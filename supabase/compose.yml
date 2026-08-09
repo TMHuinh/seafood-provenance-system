@@ -237,7 +237,9 @@ services:
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
     ports:
-      - "127.0.0.1:54321:8000"
+      # Bind trên tất cả interface (0.0.0.0) để container backend
+      # truy cập qua host.docker.internal (host-gateway).
+      - "54321:8000"
     volumes:
       - ./volumes/api/kong.yml:/home/kong/temp.yml:ro
       - ./volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro

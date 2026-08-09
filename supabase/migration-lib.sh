@@ -32,11 +32,23 @@ SQL
 validate_migration_filename() {
   local filename="$1"
 
-  if [[ ! "$filename" =~ ^[0-9]{14}_[A-Za-z0-9_-]+\.sql$ ]]; then
+  if [[ ! "$filename" =~ ^[0-9]{8}_[0-9]{3}_[A-Za-z0-9_-]+\.sql$ ]]; then
     echo "Error: invalid migration filename: $filename" >&2
-    echo "Expected: <14-digit-timestamp>_<name>.sql" >&2
+    echo "Expected: <DDMMYYYY>_<3-digit-sequence>_<name>.sql" >&2
     exit 1
   fi
+}
+
+migration_version_from_filename() {
+  local filename="$1"
+
+  if [[ "$filename" =~ ^([0-9]{8}_[0-9]{3})_ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return
+  fi
+
+  echo "Error: cannot determine migration version from: $filename" >&2
+  exit 1
 }
 
 require_migration_sections() {
@@ -74,7 +86,7 @@ migration_is_applied() {
   local version="$1"
   local result
 
-  if [[ ! "$version" =~ ^[0-9]{14}$ ]]; then
+  if [[ ! "$version" =~ ^[0-9]{8}_[0-9]{3}$ ]]; then
     echo "Error: invalid migration version: $version" >&2
     exit 1
   fi

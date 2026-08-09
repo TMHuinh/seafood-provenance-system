@@ -41,7 +41,7 @@ if [[ -n "$MIGRATION_FILE" ]]; then
   fi
 
   validate_migration_filename "$MIGRATION_BASENAME"
-  MIGRATION_VERSION="${MIGRATION_BASENAME%%_*}"
+  MIGRATION_VERSION="$(migration_version_from_filename "$MIGRATION_BASENAME")"
 else
   MIGRATION_RECORD="$(latest_migration_record)"
 

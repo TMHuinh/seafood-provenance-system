@@ -19,7 +19,7 @@ APPLIED_COUNT=0
 for MIGRATION_PATH in "${MIGRATION_FILES[@]}"; do
   MIGRATION_BASENAME="$(basename "$MIGRATION_PATH")"
   validate_migration_filename "$MIGRATION_BASENAME"
-  MIGRATION_VERSION="${MIGRATION_BASENAME%%_*}"
+  MIGRATION_VERSION="$(migration_version_from_filename "$MIGRATION_BASENAME")"
 
   if migration_is_applied "$MIGRATION_VERSION"; then
     echo "skip $MIGRATION_BASENAME"

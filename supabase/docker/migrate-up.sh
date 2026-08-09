@@ -13,12 +13,13 @@ SQL
 for migration_path in /migrations/*.sql; do
   [ -f "$migration_path" ] || continue
   filename=$(basename "$migration_path")
-  version=${filename%%_*}
+  version=$(printf '%s\n' "$filename" | cut -d_ -f1,2)
 
-  case "$filename" in
-    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql) ;;
-    *) echo "Invalid migration filename: $filename" >&2; exit 1 ;;
-  esac
+  if ! printf '%s\n' "$filename" | grep -Eq '^[0-9]{8}_[0-9]{3}_[A-Za-z0-9_-]+\.sql$'; then
+    echo "Invalid migration filename: $filename" >&2
+    echo "Expected: <DDMMYYYY>_<3-digit-sequence>_<name>.sql" >&2
+    exit 1
+  fi
 
   applied=$(psql -At -v ON_ERROR_STOP=1 \
     -c "select exists(select 1 from app_migrations.schema_migrations where version = '$version');")

@@ -58,13 +58,13 @@ drop table if exists public.example;
 Tên file phải theo định dạng:
 
 ```text
-<14-chữ-số-timestamp>_<tên-migration>.sql
+<DDMMYYYY>_<số-thứ-tự-3-chữ-số>_<tên-migration>.sql
 ```
 
 Ví dụ:
 
 ```text
-migrations/20260802120000_create_example.sql
+migrations/08092006_001_initial_schema.sql
 ```
 
 Không sửa migration đã được chia sẻ hoặc áp dụng. Khi cần thay đổi schema, hãy
@@ -82,7 +82,7 @@ tạo một file migration mới mới chạy:
 Script sẽ kết nối vào container database đang chạy, bỏ qua các migration cũ và
 chỉ thực thi phần `-- migrate:up` của các file chưa được áp dụng.
 
-Script sẽ đọc các file theo thứ tự timestamp và chỉ thực thi phần
+Script sẽ đọc các file theo thứ tự tên file và chỉ thực thi phần
 `-- migrate:up` của những migration chưa được ghi nhận trong bảng lịch sử.
 Migration đã áp dụng sẽ được bỏ qua.
 
@@ -97,13 +97,13 @@ Rollback migration mới nhất:
 Rollback đúng một migration theo tên:
 
 ```bash
-./migrate-down.sh -f 20260802120000_create_example
+./migrate-down.sh -f 08092006_001_initial_schema
 ```
 
 Có thể ghi đầy đủ đuôi `.sql`:
 
 ```bash
-./migrate-down.sh -f 20260802120000_create_example.sql
+./migrate-down.sh -f 08092006_001_initial_schema.sql
 ```
 
 Script yêu cầu xác nhận trước khi chạy phần `-- migrate:down`. Phần SQL down và

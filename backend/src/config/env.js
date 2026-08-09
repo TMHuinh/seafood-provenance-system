@@ -25,4 +25,6 @@ module.exports = Object.freeze({
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
+  blockchainRpcUrl: process.env.BLOCKCHAIN_RPC_URL,
+  blockchainContractAddress: process.env.BLOCKCHAIN_CONTRACT_ADDRESS,
 })

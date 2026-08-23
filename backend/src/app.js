@@ -5,10 +5,10 @@ const env = require('./config/env')
 const {
   errorHandler,
   notFoundHandler,
-} = require('./middleware/error-handler')
-const authRoutes = require('./routes/auth.routes')
-const batchesRoutes = require('./routes/batches.routes')
-const healthRoutes = require('./routes/health.routes')
+} = require('./shared/middleware/error-handler')
+const authRoutes = require('./modules/auth/auth.routes')
+const batchesRoutes = require('./modules/batches/batches.routes')
+const healthRoutes = require('./modules/health/health.routes')
 
 const app = express()
 

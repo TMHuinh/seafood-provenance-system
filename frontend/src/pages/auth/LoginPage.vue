@@ -3,8 +3,8 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VaButton, VaInput } from 'vuestic-ui'
 
-import { ApiError } from '../lib/api'
-import { useAuthStore } from '../stores/auth'
+import { ApiError } from '../../api/client'
+import { useAuthStore } from '../../stores/auth.store'
 
 const authStore = useAuthStore()
 const router = useRouter()

@@ -1,34 +1,34 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { VaBadge, VaButton, VaModal } from 'vuestic-ui'
 import { useRouter } from 'vue-router'
 
-import { api, ApiError } from '../lib/api'
-import { useAuthStore } from '../stores/auth'
+import { useAuthStore } from '../../stores/auth.store'
+import { useBatchesStore } from '../../stores/batches.store'
 import {
   SPECIES_LABELS,
   STATUS_LABELS,
   ROLE_LABELS,
-  type BatchDetailResponse,
-  type BatchItem,
-  type BatchListResponse,
-  type BatchSummary,
   type BlockchainRecord,
   type Role,
-} from '../types'
+} from '../../types'
 
 const authStore = useAuthStore()
+const batchesStore = useBatchesStore()
 const router = useRouter()
 
-const batches = ref<BatchItem[]>([])
-const summary = ref<BatchSummary | null>(null)
-const loadingBatches = ref(false)
-const batchesError = ref('')
-
-const detailVisible = ref(false)
-const detailLoading = ref(false)
-const detail = ref<BatchDetailResponse | null>(null)
-const selectedBatch = ref<BatchItem | null>(null)
+const {
+  batches,
+  batchesError,
+  detail,
+  detailLoading,
+  detailVisible,
+  loadingBatches,
+  selectedBatch,
+  summary,
+} = storeToRefs(batchesStore)
+const { loadBatches, openDetail } = batchesStore
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const initials = computed(() => {
@@ -84,38 +84,6 @@ function formatNumber(value: number | null | undefined): string {
 function shortHash(hash: string | null | undefined): string {
   if (!hash) return '—'
   return `${hash.slice(0, 10)}...${hash.slice(-6)}`
-}
-
-async function loadBatches() {
-  if (!authStore.isAuthenticated) return
-  loadingBatches.value = true
-  batchesError.value = ''
-  try {
-    const result = await api.get<BatchListResponse>('/batches')
-    batches.value = result.items ?? []
-    summary.value = result.summary ?? null
-  } catch (error) {
-    batchesError.value =
-      error instanceof ApiError ? error.message : 'Không thể tải danh sách lô hàng'
-  } finally {
-    loadingBatches.value = false
-  }
-}
-
-async function openDetail(batch: BatchItem) {
-  selectedBatch.value = batch
-  detailVisible.value = true
-  detailLoading.value = true
-  detail.value = null
-  try {
-    const result = await api.get<BatchDetailResponse>(`/batches/${batch.id}`)
-    detail.value = result
-  } catch (error) {
-    batchesError.value =
-      error instanceof ApiError ? error.message : 'Không thể tải chi tiết lô hàng'
-  } finally {
-    detailLoading.value = false
-  }
 }
 
 function statusLabel(record: BlockchainRecord): string {

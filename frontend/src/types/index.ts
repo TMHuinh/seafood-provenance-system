@@ -1,3 +1,4 @@
+// Shared domain and API types used by stores, pages and reusable components.
 export type Role = 'ADMIN' | 'FARMER' | 'TRANSPORTER' | 'DISTRIBUTOR'
 export type OrgType = 'FARMER_HOUSEHOLD' | 'COOPERATIVE' | 'COMPANY' | 'PROCESSOR' | 'DISTRIBUTOR' | 'RETAILER' | 'EXPORTER'
 export type Species = 'SHRIMP' | 'CRAB'

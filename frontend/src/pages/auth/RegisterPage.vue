@@ -3,9 +3,9 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { VaButton, VaInput, VaSelect } from 'vuestic-ui'
 
-import { ApiError } from '../lib/api'
-import { useAuthStore } from '../stores/auth'
-import { ORG_TYPE_OPTIONS, ROLE_OPTIONS } from '../types'
+import { ApiError } from '../../api/client'
+import { useAuthStore } from '../../stores/auth.store'
+import { ORG_TYPE_OPTIONS, ROLE_OPTIONS } from '../../types'
 
 const authStore = useAuthStore()
 const router = useRouter()

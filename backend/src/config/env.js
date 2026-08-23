@@ -4,7 +4,11 @@ require('dotenv').config({
   path: path.resolve(__dirname, '../../.env'),
 })
 
-const requiredVariables = ['SUPABASE_URL', 'SUPABASE_SECRET_KEY']
+const requiredVariables = [
+  'SUPABASE_URL',
+  'SUPABASE_SECRET_KEY',
+  'SUPABASE_ANON_KEY',
+]
 const missingVariables = requiredVariables.filter((name) => !process.env[name])
 
 if (missingVariables.length > 0) {
@@ -25,6 +29,7 @@ module.exports = Object.freeze({
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
+  supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
   blockchainRpcUrl: process.env.BLOCKCHAIN_RPC_URL,
   blockchainContractAddress: process.env.BLOCKCHAIN_CONTRACT_ADDRESS,
 })

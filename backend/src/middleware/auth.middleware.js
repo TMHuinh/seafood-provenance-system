@@ -22,7 +22,10 @@ async function loadProfile(userId) {
     .single()
 
   if (error) {
-    return null
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw error
   }
 
   return data

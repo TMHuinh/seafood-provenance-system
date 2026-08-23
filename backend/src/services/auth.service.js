@@ -1,4 +1,5 @@
 const supabase = require('../config/supabase')
+const { createAuthClient } = supabase
 
 const USER_ROLES = ['ADMIN', 'FARMER', 'TRANSPORTER', 'DISTRIBUTOR']
 const ORG_TYPES = [
@@ -72,7 +73,10 @@ async function loadProfile(userId) {
     .single()
 
   if (error) {
-    return null
+    if (error.code === 'PGRST116') {
+      return null
+    }
+    throw error
   }
   return data
 }
@@ -147,7 +151,8 @@ async function register(input) {
     organizationId = organization.id
   }
 
-  const { data: authResult, error } = await supabase.auth.signUp({
+  const authClient = createAuthClient()
+  const { data: authResult, error } = await authClient.auth.signUp({
     email: String(email).toLowerCase(),
     password,
     options: {
@@ -191,7 +196,8 @@ async function login({ email, password }) {
     throw createValidationError('Vui lòng nhập email và mật khẩu')
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+  const authClient = createAuthClient()
+  const { data, error } = await authClient.auth.signInWithPassword({
     email: String(email).toLowerCase(),
     password: String(password),
   })

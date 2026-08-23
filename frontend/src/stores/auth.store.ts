@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 
-import { api, setToken, getToken, ApiError } from '../lib/api'
+import { api, setToken, getToken, ApiError } from '../api/client'
 import type { AuthResponse, UserProfile } from '../types'
 
 export interface RegisterPayload {

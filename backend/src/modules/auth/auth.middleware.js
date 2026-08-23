@@ -1,4 +1,5 @@
-const supabase = require('../config/supabase')
+const supabase = require('../../config/supabase')
+const authRepository = require('./auth.repository')
 
 function createUnauthorized(message = 'Unauthorized') {
   const error = new Error(message)
@@ -14,29 +15,9 @@ function extractToken(request) {
   return header.slice('Bearer '.length).trim()
 }
 
-async function loadProfile(userId) {
-  const { data, error } = await supabase
-    .from('user_profiles')
-    .select('*, organization:organizations(*)')
-    .eq('id', userId)
-    .single()
-
-  if (error) {
-    if (error.code === 'PGRST116') {
-      return null
-    }
-    throw error
-  }
-
-  return data
-}
-
-/**
- * Bảo vệ các route: xác thực JWT của Supabase Auth và nạp hồ sơ
- * (user_profiles) của người dùng. Backend là nơi duy nhất tiếp xúc
- * với khóa bí mật; frontend không bao giờ tự kiểm tra token.
- */
 async function requireAuth(request, response, next) {
+  void response
+
   try {
     const token = extractToken(request)
     if (!token) {
@@ -48,17 +29,12 @@ async function requireAuth(request, response, next) {
       throw createUnauthorized('Phiên đăng nhập không hợp lệ hoặc đã hết hạn')
     }
 
-    const profile = await loadProfile(data.user.id)
+    const profile = await authRepository.findProfileById(data.user.id)
     if (!profile) {
       throw createUnauthorized('Hồ sơ người dùng chưa được khởi tạo')
     }
 
-    request.auth = {
-      token,
-      user: data.user,
-      profile,
-    }
-
+    request.auth = { token, user: data.user, profile }
     next()
   } catch (error) {
     next(error)

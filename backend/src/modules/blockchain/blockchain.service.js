@@ -1,7 +1,7 @@
 const crypto = require('node:crypto')
 
-const supabase = require('../config/supabase')
-const env = require('../config/env')
+const env = require('../../config/env')
+const supabase = require('../../config/supabase')
 
 const SUPPORTED_EVENT_TYPES = [
   'BATCH_CREATED',
@@ -15,10 +15,6 @@ const SUPPORTED_EVENT_TYPES = [
 
 const SUPPORTED_STATUSES = ['PENDING', 'SUCCESS', 'FAILED']
 
-/**
- * Băm dữ liệu thành SHA-256. Đây chính là "dấu vân tay" bất biến
- * được đưa lên chain để mọi người có thể kiểm chứng dữ liệu sau này.
- */
 function hashData(payload) {
   const canonical = JSON.stringify(payload ?? {})
   return crypto.createHash('sha256').update(canonical).digest('hex')
@@ -28,19 +24,6 @@ function isContractConfigured() {
   return Boolean(env.blockchainRpcUrl && env.blockchainContractAddress)
 }
 
-/**
- * Điểm giao tiếp duy nhất với contract trong `blockchain/`.
- *
- * Hiện tại thư mục blockchain chỉ mới có scaffold (Hardhat/Foundry),
- * chưa có contract, nên service chạy ở chế độ "chờ đồng bộ":
- * - trả về chưa có transaction hash
- * - bản ghi được đánh dấu PENDING, không làm mất trạng thái
- *
- * Khi nào deploy xong contract, chỉ cần cấu hình:
- *   BLOCKCHAIN_RPC_URL=http://localhost:8545
- *   BLOCKCHAIN_CONTRACT_ADDRESS=0x...
- * và triển khai hàm submit tại đây là luồng tự kích hoạt.
- */
 async function submitToContract({ payload, dataHash }) {
   void dataHash
   void payload
@@ -53,7 +36,6 @@ async function submitToContract({ payload, dataHash }) {
     }
   }
 
-  // TODO: thay thế bằng lời gọi ethers/web3 tới contract trong blockchain/
   return {
     transactionHash: null,
     blockNumber: null,
@@ -77,10 +59,6 @@ function assertStatus(status) {
   }
 }
 
-/**
- * Ghi một sự kiện "không thể sửa" vào chuỗi khối (bảng `blockchain_records`)
- * trong khi backend supabase giữ dữ liệu chi tiết ở các bảng nghiệp vụ.
- */
 async function createRecord({ batchId, entityType, entityId, eventType, payload, status }) {
   assertEventType(eventType)
   assertStatus(status)
@@ -112,9 +90,6 @@ async function createRecord({ batchId, entityType, entityId, eventType, payload,
   return { record: data, submitted: chain.submitted, dataHash }
 }
 
-/**
- * Lấy chuỗi ghi nhận minh bạch của một lô hàng theo thứ tự thời gian.
- */
 async function getRecordsByBatch(batchId, select = '*') {
   const { data, error } = await supabase
     .from('blockchain_records')

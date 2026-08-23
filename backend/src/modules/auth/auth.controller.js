@@ -1,4 +1,4 @@
-const authService = require('../services/auth.service')
+const authService = require('./auth.service')
 
 async function register(request, response, next) {
   try {
@@ -39,4 +39,4 @@ async function logout(request, response, next) {
   }
 }
 
-module.exports = { register, login, me, logout }
+module.exports = { login, logout, me, register }

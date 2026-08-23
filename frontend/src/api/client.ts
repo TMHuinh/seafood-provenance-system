@@ -1,4 +1,4 @@
-const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+const BASE_API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 const TOKEN_KEY = 'seafood_provenance_token'
 
 export class ApiError extends Error {
@@ -49,7 +49,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   let response: Response
   try {
     const urlPath = path.startsWith('/') ? path : `/${path}`
-    response = await fetch(`${API_URL}/api${urlPath}`, {
+    response = await fetch(`${BASE_API_URL}/api${urlPath}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),

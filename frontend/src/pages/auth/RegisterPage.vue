@@ -106,80 +106,152 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="auth-page">
-    <div class="auth-panel register-panel">
-      <va-card class="auth-card">
-        <div class="auth-card-header">
-          <h2 class="auth-title">Tạo tài khoản</h2>
-          <p class="auth-subtitle">Đăng ký để tham gia chuỗi cung ứng minh bạch</p>
+  <div class="auth-layout">
+    <div class="auth-hero">
+      <div class="hero-content">
+        <div class="brand-badge animate-float">
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 17c3-6 7-9 10-10-3 2-4 5-4 7 2-2 5-3 8-2" />
+            <path d="M15 12c-2-4-1-8 2-9-1 4 0 7 4 8" />
+          </svg>
+        </div>
+        <h1 class="hero-title">Tham gia chuỗi<br />thủy sản minh bạch</h1>
+        <p class="hero-tagline">
+          Khởi tạo tài khoản để kết nối vào hệ sinh thái truy xuất nguồn gốc chuẩn quốc tế.
+        </p>
+        
+        <div class="hero-features">
+          <div class="feature-item">
+            <span class="feature-icon">✓</span> Quản lý lô nuôi, ao trại, thu hoạch đúng chuẩn
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span> Mỗi sự kiện được bảo đảm toàn vẹn trên Blockchain
+          </div>
+          <div class="feature-item">
+            <span class="feature-icon">✓</span> Người tiêu dùng dễ dàng tra cứu bằng mã QR
+          </div>
+        </div>
+      </div>
+      
+      <div class="hero-overlay"></div>
+    </div>
+
+    <div class="auth-panel">
+      <div class="auth-form-container animate-fade-in">
+        <div class="auth-header">
+          <h2>Tạo tài khoản mới</h2>
+          <p>Điền thông tin bên dưới để đăng ký thành viên</p>
         </div>
 
-        <form novalidate @submit.prevent="handleSubmit">
-          <va-alert v-if="successMessage" color="success" class="mb-3">
+        <form novalidate @submit.prevent="handleSubmit" class="auth-form-scroll">
+          <va-alert v-if="successMessage" color="success" class="mb-4 alert-smooth">
             {{ successMessage }}
           </va-alert>
-          <va-alert v-if="errorMessage" color="danger" class="mb-3">
+          <va-alert v-if="errorMessage" color="danger" class="mb-4 alert-smooth">
             {{ errorMessage }}
           </va-alert>
 
-          <div class="mb-3">
+          <div class="input-group mb-4">
             <label class="form-label" for="reg-name">Họ và tên</label>
             <va-input
               id="reg-name"
               v-model="fullName"
-              placeholder="Nguyễn Văn A"
+              placeholder="Ví dụ: Nguyễn Văn A"
               :error="Boolean(fieldErrors.fullName)"
               :error-messages="fieldErrors.fullName"
               :autofocus="true"
+              size="large"
+              class="w-full"
               @update:model-value="fieldErrors.fullName = ''"
+            >
+              <template #prependInner>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </template>
+            </va-input>
+          </div>
+
+          <div class="row-inputs mb-4">
+            <div class="input-group col">
+              <label class="form-label" for="reg-email">Email</label>
+              <va-input
+                id="reg-email"
+                v-model="email"
+                type="email"
+                placeholder="email@vidu.com"
+                :error="Boolean(fieldErrors.email)"
+                :error-messages="fieldErrors.email"
+                size="large"
+                class="w-full"
+                @update:model-value="fieldErrors.email = ''"
+              >
+                <template #prependInner>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                  </svg>
+                </template>
+              </va-input>
+            </div>
+            
+            <div class="input-group col">
+              <label class="form-label" for="reg-phone">Số điện thoại <span class="text-optional">(Tùy chọn)</span></label>
+              <va-input
+                id="reg-phone"
+                v-model="phone"
+                type="tel"
+                placeholder="0912345678"
+                :error="Boolean(fieldErrors.phone)"
+                :error-messages="fieldErrors.phone"
+                size="large"
+                class="w-full"
+              >
+                <template #prependInner>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                  </svg>
+                </template>
+              </va-input>
+            </div>
+          </div>
+
+          <div class="input-group mb-4">
+            <label class="form-label">Vai trò trong chuỗi cung ứng</label>
+            <va-select 
+              v-model="role" 
+              :options="roleOptions" 
+              size="large" 
+              class="w-full select-modern"
             />
           </div>
 
-          <div class="mb-3">
-            <label class="form-label" for="reg-email">Email</label>
-            <va-input
-              id="reg-email"
-              v-model="email"
-              type="email"
-              placeholder="email@vidu.com"
-              :error="Boolean(fieldErrors.email)"
-              :error-messages="fieldErrors.email"
-              @update:model-value="fieldErrors.email = ''"
-            />
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label" for="reg-phone">Số điện thoại (không bắt buộc)</label>
-            <va-input
-              id="reg-phone"
-              v-model="phone"
-              type="tel"
-              placeholder="0912345678"
-              :error="Boolean(fieldErrors.phone)"
-              :error-messages="fieldErrors.phone"
-            />
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Vai trò</label>
-            <va-select v-model="role" :options="roleOptions" />
-          </div>
-
-          <div class="row mb-3">
-            <div class="col">
+          <div class="row-inputs mb-4">
+            <div class="input-group col">
               <label class="form-label" for="reg-password">Mật khẩu</label>
               <va-input
                 id="reg-password"
                 v-model="password"
                 :type="isPasswordVisible ? 'text' : 'password'"
-                placeholder="Ít nhất 8 ký tự"
+                placeholder="Tối thiểu 8 ký tự"
                 autocomplete="new-password"
                 :error="Boolean(fieldErrors.password)"
                 :error-messages="fieldErrors.password"
-              />
+                size="large"
+                class="w-full"
+              >
+                <template #prependInner>
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </template>
+              </va-input>
             </div>
-            <div class="col">
-              <label class="form-label" for="reg-confirm">Nhập lại mật khẩu</label>
+            
+            <div class="input-group col">
+              <label class="form-label" for="reg-confirm">Xác nhận mật khẩu</label>
               <va-input
                 id="reg-confirm"
                 v-model="confirmPassword"
@@ -188,23 +260,23 @@ async function handleSubmit() {
                 autocomplete="new-password"
                 :error="Boolean(fieldErrors.confirmPassword)"
                 :error-messages="fieldErrors.confirmPassword"
+                size="large"
+                class="w-full"
               >
-                <template #append>
+                <template #appendInner>
                   <button
                     type="button"
                     class="eye-toggle"
-                    :aria-label="isPasswordVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'"
+                    :aria-label="isPasswordVisible ? 'Ẩn' : 'Hiện'"
                     @click="isPasswordVisible = !isPasswordVisible"
                   >
-                    <svg v-if="isPasswordVisible" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 3l18 18" />
-                      <path d="M10.5 5.2A10.9 10.9 0 0 1 12 5c7 0 10 7 10 7a17.6 17.6 0 0 1-2.2 3.1" />
-                      <path d="M6.6 6.6C3.3 8.6 2 12 2 12s3 7 10 7a10.9 10.9 0 0 0 4.4-.9" />
-                      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                    <svg v-if="isPasswordVisible" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                      <line x1="1" y1="1" x2="23" y2="23"></line>
                     </svg>
-                    <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
-                      <circle cx="12" cy="12" r="3" />
+                    <svg v-else viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
                     </svg>
                   </button>
                 </template>
@@ -212,247 +284,413 @@ async function handleSubmit() {
             </div>
           </div>
 
-          <div class="org-toggle">
-            <label class="checkbox-label">
-              <input v-model="joinOrganization" type="checkbox" class="checkbox" />
-              <span>Tôi đại diện cho một tổ chức / doanh nghiệp</span>
+          <div class="org-section mb-4">
+            <label class="checkbox-container">
+              <input v-model="joinOrganization" type="checkbox" class="modern-checkbox" />
+              <span class="checkmark"></span>
+              <span class="checkbox-text">Tôi đại diện cho một tổ chức / doanh nghiệp</span>
             </label>
-          </div>
 
-          <template v-if="joinOrganization">
-            <div class="mb-3">
-              <label class="form-label" for="reg-org-name">Tên tổ chức</label>
-              <va-input
-                id="reg-org-name"
-                v-model="organizationName"
-                placeholder="VD: Hợi tác xã nuôi tôm Xanh"
-                :error="Boolean(fieldErrors.organizationName)"
-                :error-messages="fieldErrors.organizationName"
-              />
+            <div v-if="joinOrganization" class="org-fields animate-fade-in">
+              <div class="input-group mb-3 mt-3">
+                <label class="form-label" for="reg-org-name">Tên tổ chức</label>
+                <va-input
+                  id="reg-org-name"
+                  v-model="organizationName"
+                  placeholder="VD: Hợp tác xã nuôi tôm Xanh"
+                  :error="Boolean(fieldErrors.organizationName)"
+                  :error-messages="fieldErrors.organizationName"
+                  size="large"
+                  class="w-full"
+                />
+              </div>
+              <div class="input-group mb-2">
+                <label class="form-label">Loại hình hoạt động</label>
+                <va-select 
+                  v-model="organizationType" 
+                  :options="orgTypeOptions" 
+                  placeholder="Chọn loại tổ chức..." 
+                  size="large"
+                  class="w-full select-modern"
+                />
+              </div>
             </div>
-            <div class="mb-4">
-              <label class="form-label">Loại tổ chức</label>
-              <va-select v-model="organizationType" :options="orgTypeOptions" placeholder="Chọn loại tổ chức" />
-            </div>
-          </template>
+          </div>
 
           <va-button
             type="submit"
-            class="auth-submit"
+            class="auth-submit w-full"
             size="large"
             :loading="isSubmitting"
             :disabled="isSubmitting"
           >
-            Đăng ký
+            Đăng ký tài khoản
           </va-button>
         </form>
 
-        <div class="auth-redirect">
+        <div class="auth-footer">
           Đã có tài khoản?
-          <router-link to="/login" class="auth-link">Đăng nhập</router-link>
+          <router-link to="/login" class="auth-link">Đăng nhập ngay</router-link>
         </div>
-      </va-card>
-    </div>
-
-    <div class="auth-brand">
-      <div class="brand-badge">
-        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 17c3-6 7-9 10-10-3 2-4 5-4 7 2-2 5-3 8-2" />
-          <path d="M15 12c-2-4-1-8 2-9-1 4 0 7 4 8" />
-        </svg>
       </div>
-      <h1 class="auth-title">Tham gia chuỗi<br />thủy sản minh bạch</h1>
-      <ul class="register-benefits">
-        <li>Quản lý lô nuôi, ao trại, thu hoạch đúng chuẩn</li>
-        <li>Mỗi sự kiện đều được bảo đảm tính toàn vẹn trên chuỗi khối</li>
-        <li>Người tiêu dùng tra cứu nguồn gốc bằng mã QR</li>
-      </ul>
     </div>
   </div>
 </template>
 
 <style scoped>
-.auth-page {
-  min-height: calc(100vh - 72px);
+/* Reset & Utility */
+.w-full {
+  width: 100%;
+}
+.mb-2 { margin-bottom: 0.5rem; }
+.mb-3 { margin-bottom: 1rem; }
+.mb-4 { margin-bottom: 1.25rem; }
+.mt-3 { margin-top: 1rem; }
+.text-optional { color: #94a3b8; font-weight: 400; font-size: 0.8rem; }
+
+/* Layout chính */
+.auth-layout {
   display: flex;
-  align-items: stretch;
-  gap: 3rem;
-  padding: 3rem 2rem;
-  max-width: 1180px;
-  margin: 0 auto;
+  min-height: 100vh;
+  width: 100%;
+  background-color: #f8fafc;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-.auth-panel {
-  flex: 1 1 50%;
+/* --- Cột Bên Trái (Thương hiệu) --- */
+.auth-hero {
+  position: relative;
+  flex: 1;
+  display: none; /* Ẩn trên mobile */
+  background: linear-gradient(135deg, #0f172a 0%, #0e7490 100%);
+  color: white;
+  padding: 4rem;
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .auth-hero {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  max-width: 520px;
+}
+
+.brand-badge {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 2.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
-.auth-card {
+.hero-title {
+  font-size: 3rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.02em;
+}
+
+.hero-tagline {
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: #cbd5e1;
+  margin-bottom: 3rem;
+}
+
+.hero-features {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  font-size: 1.05rem;
+  color: #f1f5f9;
+  line-height: 1.5;
+}
+
+.feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #14b8a6;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: bold;
+  margin-top: 0.15rem;
+}
+
+/* Đồ họa trang trí nền */
+.hero-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(circle at 100% 100%, rgba(20, 184, 166, 0.15) 0%, transparent 50%), 
+                    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* --- Cột Bên Phải (Form đăng ký) --- */
+.auth-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.auth-form-container {
   width: 100%;
-  max-width: 460px;
-  border-radius: 16px;
-  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  max-width: 520px;
+  background: white;
+  padding: 3rem 2.5rem;
+  border-radius: 24px;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.05), 0 0 10px rgba(15, 23, 42, 0.02);
 }
 
-.auth-card-header {
-  margin-bottom: 1.4rem;
-}
-
-.auth-title {
-  margin: 0 0 0.25rem;
-  font-size: 1.5rem;
-  color: #0f172a;
-}
-
-.auth-subtitle {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.9rem;
-}
-
-.form-label {
-  display: block;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: #334155;
-  margin-bottom: 0.4rem;
-}
-
-.auth-submit {
-  width: 100%;
-}
-
-.auth-redirect {
-  margin-top: 1.4rem;
+.auth-header {
   text-align: center;
+  margin-bottom: 2rem;
+}
+
+.auth-header h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.auth-header p {
   color: #64748b;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
 }
 
-.auth-link {
-  color: #0e7490;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.row {
+/* Lưới Form (Rows) */
+.row-inputs {
   display: flex;
   gap: 1rem;
 }
 
 .col {
   flex: 1;
+  min-width: 0; /* Ngăn chặn overflow trong flexbox */
 }
 
-.org-toggle {
-  margin-bottom: 1rem;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+/* Căn chỉnh Input */
+.form-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: #334155;
-  cursor: pointer;
-}
-
-.checkbox {
-  width: 18px;
-  height: 18px;
-  accent-color: #0e7490;
+  margin-bottom: 0.5rem;
 }
 
 .eye-toggle {
   background: none;
   border: none;
-  padding: 4px;
   color: #94a3b8;
   cursor: pointer;
   display: flex;
   align-items: center;
+  padding: 4px;
+  transition: color 0.2s ease;
 }
 
-.register-benefits {
-  list-style: none;
-  padding: 0;
-  margin: 0;
+.eye-toggle:hover {
+  color: #0f172a;
+}
+
+/* Checkbox Doanh nghiệp Custom */
+.org-section {
+  background: #f8fafc;
+  padding: 1.25rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.checkbox-container {
   display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  color: #475569;
-  font-size: 1rem;
+  align-items: center;
+  position: relative;
+  cursor: pointer;
+  font-size: 0.95rem;
+  user-select: none;
+  color: #334155;
+  font-weight: 500;
 }
 
-.register-benefits li {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
+.modern-checkbox {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
 }
 
-.register-benefits li::before {
-  content: '';
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, #0e7490, #14b8a6);
-  margin-top: 0.6rem;
-}
-
-.auth-brand {
-  flex: 1 1 40%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1.4rem;
-  padding: 2rem 1rem;
-}
-
-.brand-badge {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #0e7490, #14b8a6);
-  color: #fff;
+.checkmark {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 12px 32px rgba(14, 116, 144, 0.35);
+  height: 20px;
+  width: 20px;
+  background-color: #fff;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  margin-right: 12px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.auth-brand h1 {
-  font-size: 2rem;
-  line-height: 1.25;
-  color: #0f172a;
-  font-weight: 700;
-  margin: 0;
+.checkbox-container:hover .modern-checkbox ~ .checkmark {
+  border-color: #0e7490;
 }
 
-.mb-3 {
-  margin-bottom: 1rem;
+.modern-checkbox:checked ~ .checkmark {
+  background-color: #0e7490;
+  border-color: #0e7490;
 }
 
-.mb-4 {
-  margin-bottom: 1.5rem;
+.checkmark:after {
+  content: "";
+  display: none;
 }
 
-@media (max-width: 960px) {
-  .auth-page {
-    flex-direction: column-reverse;
-    padding: 2rem 1.25rem;
-    gap: 1.5rem;
+.modern-checkbox:checked ~ .checkmark:after {
+  display: block;
+}
+
+.checkmark:after {
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+.org-fields {
+  margin-top: 0.5rem;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 0.5rem;
+}
+
+/* Nút Submit */
+.auth-submit {
+  border-radius: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 14px 0 rgba(14, 116, 144, 0.25);
+  transition: all 0.3s ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px 0 rgba(14, 116, 144, 0.3);
+}
+
+/* Footer (Đăng nhập) */
+.auth-footer {
+  margin-top: 2rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.auth-link {
+  color: #0e7490;
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 0.25rem;
+  transition: color 0.2s;
+}
+
+.auth-link:hover {
+  color: #14b8a6;
+  text-decoration: underline;
+}
+
+/* --- Hoạt ảnh (Animations) --- */
+.animate-fade-in {
+  animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.alert-smooth {
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive cho Mobile */
+@media (max-width: 1023px) {
+  .auth-panel {
+    padding: 1rem;
+    align-items: flex-start; /* Cho phép scroll dễ dàng hơn trên màn hình nhỏ */
   }
-  .brand-badge {
-    display: none;
+  
+  .auth-form-container {
+    padding: 2rem 1.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+    margin-top: 1rem;
   }
-  .register-benefits {
-    display: none;
+  
+  .auth-header h2 {
+    font-size: 1.5rem;
   }
-  .row {
+
+  .row-inputs {
     flex-direction: column;
+    gap: 0;
+  }
+
+  .row-inputs .col {
+    margin-bottom: 1.25rem;
+  }
+  
+  .row-inputs .col:last-child {
+    margin-bottom: 0;
   }
 }
 </style>

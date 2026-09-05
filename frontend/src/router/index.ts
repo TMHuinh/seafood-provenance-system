@@ -24,6 +24,24 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/farms',
+      name: 'farms',
+      component: () => import('../pages/farms/FarmsPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/farms/:farmId/ponds',
+      name: 'ponds',
+      component: () => import('../pages/ponds/PondsPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/farms/:farmId/ponds/:pondId/batches',
+      name: 'pond-batches',
+      component: () => import('../pages/batches/PondBatchesPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },
@@ -35,6 +53,10 @@ router.beforeEach((to) => {
 
   if (to.meta.guestOnly && authStore.isAuthenticated) {
     return { name: 'home' }
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
   return true

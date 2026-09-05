@@ -58,6 +58,15 @@ async function handleHome() {
         >
           Trang chủ
         </button>
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="nav-link"
+          :class="{ active: route.name === 'farms' }"
+          @click="router.push({ name: 'farms' })"
+        >
+          Cơ sở nuôi
+        </button>
       </nav>
 
       <div class="navbar-actions">

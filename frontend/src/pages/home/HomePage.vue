@@ -210,9 +210,8 @@ onMounted(async () => {
               </div>
             </div>
           </div>
-          <va-button class="btn-create-batch" @click="() => {}">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" class="mr-2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Khởi tạo lô mới
+          <va-button preset="secondary" @click="router.push({ name: 'farms' })">
+            Quản lý cơ sở nuôi
           </va-button>
         </header>
 

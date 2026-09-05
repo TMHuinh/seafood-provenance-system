@@ -1,5 +1,21 @@
 const blockchainService = require('../blockchain/blockchain.service')
 const batchesRepository = require('./batches.repository')
+const farmsRepository = require('../farms/farms.repository')
+const pondsRepository = require('../ponds/ponds.repository')
+const { normalizeBatchInput } = require('./batches.validation')
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+function httpError(message, status) { const error = new Error(message); error.status = status; return error }
+function validId(id, label) { if (!UUID.test(String(id))) throw httpError(`${label} không hợp lệ`, 400) }
+async function requireOwnedPond(profile, farmId, pondId) {
+  validId(farmId, 'Mã cơ sở'); validId(pondId, 'Mã ao')
+  const farm = await farmsRepository.findByIdAndOwner(farmId, profile.id)
+  if (!farm) throw httpError('Không tìm thấy cơ sở nuôi', 404)
+  const pond = await pondsRepository.findByIdAndFarm(pondId, farmId)
+  if (!pond) throw httpError('Không tìm thấy ao nuôi', 404)
+  return pond
+}
+function mapWriteError(error) { if (error.code === '23505') throw httpError('Mã vụ nuôi đã tồn tại', 409); if (error.code === '23503') throw httpError('Không thể xóa vụ nuôi đang có dữ liệu liên quan', 409); throw error }
 
 function createNotFound(message = 'Không tìm thấy lô hàng') {
   const error = new Error(message)
@@ -89,4 +105,9 @@ async function detail(id) {
   }
 }
 
-module.exports = { detail, list }
+async function listByPond(profile, farmId, pondId) { await requireOwnedPond(profile, farmId, pondId); const items = await batchesRepository.findAllByPond(pondId); return { count: items.length, items } }
+async function createForPond(profile, farmId, pondId, input) { await requireOwnedPond(profile, farmId, pondId); try { return await batchesRepository.create(pondId, normalizeBatchInput(input)) } catch (e) { mapWriteError(e) } }
+async function updateForPond(profile, farmId, pondId, id, input) { await requireOwnedPond(profile, farmId, pondId); validId(id, 'Mã vụ nuôi'); const existing = await batchesRepository.findById(id); if (!existing || existing.pond_id !== pondId) throw httpError('Không tìm thấy vụ nuôi', 404); try { const changes = normalizeBatchInput({ ...input, currentStockingDate: existing.stocking_date, currentStatus: existing.status }, { partial: true }); return await batchesRepository.updateByPond(id, pondId, changes) } catch (e) { mapWriteError(e) } }
+async function removeForPond(profile, farmId, pondId, id) { await requireOwnedPond(profile, farmId, pondId); validId(id, 'Mã vụ nuôi'); try { const item = await batchesRepository.removeByPond(id, pondId); if (!item) throw httpError('Không tìm thấy vụ nuôi', 404) } catch (e) { mapWriteError(e) } }
+
+module.exports = { createForPond, detail, list, listByPond, removeForPond, updateForPond }

@@ -1,4 +1,29 @@
 const supabase = require('../../config/supabase')
+const BATCH_FIELDS = 'id, pond_id, batch_code, species, seed_source, seed_quantity, stocking_date, expected_harvest_date, actual_harvest_date, yield_quantity, status, note, created_at, updated_at'
+
+async function create(pondId, batch) {
+  const { data, error } = await supabase.from('batches').insert({ ...batch, pond_id: pondId }).select(BATCH_FIELDS).single()
+  if (error) throw error
+  return data
+}
+
+async function findAllByPond(pondId) {
+  const { data, error } = await supabase.from('batches').select(BATCH_FIELDS).eq('pond_id', pondId).order('stocking_date', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+async function updateByPond(id, pondId, changes) {
+  const { data, error } = await supabase.from('batches').update(changes).eq('id', id).eq('pond_id', pondId).select(BATCH_FIELDS).maybeSingle()
+  if (error) throw error
+  return data
+}
+
+async function removeByPond(id, pondId) {
+  const { data, error } = await supabase.from('batches').delete().eq('id', id).eq('pond_id', pondId).select('id').maybeSingle()
+  if (error) throw error
+  return data
+}
 
 async function findRecent() {
   const { data, count, error } = await supabase
@@ -94,11 +119,15 @@ async function findDistributions(batchId) {
 }
 
 module.exports = {
+  create,
   countFarmingLogs,
   findById,
   findDistributions,
   findHarvests,
   findPondsByIds,
   findRecent,
+  findAllByPond,
+  removeByPond,
   findTransports,
+  updateByPond,
 }

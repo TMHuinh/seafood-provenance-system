@@ -27,10 +27,86 @@ export interface UserProfile {
   organization: Organization | null
 }
 
+export interface Farm {
+  id: string
+  owner_id: string
+  organization_id: string | null
+  farm_name: string
+  address: string | null
+  area: number | null
+  certification: string | null
+  status: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface FarmInput {
+  farmName: string
+  address?: string | null
+  area?: number | null
+  certification?: string | null
+  status?: boolean
+}
+
+export interface FarmListResponse {
+  success: boolean
+  count: number
+  items: Farm[]
+}
+
+export interface FarmResponse {
+  success: boolean
+  farm: Farm
+}
+
+export type PondStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE'
+
+export interface Pond {
+  id: string
+  farm_id: string
+  pond_code: string
+  pond_name: string
+  area: number | null
+  depth: number | null
+  water_type: string | null
+  status: PondStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface PondInput {
+  pondCode: string
+  pondName: string
+  area?: number | null
+  depth?: number | null
+  waterType?: string | null
+  status?: PondStatus
+}
+
+export interface PondListResponse { success: boolean; count: number; items: Pond[] }
+export interface PondResponse { success: boolean; pond: Pond }
+
+export interface BatchInput {
+  batchCode: string
+  species: Species
+  seedSource?: string | null
+  seedQuantity: number
+  stockingDate: string
+  expectedHarvestDate?: string | null
+  actualHarvestDate?: string | null
+  yieldQuantity?: number | null
+  status?: BatchStatusCode
+  note?: string | null
+}
+
+export interface PondBatchListResponse { success: boolean; count: number; items: BatchItem[] }
+export interface PondBatchResponse { success: boolean; batch: BatchItem }
+
 export interface BatchItem {
   id: string
   batch_code: string
   species: Species
+  seed_source: string | null
   seed_quantity: number
   stocking_date: string
   expected_harvest_date: string | null
@@ -39,7 +115,8 @@ export interface BatchItem {
   status: BatchStatusCode
   note: string | null
   created_at: string
-  pond: {
+  updated_at?: string
+  pond?: {
     id: string
     pond_code: string
     pond_name: string

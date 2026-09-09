@@ -10,6 +10,7 @@ const authRoutes = require('./modules/auth/auth.routes')
 const batchesRoutes = require('./modules/batches/batches.routes')
 const farmsRoutes = require('./modules/farms/farms.routes')
 const healthRoutes = require('./modules/health/health.routes')
+const farmingLogsRoutes = require('./modules/farming-logs/farming-logs.routes')
 
 const app = express()
 
@@ -26,6 +27,7 @@ app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)
 app.use('/api/batches', batchesRoutes)
 app.use('/api/farms', farmsRoutes)
+app.use('/api/farming-logs', farmingLogsRoutes)
 
 app.use(notFoundHandler)
 app.use(errorHandler)

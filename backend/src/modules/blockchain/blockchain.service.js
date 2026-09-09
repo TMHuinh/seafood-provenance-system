@@ -1,4 +1,5 @@
 const crypto = require('node:crypto')
+const { ethers } = require('ethers') // Import thêm thư viện ethers
 
 const env = require('../../config/env')
 const supabase = require('../../config/supabase')
@@ -20,26 +21,54 @@ function hashData(payload) {
   return crypto.createHash('sha256').update(canonical).digest('hex')
 }
 
+// Cập nhật hàm kiểm tra cấu hình để check cả Private Key
 function isContractConfigured() {
-  return Boolean(env.blockchainRpcUrl && env.blockchainContractAddress)
+  return Boolean(env.blockchainRpcUrl && env.blockchainContractAddress && env.blockchainPrivateKey)
 }
 
-async function submitToContract({ payload, dataHash }) {
-  void dataHash
-  void payload
-
+// Hoàn thiện logic gọi Smart Contract bằng Ethers.js
+async function submitToContract({ batchId, dataHash }) {
   if (!isContractConfigured()) {
+    console.warn('⚠️ Thiếu cấu hình Blockchain (RPC, Contract, hoặc Private Key). Đang dùng Mock data.')
     return {
       transactionHash: null,
       blockNumber: null,
-      contractAddress: null,
+      contractAddress: env.blockchainContractAddress || null,
+      status: 'PENDING'
     }
   }
 
-  return {
-    transactionHash: null,
-    blockNumber: null,
-    contractAddress: env.blockchainContractAddress,
+  try {
+    // 1. Kết nối mạng và ví
+    const provider = new ethers.JsonRpcProvider(env.blockchainRpcUrl)
+    const wallet = new ethers.Wallet(env.blockchainPrivateKey, provider)
+
+    // 2. Khai báo ABI của Smart Contract (Phải khớp với code Solidity)
+    const contractABI = [
+      "function recordData(string id, string dataHash) public"
+    ]
+    const contract = new ethers.Contract(env.blockchainContractAddress, contractABI, wallet)
+
+    // 3. Thực thi giao dịch (Gửi data lên Blockchain)
+    const tx = await contract.recordData(batchId, dataHash)
+    
+    // 4. CHỜ MẠNG LƯỚI XÁC NHẬN (Cực kỳ quan trọng để đổi từ PENDING sang SUCCESS)
+    const receipt = await tx.wait()
+
+    return {
+      transactionHash: receipt.hash,
+      blockNumber: receipt.blockNumber,
+      contractAddress: env.blockchainContractAddress,
+      status: 'SUCCESS' // Đánh dấu thành công khi đã có biên lai
+    }
+  } catch (error) {
+    console.error('❌ Lỗi khi gửi giao dịch Smart Contract:', error)
+    return {
+      transactionHash: null,
+      blockNumber: null,
+      contractAddress: env.blockchainContractAddress,
+      status: 'FAILED'
+    }
   }
 }
 
@@ -64,7 +93,12 @@ async function createRecord({ batchId, entityType, entityId, eventType, payload,
   assertStatus(status)
 
   const dataHash = hashData(payload)
-  const chain = await submitToContract({ payload, dataHash })
+  
+  // Gọi hàm submitToContract, truyền thêm batchId
+  const chain = await submitToContract({ batchId, dataHash })
+
+  // Quyết định trạng thái cuối cùng dựa trên kết quả trả về từ Blockchain
+  const finalStatus = chain.status || (status ?? 'PENDING')
 
   const { data, error } = await supabase
     .from('blockchain_records')
@@ -77,7 +111,7 @@ async function createRecord({ batchId, entityType, entityId, eventType, payload,
       transaction_hash: chain.transactionHash,
       block_number: chain.blockNumber,
       contract_address: chain.contractAddress,
-      status: status ?? 'PENDING',
+      status: finalStatus, // Lưu trạng thái SUCCESS hoặc PENDING vào DB
       recorded_at: new Date().toISOString(),
     })
     .select()
@@ -87,7 +121,7 @@ async function createRecord({ batchId, entityType, entityId, eventType, payload,
     throw error
   }
 
-  return { record: data, submitted: chain.submitted, dataHash }
+  return { record: data, submitted: finalStatus === 'SUCCESS', dataHash }
 }
 
 async function getRecordsByBatch(batchId, select = '*') {

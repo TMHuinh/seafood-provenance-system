@@ -42,6 +42,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/farms/:farmId/ponds/:pondId/batches/:batchId/logs',
+      name: 'farming-logs',
+      component: () => import('../pages/batches/FarmingLogsPage.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },

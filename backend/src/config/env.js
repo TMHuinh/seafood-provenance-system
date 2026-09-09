@@ -32,4 +32,5 @@ module.exports = Object.freeze({
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
   blockchainRpcUrl: process.env.BLOCKCHAIN_RPC_URL,
   blockchainContractAddress: process.env.BLOCKCHAIN_CONTRACT_ADDRESS,
+  blockchainPrivateKey: process.env.BLOCKCHAIN_PRIVATE_KEY,
 })

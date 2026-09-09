@@ -213,6 +213,61 @@ export interface BatchDetailResponse {
   distributions: DistributionRecord[]
 }
 
+export type FarmingLogType = 'FEEDING' | 'MEDICINE' | 'WATER_QUALITY' | 'CARE' | 'ENVIRONMENT' | 'MORTALITY' | 'OTHER'
+
+export interface FarmingLog {
+  id: string
+  batch_id: string
+  created_by: string
+  log_date: string
+  log_type: FarmingLogType
+  details: Record<string, unknown>
+  image_url: string | null
+  data_hash: string | null
+  tx_hash: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface FarmingLogInput {
+  batchId: string
+  logType: FarmingLogType
+  logDate: string
+  details: Record<string, unknown>
+  imageUrl?: string | null
+}
+
+export interface FarmingLogListResponse { success: boolean; count: number; items: FarmingLog[] }
+export interface FarmingLogResponse { success: boolean; log: FarmingLog }
+
+export interface FarmingLogVerifyRecord {
+  id: string
+  logType: FarmingLogType
+  logDate: string
+  dataHash: string | null
+  status: 'SYNCED' | 'DESYNCED'
+  issues: string[]
+  record: { eventType: string; status: BlockchainStatus; txHash: string | null; dataHash: string } | null
+}
+
+export interface FarmingLogVerifyResponse {
+  success: boolean
+  batchId: string
+  checkedAt: string
+  summary: { total: number; verified: number; desynced: number }
+  details: FarmingLogVerifyRecord[]
+}
+
+export const FARMING_LOG_TYPE_LABELS: Record<FarmingLogType, string> = {
+  FEEDING: 'Cho ăn',
+  MEDICINE: 'Thuốc / xử lý',
+  WATER_QUALITY: 'Chất lượng nước',
+  CARE: 'Chăm sóc',
+  ENVIRONMENT: 'Môi trường',
+  MORTALITY: 'Tỷ lệ chết',
+  OTHER: 'Khác',
+}
+
 export interface AuthResponse {
   success: boolean
   requiresConfirmation?: boolean

@@ -17,8 +17,28 @@ const SUPPORTED_EVENT_TYPES = [
 const SUPPORTED_STATUSES = ['PENDING', 'SUCCESS', 'FAILED']
 
 function hashData(payload) {
-  const canonical = JSON.stringify(payload ?? {})
+  const canonical = JSON.stringify(sortObjectKeys(payload ?? {}))
   return crypto.createHash('sha256').update(canonical).digest('hex')
+}
+
+function sortObjectKeys(value) {
+  if (Array.isArray(value)) return value.map(sortObjectKeys)
+  if (!value || typeof value !== 'object') return value
+
+  return Object.keys(value)
+    .sort()
+    .reduce((result, key) => {
+      result[key] = sortObjectKeys(value[key])
+      return result
+    }, {})
+}
+
+function hashLegacyData(payload) {
+  return crypto.createHash('sha256').update(JSON.stringify(payload ?? {})).digest('hex')
+}
+
+function buildEventId(eventType, entityId) {
+  return `${eventType}:${entityId}`
 }
 
 // Cập nhật hàm kiểm tra cấu hình để check cả Private Key
@@ -26,8 +46,37 @@ function isContractConfigured() {
   return Boolean(env.blockchainRpcUrl && env.blockchainContractAddress && env.blockchainPrivateKey)
 }
 
+function isContractReadable() {
+  return Boolean(env.blockchainRpcUrl && env.blockchainContractAddress)
+}
+
+async function getDataHashFromContract(eventId, contractAddress = env.blockchainContractAddress) {
+  if (!env.blockchainRpcUrl || !contractAddress) {
+    const error = new Error('Thiếu cấu hình Blockchain RPC hoặc Contract Address')
+    error.status = 503
+    throw error
+  }
+
+  try {
+    const provider = new ethers.JsonRpcProvider(env.blockchainRpcUrl)
+    const contract = new ethers.Contract(
+      contractAddress,
+      ['function getDataHash(string eventId) external view returns (string)'],
+      provider,
+    )
+
+    return await contract.getDataHash(eventId)
+  } catch (cause) {
+    console.error('❌ Lỗi khi đọc dữ liệu từ Smart Contract:', cause)
+    const error = new Error('Không thể đọc dữ liệu từ Blockchain')
+    error.status = 503
+    error.cause = cause
+    throw error
+  }
+}
+
 // Hoàn thiện logic gọi Smart Contract bằng Ethers.js
-async function submitToContract({ batchId, dataHash }) {
+async function submitToContract({ eventId, dataHash }) {
   if (!isContractConfigured()) {
     console.warn('⚠️ Thiếu cấu hình Blockchain (RPC, Contract, hoặc Private Key). Đang dùng Mock data.')
     return {
@@ -50,7 +99,7 @@ async function submitToContract({ batchId, dataHash }) {
     const contract = new ethers.Contract(env.blockchainContractAddress, contractABI, wallet)
 
     // 3. Thực thi giao dịch (Gửi data lên Blockchain)
-    const tx = await contract.recordData(batchId, dataHash)
+    const tx = await contract.recordData(eventId, dataHash)
     
     // 4. CHỜ MẠNG LƯỚI XÁC NHẬN (Cực kỳ quan trọng để đổi từ PENDING sang SUCCESS)
     const receipt = await tx.wait()
@@ -88,14 +137,15 @@ function assertStatus(status) {
   }
 }
 
-async function createRecord({ batchId, entityType, entityId, eventType, payload, status }) {
+async function createRecord({ batchId, entityType, entityId, eventType, eventId, payload, status }) {
   assertEventType(eventType)
   assertStatus(status)
 
   const dataHash = hashData(payload)
+  const resolvedEventId = eventId ?? buildEventId(eventType, entityId)
   
-  // Gọi hàm submitToContract, truyền thêm batchId
-  const chain = await submitToContract({ batchId, dataHash })
+  // Mỗi thực thể/sự kiện có khóa riêng, tránh các bản ghi cùng batch ghi đè nhau.
+  const chain = await submitToContract({ eventId: resolvedEventId, dataHash })
 
   // Quyết định trạng thái cuối cùng dựa trên kết quả trả về từ Blockchain
   const finalStatus = chain.status || (status ?? 'PENDING')
@@ -107,6 +157,7 @@ async function createRecord({ batchId, entityType, entityId, eventType, payload,
       entity_type: entityType,
       entity_id: entityId,
       event_type: eventType,
+      event_id: resolvedEventId,
       data_hash: dataHash,
       transaction_hash: chain.transactionHash,
       block_number: chain.blockNumber,
@@ -142,7 +193,10 @@ async function getRecordsByBatch(batchId, select = '*') {
 module.exports = {
   createRecord,
   getRecordsByBatch,
+  getDataHashFromContract,
   hashData,
+  hashLegacyData,
+  buildEventId,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_STATUSES,
 }

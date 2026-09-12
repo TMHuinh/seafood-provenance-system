@@ -6,25 +6,51 @@ import { VaButton, VaInnerLoading } from 'vuestic-ui'
 import { usePondsStore } from '../../stores/ponds.store'
 import { usePondBatchesStore } from '../../stores/pond-batches.store'
 import { useFarmingLogsStore } from '../../stores/farming-logs.store'
-import { FARMING_LOG_TYPE_LABELS, SPECIES_LABELS, type BatchItem, type FarmingLog, type FarmingLogInput, type FarmingLogType, type FarmingLogVerifyResponse } from '../../types'
+import { FARMING_LOG_TYPE_LABELS, SPECIES_LABELS, type BatchItem, type FarmingLog, type FarmingLogHistoryResponse, type FarmingLogInput, type FarmingLogType, type FarmingLogVerifyResponse } from '../../types'
 
 const route = useRoute(); const router = useRouter(); const logStore = useFarmingLogsStore(); const pondsStore = usePondsStore(); const batchesStore = usePondBatchesStore()
 const { items, loading, saving, verifying } = storeToRefs(logStore)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const batchId = computed(() => String(route.params.batchId))
 const pondName = ref(''); const batchInfo = ref<BatchItem | null>(null); const error = ref('')
 const showForm = ref(false); const formError = ref(''); const success = ref('')
-const verifyResults = ref<FarmingLogVerifyResponse | null>(null); const verifyError = ref(''); const verifiedStatus = ref<Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING'>>({})
+const editingId = ref<string | null>(null)
+const editingMode = ref<'DRAFT' | 'CORRECTION'>('DRAFT'); const historyResult = ref<FarmingLogHistoryResponse | null>(null)
+const verifyResults = ref<FarmingLogVerifyResponse | null>(null); const verifyError = ref(''); const verifiedStatus = ref<Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'>>({})
 const logTypes = Object.entries(FARMING_LOG_TYPE_LABELS) as [FarmingLogType, string][]
-const form = reactive({ logType: 'FEEDING' as FarmingLogType, logDate: '', feedType: '', feedAmount: '' as string | number, temperature: '' as string | number, salinity: '' as string | number, ph: '' as string | number, dissolvedOxygen: '' as string | number, medicineName: '', dose: '', mortalityCount: '' as string | number, cause: '', description: '', imageUrl: '' })
+const form = reactive({ logType: 'FEEDING' as FarmingLogType, logDate: '', feedType: '', feedAmount: '' as string | number, temperature: '' as string | number, salinity: '' as string | number, ph: '' as string | number, dissolvedOxygen: '' as string | number, medicineName: '', dose: '', mortalityCount: '' as string | number, cause: '', description: '', imageUrl: '', correctionReason: '' })
 const DETAIL_LABELS: Record<string, string> = { feedType: 'Loại thức ăn', feedAmount: 'Số lượng (kg)', temperature: 'Nhiệt độ (°C)', salinity: 'Độ mặn (‰)', ph: 'pH', dissolvedOxygen: 'Oxy hòa tan (mg/L)', medicineName: 'Tên thuốc / hoá chất', dose: 'Liều lượng', mortalityCount: 'Số con chết', cause: 'Nguyên nhân', description: 'Mô tả', note: 'Ghi chú' }
 const numeric = (value: string | number) => value === '' ? null : Number(value)
 const dateOnly = (value: string | null | undefined) => value ? value.slice(0, 10) : ''
 function formatDateTime(value: string) { const d = new Date(value); return isNaN(d.getTime()) ? value : `${d.toLocaleDateString('vi-VN')} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` }
 function shortHash(value: string) { return value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}` }
 function detailsRows(log: FarmingLog) { return Object.entries(log.details ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: String(v) })) }
-function reset() { Object.assign(form, { logType: 'FEEDING', logDate: '', feedType: '', feedAmount: '', temperature: '', salinity: '', ph: '', dissolvedOxygen: '', medicineName: '', dose: '', mortalityCount: '', cause: '', description: '', imageUrl: '' }); formError.value = '' }
-function openCreate() { reset(); showForm.value = true }
-function close() { showForm.value = false; reset() }
+function reset() { Object.assign(form, { logType: 'FEEDING', logDate: '', feedType: '', feedAmount: '', temperature: '', salinity: '', ph: '', dissolvedOxygen: '', medicineName: '', dose: '', mortalityCount: '', cause: '', description: '', imageUrl: '', correctionReason: '' }); formError.value = '' }
+function openCreate() { editingId.value = null; reset(); showForm.value = true }
+function openEdit(log: FarmingLog) {
+  reset()
+  editingId.value = log.id
+  editingMode.value = log.lifecycle_status === 'DRAFT' ? 'DRAFT' : 'CORRECTION'
+  const details = log.details ?? {}
+  Object.assign(form, {
+    logType: log.log_type,
+    logDate: dateOnly(log.log_date),
+    feedType: String(details.feedType ?? ''),
+    feedAmount: (details.feedAmount ?? '') as string | number,
+    temperature: (details.temperature ?? '') as string | number,
+    salinity: (details.salinity ?? '') as string | number,
+    ph: (details.ph ?? '') as string | number,
+    dissolvedOxygen: (details.dissolvedOxygen ?? '') as string | number,
+    medicineName: String(details.medicineName ?? ''),
+    dose: String(details.dose ?? ''),
+    mortalityCount: (details.mortalityCount ?? '') as string | number,
+    cause: String(details.cause ?? ''),
+    description: String(details.description ?? details.note ?? ''),
+    imageUrl: log.image_url ?? '',
+    correctionReason: '',
+  })
+  showForm.value = true
+}
+function close() { showForm.value = false; editingId.value = null; editingMode.value = 'DRAFT'; reset() }
 function buildDetails(): Record<string, unknown> {
   switch (form.logType) {
     case 'FEEDING': return { feedType: form.feedType.trim(), feedAmount: numeric(form.feedAmount), note: form.description.trim() || null }
@@ -46,9 +72,26 @@ async function submit() {
   if (!form.logDate) { formError.value = 'Vui lòng chọn ngày ghi nhật ký'; return }
   const required = validate()
   if (required) { formError.value = required; return }
-  const input: FarmingLogInput = { batchId: batchId.value, logType: form.logType, logDate: form.logDate, details: buildDetails(), imageUrl: form.imageUrl.trim() || null }
-  try { await logStore.create(input); success.value = 'Đã ghi nhật ký nuôi và lưu lên Blockchain'; close() } catch { formError.value = logStore.error }
+  if (editingId.value && editingMode.value === 'CORRECTION' && form.correctionReason.trim().length < 3) { formError.value = 'Vui lòng nhập lý do đính chính (tối thiểu 3 ký tự)'; return }
+  const input: FarmingLogInput = { batchId: batchId.value, logType: form.logType, logDate: form.logDate, details: buildDetails(), imageUrl: form.imageUrl.trim() || null, correctionReason: editingId.value ? form.correctionReason.trim() : undefined }
+  try {
+    if (editingId.value) {
+      const current = items.value.find((item) => item.id === editingId.value)
+      if (editingMode.value === 'CORRECTION' && current) await logStore.correct(editingId.value, { ...input, expectedVersion: current.current_version })
+      else await logStore.update(editingId.value, input)
+      verifiedStatus.value = {}
+      success.value = editingMode.value === 'CORRECTION' ? 'Đã đính chính và chứng thực phiên bản mới' : 'Đã lưu thay đổi bản nháp'
+    } else {
+      await logStore.create(input)
+      success.value = 'Đã lưu bản nháp'
+    }
+    close()
+  } catch { formError.value = logStore.error }
 }
+
+async function confirmLog(log: FarmingLog) { try { await logStore.confirm(log.id); success.value = 'Đã xác nhận và chứng thực Blockchain' } catch { error.value = logStore.error } }
+async function revokeLog(log: FarmingLog) { const reason = window.prompt('Nhập lý do thu hồi:')?.trim(); if (!reason) return; try { await logStore.revoke(log.id, reason); success.value = 'Đã thu hồi nhật ký' } catch { error.value = logStore.error } }
+async function showHistory(log: FarmingLog) { try { historyResult.value = await logStore.history(log.id) } catch { error.value = logStore.error } }
 
 async function checkSync() {
   verifyError.value = '';
@@ -57,7 +100,7 @@ async function checkSync() {
     verifyResults.value = await logStore.verify(batchId.value)
 
     // Xử lý thêm điều kiện PENDING
-    const map: Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING'> = {}
+    const map: Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'> = {}
     for (const item of verifyResults.value.details) {
       if (item.record?.status === 'PENDING') {
         map[item.id] = 'PENDING'
@@ -102,9 +145,7 @@ onMounted(async () => {
       </div>
       <div v-else class="grid">
         <article v-for="log in items" :key="log.id">
-          <div class="top"><strong>{{ FARMING_LOG_TYPE_LABELS[log.log_type] }}</strong><span
-              :class="log.data_hash ? 'ok' : 'no'">{{ log.data_hash ? '✓ Đã lưu Blockchain' : 'Chưa ghi Blockchain'
-              }}</span></div>
+          <div class="top"><strong>{{ FARMING_LOG_TYPE_LABELS[log.log_type] }}</strong><span :class="log.lifecycle_status === 'CONFIRMED' ? 'ok' : 'no'">{{ log.lifecycle_status === 'DRAFT' ? 'Bản nháp' : log.lifecycle_status === 'REVOKED' ? 'Đã thu hồi' : '✓ Đã chứng thực' }}</span></div>
           <p class="when">{{ formatDateTime(log.log_date) }}</p>
           <dl>
             <div v-for="row in detailsRows(log)" :key="row.label">
@@ -119,16 +160,17 @@ onMounted(async () => {
             {{
               verifiedStatus[log.id] === 'SYNCED'
                 ? '✓ Đồng bộ blockchain'
-                : (verifiedStatus[log.id] === 'PENDING' ? '⏳ Đang chờ xác nhận' : '✗ Lệch dữ liệu blockchain')
+                : (verifiedStatus[log.id] === 'PENDING' ? '⏳ Đang chờ xác nhận' : verifiedStatus[log.id] === 'DRAFT' ? 'Bản nháp chưa chứng thực' : '✗ Lệch dữ liệu blockchain')
             }}
           </p>
+          <footer><va-button v-if="log.lifecycle_status !== 'REVOKED'" preset="secondary" size="small" @click="openEdit(log)">{{ log.lifecycle_status === 'DRAFT' ? 'Chỉnh sửa' : 'Đính chính' }}</va-button><va-button v-if="log.lifecycle_status === 'DRAFT'" size="small" :loading="saving" @click="confirmLog(log)">Xác nhận</va-button><va-button v-if="log.lifecycle_status === 'CONFIRMED'" preset="plain" color="danger" size="small" @click="revokeLog(log)">Thu hồi</va-button><va-button v-if="log.current_version_id" preset="plain" size="small" @click="showHistory(log)">Lịch sử</va-button></footer>
         </article>
       </div>
     </va-inner-loading>
     <div v-if="showForm" class="backdrop" @click.self="close">
       <section class="modal">
         <header>
-          <h2>Ghi nhật ký nuôi</h2><button @click="close">×</button>
+          <h2>{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2><button @click="close">×</button>
         </header>
         <form @submit.prevent="submit"><label>Loại nhật ký *<select v-model="form.logType">
               <option v-for="([value, label]) in logTypes" :key="value" :value="value">{{ label }}</option>
@@ -152,12 +194,15 @@ onMounted(async () => {
             v-if="form.logType !== 'CARE' && form.logType !== 'ENVIRONMENT' && form.logType !== 'OTHER'"><label
               class="full">Ghi chú<textarea v-model="form.description" rows="2"></textarea></label></template><label
             class="full">Hình ảnh (URL)<input v-model="form.imageUrl" placeholder="https://..." /></label>
+          <label v-if="editingId && editingMode === 'CORRECTION'" class="full">Lý do đính chính *<textarea v-model="form.correctionReason" rows="3"
+              minlength="3" maxlength="1000" required placeholder="Ví dụ: Nhập nhầm số lượng thức ăn"></textarea></label>
           <p v-if="formError" class="form-error">{{ formError }}</p>
           <footer><va-button preset="secondary" type="button" @click="close">Hủy</va-button><va-button type="submit"
-              :loading="saving">Ghi nhật ký</va-button></footer>
+              :loading="saving">{{ editingId ? 'Lưu thay đổi' : 'Ghi nhật ký' }}</va-button></footer>
         </form>
       </section>
     </div>
+    <div v-if="historyResult" class="backdrop" @click.self="historyResult = null"><section class="modal verify"><header><h2>Lịch sử phiên bản</h2><button @click="historyResult = null">×</button></header><ul class="verify-list"><li v-for="version in historyResult.items" :key="version.id"><div class="v-top"><strong>Phiên bản {{ version.version_number }}</strong><span>{{ version.status }}</span></div><p v-if="version.correction_reason">Lý do: {{ version.correction_reason }}</p><p class="when">{{ formatDateTime(version.created_at) }}</p><blockquote class="hash">EVENT {{ shortHash(version.blockchain_event_id) }}<template v-if="version.tx_hash"> · TX {{ shortHash(version.tx_hash) }}</template></blockquote></li></ul></section></div>
     <div v-if="verifyResults" class="backdrop" @click.self="verifyResults = null">
       <section class="modal verify">
         <header>
@@ -292,6 +337,10 @@ article .top span {
   color: #64748b;
   font-size: .85rem;
   margin: .4rem 0 0
+}
+
+article footer {
+  margin-top: .8rem
 }
 
 dl div {

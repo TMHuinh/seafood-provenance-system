@@ -13,31 +13,32 @@ contract SeafoodProvenance {
         uint256 writeCount;
     }
 
-    event DataRecorded(string indexed id, string dataHash, address indexed recordedBy, uint256 blockNumber);
+    event DataRecorded(string indexed eventId, string dataHash, address indexed recordedBy, uint256 blockNumber);
 
     mapping(string => ChainRecord) private _records;
 
     /// @notice Ghi hoặc cập nhật hash của một thực thể.
-    /// @param id       Mã định danh thực thể (ví dụ: id của nhật ký nuôi).
+    /// @param eventId  Mã duy nhất của sự kiện (ví dụ: FARMING_LOG_RECORDED:<logId>).
     /// @param dataHash Hash SHA-256 của dữ liệu.
-    function recordData(string calldata id, string calldata dataHash) external {
-        ChainRecord storage record = _records[id];
+    function recordData(string calldata eventId, string calldata dataHash) external {
+        ChainRecord storage record = _records[eventId];
+        require(record.timestamp == 0, "Event already exists");
         record.dataHash = dataHash;
         record.recordedBy = msg.sender;
         record.timestamp = block.timestamp;
         record.blockNumber = block.number;
-        record.writeCount += 1;
+        record.writeCount = 1;
 
-        emit DataRecorded(id, dataHash, msg.sender, block.number);
+        emit DataRecorded(eventId, dataHash, msg.sender, block.number);
     }
 
     /// @notice Lấy toàn bộ bản ghi của một thực thể trên chuỗi (dùng để đối soát).
-    function getRecord(string calldata id) external view returns (ChainRecord memory) {
-        return _records[id];
+    function getRecord(string calldata eventId) external view returns (ChainRecord memory) {
+        return _records[eventId];
     }
 
     /// @notice Lấy dataHash (hoặc chuỗi rỗng nếu chưa từng ghi).
-    function getDataHash(string calldata id) external view returns (string memory) {
-        return _records[id].dataHash;
+    function getDataHash(string calldata eventId) external view returns (string memory) {
+        return _records[eventId].dataHash;
     }
 }

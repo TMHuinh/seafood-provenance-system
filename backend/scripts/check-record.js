@@ -10,9 +10,9 @@ const artifactPath = path.resolve(
 )
 
 async function main() {
-  const id = process.argv[2]
-  if (!id) {
-    console.error('Cách dùng: node scripts/check-record.js <id>')
+  const eventId = process.argv[2]
+  if (!eventId) {
+    console.error('Cách dùng: node scripts/check-record.js <eventId>')
     process.exitCode = 1
     return
   }
@@ -35,17 +35,17 @@ async function main() {
   const provider = new ethers.JsonRpcProvider(rpcUrl)
   const iface = new ethers.Interface(artifact.abi)
 
-  const calldata = iface.encodeFunctionData('getRecord', [id])
+  const calldata = iface.encodeFunctionData('getRecord', [eventId])
   const raw = await provider.call({ to: contractAddress, data: calldata })
   const record = iface.decodeFunctionResult('getRecord', raw)[0]
 
   if (record[4].toString() === '0') {
-    console.log('id         :', id)
+    console.log('eventId    :', eventId)
     console.log('Trạng thái : Chưa có bản ghi trên chain (writeCount = 0)')
     return
   }
 
-  console.log('id         :', id)
+  console.log('eventId    :', eventId)
   console.log('dataHash   :', record[0])
   console.log('recordedBy :', record[1])
   console.log('timestamp  :', new Date(Number(record[2]) * 1000).toISOString())

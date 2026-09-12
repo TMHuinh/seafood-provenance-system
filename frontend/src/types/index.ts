@@ -225,6 +225,9 @@ export interface FarmingLog {
   image_url: string | null
   data_hash: string | null
   tx_hash: string | null
+  current_version: number
+  current_version_id: string | null
+  lifecycle_status: 'DRAFT' | 'CONFIRMED' | 'REVOKED'
   created_at: string
   updated_at: string
 }
@@ -235,17 +238,22 @@ export interface FarmingLogInput {
   logDate: string
   details: Record<string, unknown>
   imageUrl?: string | null
+  correctionReason?: string
 }
 
 export interface FarmingLogListResponse { success: boolean; count: number; items: FarmingLog[] }
 export interface FarmingLogResponse { success: boolean; log: FarmingLog }
+export interface FarmingLogVersion { id: string; farming_log_id: string; version_number: number; status: 'ACTIVE' | 'SUPERSEDED' | 'REVOKED' | 'FAILED'; log_date: string; log_type: FarmingLogType; details: Record<string, unknown>; correction_reason: string | null; blockchain_event_id: string; tx_hash: string | null; created_at: string }
+export interface FarmingLogHistoryResponse { success: boolean; currentVersion: number; items: FarmingLogVersion[] }
 
 export interface FarmingLogVerifyRecord {
   id: string
+  eventId: string
   logType: FarmingLogType
   logDate: string
   dataHash: string | null
-  status: 'SYNCED' | 'DESYNCED'
+  onChainDataHash: string | null
+  status: 'SYNCED' | 'DESYNCED' | 'DRAFT'
   issues: string[]
   record: { eventType: string; status: BlockchainStatus; txHash: string | null; dataHash: string } | null
 }
@@ -254,7 +262,7 @@ export interface FarmingLogVerifyResponse {
   success: boolean
   batchId: string
   checkedAt: string
-  summary: { total: number; verified: number; desynced: number }
+  summary: { total: number; verified: number; desynced: number; drafts: number }
   details: FarmingLogVerifyRecord[]
 }
 

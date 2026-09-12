@@ -59,6 +59,8 @@ async function getDataHashFromContract(eventId, contractAddress = env.blockchain
 
   try {
     const provider = new ethers.JsonRpcProvider(env.blockchainRpcUrl)
+    const code = await provider.getCode(contractAddress)
+    if (code === '0x') return null
     const contract = new ethers.Contract(
       contractAddress,
       ['function getDataHash(string eventId) external view returns (string)'],

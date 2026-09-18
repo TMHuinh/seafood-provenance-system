@@ -2,7 +2,10 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
-import { VaButton, VaInnerLoading } from 'vuestic-ui'
+import {
+  VaButton, VaInnerLoading, VaModal, VaInput, VaSelect,
+  VaAlert, VaCard, VaCardContent, VaBadge, VaIcon, VaTextarea
+} from 'vuestic-ui'
 import { usePondsStore } from '../../stores/ponds.store'
 import { usePondBatchesStore } from '../../stores/pond-batches.store'
 import { useFarmingLogsStore } from '../../stores/farming-logs.store'
@@ -16,15 +19,78 @@ const showForm = ref(false); const formError = ref(''); const success = ref('')
 const editingId = ref<string | null>(null)
 const editingMode = ref<'DRAFT' | 'CORRECTION'>('DRAFT'); const historyResult = ref<FarmingLogHistoryResponse | null>(null)
 const verifyResults = ref<FarmingLogVerifyResponse | null>(null); const verifyError = ref(''); const verifiedStatus = ref<Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'>>({})
-const logTypes = Object.entries(FARMING_LOG_TYPE_LABELS) as [FarmingLogType, string][]
+
+const showHistoryModal = computed({ get: () => !!historyResult.value, set: (val) => { if (!val) historyResult.value = null } })
+const showVerifyModal = computed({ get: () => !!verifyResults.value, set: (val) => { if (!val) verifyResults.value = null } })
+
+const logTypes = Object.entries(FARMING_LOG_TYPE_LABELS).map(([value, label]) => ({ value: value as FarmingLogType, label }))
 const form = reactive({ logType: 'FEEDING' as FarmingLogType, logDate: '', feedType: '', feedAmount: '' as string | number, temperature: '' as string | number, salinity: '' as string | number, ph: '' as string | number, dissolvedOxygen: '' as string | number, medicineName: '', dose: '', mortalityCount: '' as string | number, cause: '', description: '', imageUrl: '', correctionReason: '' })
 const DETAIL_LABELS: Record<string, string> = { feedType: 'Loại thức ăn', feedAmount: 'Số lượng (kg)', temperature: 'Nhiệt độ (°C)', salinity: 'Độ mặn (‰)', ph: 'pH', dissolvedOxygen: 'Oxy hòa tan (mg/L)', medicineName: 'Tên thuốc / hoá chất', dose: 'Liều lượng', mortalityCount: 'Số con chết', cause: 'Nguyên nhân', description: 'Mô tả', note: 'Ghi chú' }
 const numeric = (value: string | number) => value === '' ? null : Number(value)
-const dateOnly = (value: string | null | undefined) => value ? value.slice(0, 10) : ''
-function formatDateTime(value: string) { const d = new Date(value); return isNaN(d.getTime()) ? value : `${d.toLocaleDateString('vi-VN')} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` }
+
+// --------------------------------------------------
+// LOGIC SẮP XẾP VÀ GOM NHÓM THEO NGÀY
+// --------------------------------------------------
+
+const groupedLogs = computed(() => {
+  const sorted = [...items.value].sort((a, b) => new Date(b.log_date).getTime() - new Date(a.log_date).getTime())
+  const groups: { date: string, items: FarmingLog[] }[] = []
+  sorted.forEach(log => {
+    const dateStr = new Date(log.log_date).toLocaleDateString('vi-VN')
+    let group = groups.find(g => g.date === dateStr)
+    if (!group) { group = { date: dateStr, items: [] }; groups.push(group) }
+    group.items.push(log)
+  })
+  return groups
+})
+
+const groupedHistoryItems = computed(() => {
+  if (!historyResult.value) return []
+  const sorted = [...historyResult.value.items].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const groups: { date: string, items: typeof sorted }[] = []
+  sorted.forEach(item => {
+    const dateStr = new Date(item.created_at).toLocaleDateString('vi-VN')
+    let group = groups.find(g => g.date === dateStr)
+    if (!group) { group = { date: dateStr, items: [] }; groups.push(group) }
+    group.items.push(item)
+  })
+  return groups
+})
+
+const groupedVerifyDetails = computed(() => {
+  if (!verifyResults.value) return []
+  const sorted = [...verifyResults.value.details].sort((a, b) => new Date(b.logDate).getTime() - new Date(a.logDate).getTime())
+  const groups: { date: string, items: typeof sorted }[] = []
+  sorted.forEach(item => {
+    const dateStr = new Date(item.logDate).toLocaleDateString('vi-VN')
+    let group = groups.find(g => g.date === dateStr)
+    if (!group) { group = { date: dateStr, items: [] }; groups.push(group) }
+    group.items.push(item)
+  })
+  return groups
+})
+
+// --------------------------------------------------
+
+function formatDateTime(value: string) { 
+  const d = new Date(value); 
+  if (isNaN(d.getTime())) return value;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} - ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function toDatetimeLocal(value: string | Date | null | undefined) {
+  if (!value) return ''
+  const d = value instanceof Date ? value : new Date(value)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function shortHash(value: string) { return value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}` }
 function detailsRows(log: FarmingLog) { return Object.entries(log.details ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: String(v) })) }
 function reset() { Object.assign(form, { logType: 'FEEDING', logDate: '', feedType: '', feedAmount: '', temperature: '', salinity: '', ph: '', dissolvedOxygen: '', medicineName: '', dose: '', mortalityCount: '', cause: '', description: '', imageUrl: '', correctionReason: '' }); formError.value = '' }
+
 function openCreate() { editingId.value = null; reset(); showForm.value = true }
 function openEdit(log: FarmingLog) {
   reset()
@@ -33,7 +99,7 @@ function openEdit(log: FarmingLog) {
   const details = log.details ?? {}
   Object.assign(form, {
     logType: log.log_type,
-    logDate: dateOnly(log.log_date),
+    logDate: toDatetimeLocal(log.log_date),
     feedType: String(details.feedType ?? ''),
     feedAmount: (details.feedAmount ?? '') as string | number,
     temperature: (details.temperature ?? '') as string | number,
@@ -51,6 +117,7 @@ function openEdit(log: FarmingLog) {
   showForm.value = true
 }
 function close() { showForm.value = false; editingId.value = null; editingMode.value = 'DRAFT'; reset() }
+
 function buildDetails(): Record<string, unknown> {
   switch (form.logType) {
     case 'FEEDING': return { feedType: form.feedType.trim(), feedAmount: numeric(form.feedAmount), note: form.description.trim() || null }
@@ -60,6 +127,7 @@ function buildDetails(): Record<string, unknown> {
     default: return { description: form.description.trim() }
   }
 }
+
 function validate(): string {
   if (form.logType === 'FEEDING' && !form.feedType.trim()) return 'Vui lòng nhập loại thức ăn'
   if (form.logType === 'MEDICINE' && !form.medicineName.trim()) return 'Vui lòng nhập tên thuốc / hoá chất'
@@ -67,13 +135,25 @@ function validate(): string {
   if ((form.logType === 'CARE' || form.logType === 'ENVIRONMENT' || form.logType === 'OTHER') && !form.description.trim()) return 'Vui lòng nhập mô tả'
   return ''
 }
+
 async function submit() {
   formError.value = ''; success.value = ''
-  if (!form.logDate) { formError.value = 'Vui lòng chọn ngày ghi nhật ký'; return }
+  if (!form.logDate) { formError.value = 'Vui lòng chọn thời gian ghi nhật ký'; return }
   const required = validate()
   if (required) { formError.value = required; return }
   if (editingId.value && editingMode.value === 'CORRECTION' && form.correctionReason.trim().length < 3) { formError.value = 'Vui lòng nhập lý do đính chính (tối thiểu 3 ký tự)'; return }
-  const input: FarmingLogInput = { batchId: batchId.value, logType: form.logType, logDate: form.logDate, details: buildDetails(), imageUrl: form.imageUrl.trim() || null, correctionReason: editingId.value ? form.correctionReason.trim() : undefined }
+
+  const isoLogDate = new Date(form.logDate).toISOString()
+
+  const input: FarmingLogInput = { 
+    batchId: batchId.value, 
+    logType: form.logType, 
+    logDate: isoLogDate, 
+    details: buildDetails(), 
+    imageUrl: form.imageUrl.trim() || null, 
+    correctionReason: editingId.value ? form.correctionReason.trim() : undefined 
+  }
+  
   try {
     if (editingId.value) {
       const current = items.value.find((item) => item.id === editingId.value)
@@ -94,26 +174,18 @@ async function revokeLog(log: FarmingLog) { const reason = window.prompt('Nhập
 async function showHistory(log: FarmingLog) { try { historyResult.value = await logStore.history(log.id) } catch { error.value = logStore.error } }
 
 async function checkSync() {
-  verifyError.value = '';
-  verifyResults.value = null;
+  verifyError.value = ''; verifyResults.value = null;
   try {
     verifyResults.value = await logStore.verify(batchId.value)
-
-    // Xử lý thêm điều kiện PENDING
     const map: Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'> = {}
     for (const item of verifyResults.value.details) {
-      if (item.record?.status === 'PENDING') {
-        map[item.id] = 'PENDING'
-      } else {
-        map[item.id] = item.status
-      }
+      if (item.record?.status === 'PENDING') map[item.id] = 'PENDING'
+      else map[item.id] = item.status
     }
     verifiedStatus.value = map
-
-  } catch {
-    verifyError.value = logStore.error
-  }
+  } catch { verifyError.value = logStore.error }
 }
+
 onMounted(async () => {
   await pondsStore.load(farmId.value)
   pondName.value = pondsStore.items.find((x) => x.id === pondId.value)?.pond_name ?? ''
@@ -123,462 +195,327 @@ onMounted(async () => {
   await logStore.load(batchId.value)
   error.value = logStore.error
 })
+
+// Helpers màu sắc
+const lifecycleColors: Record<string, string> = { DRAFT: 'secondary', CONFIRMED: 'success', REVOKED: 'danger' }
+const lifecycleLabels: Record<string, string> = { DRAFT: 'Bản nháp', CONFIRMED: '✓ Đã chứng thực', REVOKED: 'Đã thu hồi' }
+const verifyColors: Record<string, string> = { SYNCED: 'success', DESYNCED: 'danger', PENDING: 'warning', DRAFT: 'secondary' }
+const verifyLabels: Record<string, string> = { SYNCED: '✓ Đồng bộ', DESYNCED: '✗ Lệch dữ liệu', PENDING: '⏳ Đang chờ xác nhận', DRAFT: 'Chưa chứng thực' }
+
+// Fix lỗi số 1 và số 2 (Undefined Index Type)
+function getVerifyColor(status?: string) { return status ? verifyColors[status] : 'secondary'; }
+function getVerifyLabel(status?: string) { return status ? verifyLabels[status] : ''; }
 </script>
 
 <template>
-  <main class="page"><button class="back" @click="router.push({ name: 'pond-batches', params: { farmId, pondId } })">←
-      Các vụ nuôi</button>
-    <header>
-      <div>
-        <p class="eyebrow">{{ batchInfo ? `${batchInfo.batch_code} · ${SPECIES_LABELS[batchInfo.species]}` : 'Vụ nuôi'
-        }} · {{ pondName }}</p>
-        <h1>Nhật ký nuôi</h1>
+  <main class="page-container">
+    <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn" @click="router.push({ name: 'pond-batches', params: { farmId, pondId } })">
+      Quay lại Các vụ nuôi
+    </va-button>
+
+    <header class="page-header">
+      <div class="header-info">
+        <p class="eyebrow">
+          <va-icon name="water" size="small" class="mr-1" />
+          {{ batchInfo ? `${batchInfo.batch_code} · ${SPECIES_LABELS[batchInfo.species]}` : 'Vụ nuôi' }} · {{ pondName }}
+        </p>
+        <h1 class="page-title">Nhật ký nuôi</h1>
       </div>
-      <div class="actions"><va-button preset="secondary" :loading="verifying" @click="checkSync">Kiểm tra đồng bộ
-          Blockchain</va-button><va-button gradient @click="openCreate">+ Ghi nhật ký</va-button></div>
+      <div class="header-actions">
+        <va-button preset="secondary" icon="sync" :loading="verifying" @click="checkSync">Kiểm tra Blockchain</va-button>
+        <va-button icon="add" gradient @click="openCreate">Ghi nhật ký</va-button>
+      </div>
     </header>
-    <p v-if="success" class="notice success">{{ success }}</p>
-    <p v-if="error"><va-alert color="danger" dense>{{ error }}</va-alert></p><va-inner-loading :loading="loading">
-      <div v-if="!loading && !items.length" class="empty">
+
+    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable>{{ success }}</va-alert>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>{{ error }}</va-alert>
+
+    <va-inner-loading :loading="loading">
+      <div v-if="!loading && !items.length" class="empty-state">
+        <div class="empty-icon-wrapper"><va-icon name="edit_document" size="3rem" color="info" /></div>
         <h2>Chưa có nhật ký nuôi</h2>
-        <p>Ghi nhật ký đầu tiên cho vụ nuôi này.</p><va-button @click="openCreate">Ghi nhật ký</va-button>
+        <p class="text-secondary">Hãy ghi lại hoạt động đầu tiên cho vụ nuôi này.</p>
+        <va-button icon="add" class="mt-4" @click="openCreate">Ghi nhật ký</va-button>
       </div>
-      <div v-else class="grid">
-        <article v-for="log in items" :key="log.id">
-          <div class="top"><strong>{{ FARMING_LOG_TYPE_LABELS[log.log_type] }}</strong><span :class="log.lifecycle_status === 'CONFIRMED' ? 'ok' : 'no'">{{ log.lifecycle_status === 'DRAFT' ? 'Bản nháp' : log.lifecycle_status === 'REVOKED' ? 'Đã thu hồi' : '✓ Đã chứng thực' }}</span></div>
-          <p class="when">{{ formatDateTime(log.log_date) }}</p>
-          <dl>
-            <div v-for="row in detailsRows(log)" :key="row.label">
-              <dt>{{ row.label }}</dt>
-              <dd>{{ row.value }}</dd>
-            </div>
-          </dl>
-          <blockquote v-if="log.data_hash" class="hash">DATA {{ shortHash(log.data_hash) }}<template v-if="log.tx_hash">
-              · TX {{ shortHash(log.tx_hash) }}</template>
-          </blockquote>
-          <p v-if="verifiedStatus[log.id]" class="verify-badge" :class="verifiedStatus[log.id]?.toLowerCase()">
-            {{
-              verifiedStatus[log.id] === 'SYNCED'
-                ? '✓ Đồng bộ blockchain'
-                : (verifiedStatus[log.id] === 'PENDING' ? '⏳ Đang chờ xác nhận' : verifiedStatus[log.id] === 'DRAFT' ? 'Bản nháp chưa chứng thực' : '✗ Lệch dữ liệu blockchain')
-            }}
-          </p>
-          <footer><va-button v-if="log.lifecycle_status !== 'REVOKED'" preset="secondary" size="small" @click="openEdit(log)">{{ log.lifecycle_status === 'DRAFT' ? 'Chỉnh sửa' : 'Đính chính' }}</va-button><va-button v-if="log.lifecycle_status === 'DRAFT'" size="small" :loading="saving" @click="confirmLog(log)">Xác nhận</va-button><va-button v-if="log.lifecycle_status === 'CONFIRMED'" preset="plain" color="danger" size="small" @click="revokeLog(log)">Thu hồi</va-button><va-button v-if="log.current_version_id" preset="plain" size="small" @click="showHistory(log)">Lịch sử</va-button></footer>
-        </article>
+
+      <!-- Log Groups (Gom nhóm và sắp xếp theo ngày) -->
+      <div v-else class="logs-container">
+        <div v-for="group in groupedLogs" :key="group.date" class="date-group">
+          
+          <!-- Header của Ngày -->
+          <h3 class="date-header">
+            <va-icon name="calendar_today" size="small" class="mr-2" color="primary" /> 
+            Ngày {{ group.date }}
+          </h3>
+
+          <div class="log-grid">
+            <va-card v-for="log in group.items" :key="log.id" class="log-card">
+              <va-card-content>
+                <div class="card-top">
+                  <strong class="log-type-title">{{ FARMING_LOG_TYPE_LABELS[log.log_type] }}</strong>
+                  <va-badge :color="lifecycleColors[log.lifecycle_status]" :text="lifecycleLabels[log.lifecycle_status]" />
+                </div>
+                <p class="log-date"><va-icon name="schedule" size="small" class="mr-1" />{{ formatDateTime(log.log_date) }}</p>
+
+                <div class="log-details">
+                  <div v-for="row in detailsRows(log)" :key="row.label" class="detail-row">
+                    <span class="detail-label">{{ row.label }}</span>
+                    <span class="detail-value">{{ row.value }}</span>
+                  </div>
+                </div>
+
+                <div v-if="log.data_hash" class="hash-block">
+                  <div class="hash-line"><span>DATA:</span> {{ shortHash(log.data_hash) }}</div>
+                  <div v-if="log.tx_hash" class="hash-line"><span>TX:</span> {{ shortHash(log.tx_hash) }}</div>
+                </div>
+
+                <div v-if="verifiedStatus[log.id]" class="mt-2">
+                  <va-badge :color="getVerifyColor(verifiedStatus[log.id])" outline>
+                    {{ getVerifyLabel(verifiedStatus[log.id]) }}
+                  </va-badge>
+                </div>
+              </va-card-content>
+
+              <div class="card-actions">
+                <va-button v-if="log.lifecycle_status !== 'REVOKED'" preset="primary" size="small" @click="openEdit(log)">
+                  {{ log.lifecycle_status === 'DRAFT' ? 'Chỉnh sửa' : 'Đính chính' }}
+                </va-button>
+                <va-button v-if="log.lifecycle_status === 'DRAFT'" color="success" size="small" :loading="saving" @click="confirmLog(log)">Xác nhận</va-button>
+                <va-button v-if="log.lifecycle_status === 'CONFIRMED'" preset="plain" color="danger" size="small" @click="revokeLog(log)">Thu hồi</va-button>
+                
+                <!-- Fix Cảnh báo số 4 (Đổi flex-grow thành grow) -->
+                <div class="grow"></div>
+                
+                <va-button v-if="log.current_version_id" preset="secondary" icon="history" size="small" @click="showHistory(log)">Lịch sử</va-button>
+              </div>
+            </va-card>
+          </div>
+        </div>
       </div>
     </va-inner-loading>
-    <div v-if="showForm" class="backdrop" @click.self="close">
-      <section class="modal">
-        <header>
-          <h2>{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2><button @click="close">×</button>
-        </header>
-        <form @submit.prevent="submit"><label>Loại nhật ký *<select v-model="form.logType">
-              <option v-for="([value, label]) in logTypes" :key="value" :value="value">{{ label }}</option>
-            </select></label><label>Ngày ghi nhật ký *<input v-model="form.logDate" type="date"
-              :max="dateOnly(new Date().toISOString())" /></label><template
-            v-if="form.logType === 'FEEDING'"><label>Loại thức ăn *<input v-model="form.feedType" maxlength="255"
-                placeholder="Thức ăn viên 40%" /></label><label>Số lượng (kg)<input v-model="form.feedAmount"
-                type="number" min="0" step="0.01" /></label></template><template
-            v-else-if="form.logType === 'WATER_QUALITY'"><label>Nhiệt độ (°C)<input v-model="form.temperature"
-                type="number" step="0.1" /></label><label>Độ mặn (‰)<input v-model="form.salinity" type="number"
-                step="0.1" /></label><label>pH<input v-model="form.ph" type="number" min="0" max="14"
-                step="0.1" /></label><label>Oxy hòa tan (mg/L)<input v-model="form.dissolvedOxygen" type="number"
-                step="0.1" /></label></template><template v-else-if="form.logType === 'MEDICINE'"><label>Tên thuốc / hoá
-              chất *<input v-model="form.medicineName" maxlength="255" /></label><label>Liều lượng<input
-                v-model="form.dose" maxlength="255" /></label></template><template
-            v-else-if="form.logType === 'MORTALITY'"><label>Số con chết *<input v-model="form.mortalityCount"
-                type="number" min="0" step="1" /></label><label>Nguyên nhân<input v-model="form.cause"
-                maxlength="255" /></label></template><template v-else><label class="full">Mô tả *<textarea
-                v-model="form.description" rows="3"
-                placeholder="Mô tả chi tiết hoạt động chăm sóc / môi trường..."></textarea></label></template><template
-            v-if="form.logType !== 'CARE' && form.logType !== 'ENVIRONMENT' && form.logType !== 'OTHER'"><label
-              class="full">Ghi chú<textarea v-model="form.description" rows="2"></textarea></label></template><label
-            class="full">Hình ảnh (URL)<input v-model="form.imageUrl" placeholder="https://..." /></label>
-          <label v-if="editingId && editingMode === 'CORRECTION'" class="full">Lý do đính chính *<textarea v-model="form.correctionReason" rows="3"
-              minlength="3" maxlength="1000" required placeholder="Ví dụ: Nhập nhầm số lượng thức ăn"></textarea></label>
-          <p v-if="formError" class="form-error">{{ formError }}</p>
-          <footer><va-button preset="secondary" type="button" @click="close">Hủy</va-button><va-button type="submit"
-              :loading="saving">{{ editingId ? 'Lưu thay đổi' : 'Ghi nhật ký' }}</va-button></footer>
-        </form>
-      </section>
-    </div>
-    <div v-if="historyResult" class="backdrop" @click.self="historyResult = null"><section class="modal verify"><header><h2>Lịch sử phiên bản</h2><button @click="historyResult = null">×</button></header><ul class="verify-list"><li v-for="version in historyResult.items" :key="version.id"><div class="v-top"><strong>Phiên bản {{ version.version_number }}</strong><span>{{ version.status }}</span></div><p v-if="version.correction_reason">Lý do: {{ version.correction_reason }}</p><p class="when">{{ formatDateTime(version.created_at) }}</p><blockquote class="hash">EVENT {{ shortHash(version.blockchain_event_id) }}<template v-if="version.tx_hash"> · TX {{ shortHash(version.tx_hash) }}</template></blockquote></li></ul></section></div>
-    <div v-if="verifyResults" class="backdrop" @click.self="verifyResults = null">
-      <section class="modal verify">
-        <header>
-          <h2>Kết quả kiểm tra đồng bộ Blockchain</h2><button @click="verifyResults = null">×</button>
-        </header>
-        <p v-if="verifyError" class="notice error">{{ verifyError }}</p>
-        <div class="summary">
-          <div><strong>{{ verifyResults.summary.total }}</strong><span>Tổng nhật ký</span></div>
-          <div class="ok"><strong>{{ verifyResults.summary.verified }}</strong><span>Đồng bộ</span></div>
-          <div class="err"><strong>{{ verifyResults.summary.desynced }}</strong><span>Lệch dữ liệu</span></div>
+
+    <!-- Modal: Ghi Nhật Ký -->
+    <va-modal v-model="showForm" hide-default-actions size="large" overlay-opacity="0.5">
+      <template #header>
+        <h2 class="modal-title">{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2>
+      </template>
+
+      <form @submit.prevent="submit" class="modern-form">
+        <va-select v-model="form.logType" :options="logTypes" value-by="value" text-by="label" label="Loại nhật ký *" class="col-span-1" />
+        
+        <va-input v-model="form.logDate" type="datetime-local" label="Thời gian ghi (Ngày & Giờ) *" :max="toDatetimeLocal(new Date())" class="col-span-1" />
+
+        <template v-if="form.logType === 'FEEDING'">
+          <va-input v-model="form.feedType" label="Loại thức ăn *" placeholder="VD: Thức ăn viên 40%" class="col-span-1" />
+          <va-input v-model="form.feedAmount" type="number" label="Số lượng (kg)" min="0" step="0.01" class="col-span-1" />
+        </template>
+        <template v-else-if="form.logType === 'WATER_QUALITY'">
+          <va-input v-model="form.temperature" type="number" label="Nhiệt độ (°C)" step="0.1" class="col-span-1" />
+          <va-input v-model="form.salinity" type="number" label="Độ mặn (‰)" step="0.1" class="col-span-1" />
+          <va-input v-model="form.ph" type="number" label="pH" min="0" max="14" step="0.1" class="col-span-1" />
+          <va-input v-model="form.dissolvedOxygen" type="number" label="Oxy hòa tan (mg/L)" step="0.1" class="col-span-1" />
+        </template>
+        <template v-else-if="form.logType === 'MEDICINE'">
+          <va-input v-model="form.medicineName" label="Tên thuốc / hoá chất *" class="col-span-1" />
+          <va-input v-model="form.dose" label="Liều lượng" class="col-span-1" />
+        </template>
+        <template v-else-if="form.logType === 'MORTALITY'">
+          <va-input v-model="form.mortalityCount" type="number" label="Số con chết *" min="0" step="1" class="col-span-1" />
+          <va-input v-model="form.cause" label="Nguyên nhân" class="col-span-1" />
+        </template>
+        <template v-else>
+          <va-textarea v-model="form.description" label="Mô tả *" placeholder="Mô tả chi tiết hoạt động..." class="col-span-2" />
+        </template>
+
+        <template v-if="['FEEDING', 'WATER_QUALITY', 'MEDICINE', 'MORTALITY'].includes(form.logType)">
+          <va-textarea v-model="form.description" label="Ghi chú" class="col-span-2" />
+        </template>
+
+        <va-input v-model="form.imageUrl" label="Hình ảnh (URL)" placeholder="https://..." class="col-span-2" />
+        <va-textarea v-if="editingId && editingMode === 'CORRECTION'" v-model="form.correctionReason" label="Lý do đính chính *" placeholder="Ví dụ: Nhập nhầm số lượng thức ăn" class="col-span-2" required />
+
+        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">{{ formError }}</va-alert>
+
+        <div class="form-actions col-span-2">
+          <va-button preset="secondary" type="button" color="secondary" @click="close">Hủy bỏ</va-button>
+          <va-button type="submit" :loading="saving" color="primary">{{ editingId ? 'Lưu thay đổi' : 'Hoàn tất ghi' }}</va-button>
         </div>
-        <ul class="verify-list">
-          <li v-for="item in verifyResults.details" :key="item.id"
-            :class="item.record?.status === 'PENDING' ? 'pending' : item.status.toLowerCase()">
-            <div class="v-top">
-              <strong>{{ FARMING_LOG_TYPE_LABELS[item.logType] }}</strong>
-              <span>
-                {{
-                  item.record?.status === 'PENDING'
-                    ? '⏳ Đang chờ xác nhận'
-                    : (item.status === 'SYNCED' ? '✓ Đồng bộ' : '✗ Lệch dữ liệu')
-                }}
-              </span>
-            </div>
-            <p class="when">{{ formatDateTime(item.logDate) }}</p>
-            <ul v-if="item.issues.length" class="issues" :class="{ 'pending-text': item.record?.status === 'PENDING' }">
-              <li v-for="(issue, i) in item.issues" :key="i">{{ issue }}</li>
-            </ul>
-            <blockquote v-if="item.record" class="hash">
-              DATA {{ shortHash(item.record.dataHash) }}
-              <template v-if="item.record.txHash"> · TX {{ shortHash(item.record.txHash) }}</template>
-              · <em>{{ item.record.status }}</em>
-            </blockquote>
-          </li>
-        </ul>
-      </section>
-    </div>
+      </form>
+    </va-modal>
+
+    <!-- Modal: Lịch sử phiên bản (Có gom nhóm theo ngày) -->
+    <va-modal v-model="showHistoryModal" hide-default-actions size="large" overlay-opacity="0.5">
+      <template #header><h2 class="modal-title">Lịch sử phiên bản</h2></template>
+      <div v-if="historyResult" class="history-list">
+        <div v-for="group in groupedHistoryItems" :key="group.date" class="date-group-small mb-4">
+          <h4 class="date-header-small">Ngày {{ group.date }}</h4>
+          
+          <va-card v-for="version in group.items" :key="version.id" outlined class="mb-3">
+            <va-card-content>
+              <div class="v-top">
+                <strong>Phiên bản {{ version.version_number }}</strong>
+                
+                <!-- Fix lỗi số 3 (Đổi 'VALID' thành 'ACTIVE') -->
+                <va-badge :color="version.status === 'ACTIVE' ? 'success' : 'secondary'">{{ version.status }}</va-badge>
+              </div>
+              <p v-if="version.correction_reason" class="correction-reason"><strong>Lý do:</strong> {{ version.correction_reason }}</p>
+              <p class="log-date"><va-icon name="schedule" size="small" class="mr-1" />{{ formatDateTime(version.created_at) }}</p>
+              
+              <div class="hash-block mt-2">
+                <div class="hash-line"><span>EVENT:</span> {{ shortHash(version.blockchain_event_id) }}</div>
+                <div v-if="version.tx_hash" class="hash-line"><span>TX:</span> {{ shortHash(version.tx_hash) }}</div>
+              </div>
+            </va-card-content>
+          </va-card>
+        </div>
+      </div>
+    </va-modal>
+
+    <!-- Modal: Kết quả Verify (Có gom nhóm theo ngày) -->
+    <va-modal v-model="showVerifyModal" hide-default-actions size="large" overlay-opacity="0.5">
+      <template #header><h2 class="modal-title">Kết quả đồng bộ Blockchain</h2></template>
+      <div v-if="verifyResults">
+        <va-alert v-if="verifyError" color="danger" outline class="mb-4">{{ verifyError }}</va-alert>
+
+        <div class="summary-stats mb-4">
+          <div class="stat-box"><strong>{{ verifyResults.summary.total }}</strong><span>Tổng cộng</span></div>
+          <div class="stat-box ok"><strong>{{ verifyResults.summary.verified }}</strong><span>Khớp dữ liệu</span></div>
+          <div class="stat-box err"><strong>{{ verifyResults.summary.desynced }}</strong><span>Bị lệch</span></div>
+        </div>
+
+        <div class="history-list">
+          <div v-for="group in groupedVerifyDetails" :key="group.date" class="date-group-small mb-4">
+            <h4 class="date-header-small">Ngày {{ group.date }}</h4>
+            
+            <va-card v-for="item in group.items" :key="item.id" outlined class="mb-3"
+              :class="item.record?.status === 'PENDING' ? 'border-warning' : (item.status === 'SYNCED' ? 'border-success' : 'border-danger')">
+              <va-card-content>
+                <div class="v-top">
+                  <strong>{{ FARMING_LOG_TYPE_LABELS[item.logType] }}</strong>
+                  <va-badge :color="item.record?.status === 'PENDING' ? 'warning' : (item.status === 'SYNCED' ? 'success' : 'danger')">
+                    {{ item.record?.status === 'PENDING' ? '⏳ Đang chờ' : (item.status === 'SYNCED' ? '✓ Đồng bộ' : '✗ Lệch dữ liệu') }}
+                  </va-badge>
+                </div>
+                <p class="log-date"><va-icon name="schedule" size="small" class="mr-1" />{{ formatDateTime(item.logDate) }}</p>
+
+                <ul v-if="item.issues.length" class="issues-list" :class="{ 'text-warning': item.record?.status === 'PENDING' }">
+                  <li v-for="(issue, i) in item.issues" :key="i"><va-icon name="error_outline" size="small" class="mr-1" />{{ issue }}</li>
+                </ul>
+
+                <div v-if="item.record" class="hash-block mt-2">
+                  <div class="hash-line"><span>DATA:</span> {{ shortHash(item.record.dataHash) }}</div>
+                  <div v-if="item.record.txHash" class="hash-line"><span>TX:</span> {{ shortHash(item.record.txHash) }}</div>
+                </div>
+              </va-card-content>
+            </va-card>
+          </div>
+        </div>
+      </div>
+    </va-modal>
   </main>
 </template>
 
 <style scoped>
-.page {
-  width: min(1180px, calc(100% - 2.5rem));
-  margin: auto;
-  padding: 2rem 0 4rem
+.page-container { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 1.5rem 0 4rem; font-family: 'Inter', sans-serif; }
+.back-btn { margin-bottom: 1rem; margin-left: -0.5rem; }
+
+/* Header */
+.page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+.eyebrow { display: flex; align-items: center; margin: 0 0 0.5rem; color: var(--va-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
+.page-title { margin: 0; font-size: clamp(1.8rem, 4vw, 2.2rem); font-weight: 800; color: #1e293b; }
+.header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* Empty State */
+.empty-state { padding: 5rem 1rem; text-align: center; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 20px; display: flex; flex-direction: column; align-items: center; }
+.empty-icon-wrapper { width: 80px; height: 80px; background: #e0f2fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
+.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: #1e293b; }
+.text-secondary { color: #64748b; margin: 0; }
+
+/* Gom Nhóm Ngày */
+.date-group { margin-bottom: 2.5rem; }
+.date-header { 
+  display: flex; 
+  align-items: center; 
+  font-size: 1.15rem; 
+  font-weight: 700; 
+  color: #1e293b; 
+  margin-bottom: 1.2rem; 
+  padding-bottom: 0.5rem; 
+  border-bottom: 2px solid #e2e8f0; 
+}
+.date-group-small { margin-bottom: 1.5rem; }
+.date-header-small {
+  font-size: 0.95rem; 
+  font-weight: 700; 
+  color: #475569; 
+  margin: 0 0 0.75rem 0; 
+  text-transform: uppercase; 
+  letter-spacing: 0.05em;
+  border-left: 3px solid #cbd5e1;
+  padding-left: 0.5rem;
 }
 
-.back {
-  border: 0;
-  background: none;
-  color: #0f766e;
-  font-weight: 700;
-  cursor: pointer;
-  margin-bottom: 1rem
-}
+/* Grid & Cards */
+.log-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
+.log-card { border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important; display: flex; flex-direction: column; }
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
+.log-type-title { font-size: 1.15rem; color: #0f172a; }
+.log-date { display: flex; align-items: center; color: #64748b; font-size: 0.85rem; margin: 0 0 1rem; }
 
-.page>header,
-.modal header,
-.top,
-article footer,
-form footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem
-}
+/* Detail Rows */
+.log-details { border-top: 1px solid #f1f5f9; padding-top: 0.75rem; margin-bottom: 1rem; }
+.detail-row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; }
+.detail-label { color: #64748b; }
+.detail-value { font-weight: 600; color: #1e293b; text-align: right; }
 
-.actions {
-  display: flex;
-  gap: .6rem;
-  flex-wrap: wrap
-}
+/* Hash & Code blocks */
+.hash-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.75rem; color: #475569; word-break: break-all; }
+.hash-line span { font-weight: 700; color: #94a3b8; margin-right: 0.25rem; }
 
-.eyebrow {
-  color: #0f766e;
-  font-weight: 800;
-  margin: 0 0 .3rem
-}
+/* Actions */
+.card-actions { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.25rem; background: #f8fafc; border-top: 1px solid #f1f5f9; border-radius: 0 0 16px 16px; margin-top: auto; }
+.grow { flex-grow: 1; }
 
-h1 {
-  margin: 0
-}
+/* Modals & Forms */
+.modal-title { font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; }
+.modern-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; width: 100%; min-width: 500px; }
+.col-span-1 { grid-column: span 1; }
+.col-span-2 { grid-column: 1 / -1; }
+.form-actions { display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid #f1f5f9; }
 
-.notice {
-  padding: .8rem 1rem;
-  border-radius: 10px
-}
+/* History & Verify UI */
+.history-list { max-height: 60vh; overflow-y: auto; padding-right: 0.5rem; }
+.v-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.correction-reason { font-size: 0.9rem; color: #334155; margin-bottom: 0.5rem; background: #f1f5f9; padding: 0.5rem; border-radius: 6px; }
 
-.success {
-  background: #ecfdf5;
-  color: #047857
-}
+.summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.stat-box { text-align: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; }
+.stat-box strong { display: block; font-size: 1.5rem; margin-bottom: 0.25rem; color: #1e293b; }
+.stat-box span { font-size: 0.8rem; color: #64748b; text-transform: uppercase; font-weight: 600; }
+.stat-box.ok strong { color: var(--va-success); }
+.stat-box.err strong { color: var(--va-danger); }
 
-.error,
-.form-error {
-  background: #fef2f2;
-  color: #b91c1c
-}
+.issues-list { list-style: none; padding: 0; margin: 0.5rem 0; color: var(--va-danger); font-size: 0.85rem; }
+.issues-list li { display: flex; align-items: flex-start; margin-bottom: 0.25rem; }
+.text-warning { color: var(--va-warning) !important; }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  margin-top: 1.5rem
-}
+.border-success { border-color: var(--va-success) !important; }
+.border-danger { border-color: var(--va-danger) !important; }
+.border-warning { border-color: var(--va-warning) !important; }
 
-article,
-.empty {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 18px;
-  padding: 1.25rem
-}
+/* Utilities */
+.mr-1 { margin-right: 0.35rem; }
+.mr-2 { margin-right: 0.75rem; }
+.mb-3 { margin-bottom: 0.75rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mt-2 { margin-top: 0.5rem; }
+.mt-4 { margin-top: 1rem; }
 
-article .top span {
-  font-size: .75rem;
-  padding: .3rem .55rem;
-  border-radius: 99px
-}
-
-.top span.ok {
-  background: #ecfdf5;
-  color: #047857
-}
-
-.top span.no {
-  background: #f1f5f9;
-  color: #64748b
-}
-
-.when {
-  color: #64748b;
-  font-size: .85rem;
-  margin: .4rem 0 0
-}
-
-article footer {
-  margin-top: .8rem
-}
-
-dl div {
-  display: flex;
-  justify-content: space-between;
-  border-top: 1px solid #f1f5f9;
-  padding: .6rem 0
-}
-
-dd {
-  margin: 0;
-  font-weight: 600
-}
-
-.hash {
-  font-size: .72rem;
-  color: #0f766e;
-  background: #f0fdfa;
-  border: 1px solid #ccfbf1;
-  border-radius: 8px;
-  padding: .4rem .55rem;
-  margin: .6rem 0 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  word-break: break-all
-}
-
-.verify-badge {
-  font-size: .72rem;
-  font-weight: 700;
-  padding: .3rem .55rem;
-  border-radius: 99px;
-  margin: .6rem 0 0;
-  display: inline-block
-}
-
-.verify-badge.synced {
-  background: #ecfdf5;
-  color: #047857
-}
-
-.verify-badge.desynced {
-  background: #fef2f2;
-  color: #b91c1c
-}
-
-.empty {
-  text-align: center;
-  margin-top: 1.5rem;
-  padding: 4rem
-}
-
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: #0f172a88;
-  display: grid;
-  place-items: center;
-  padding: 1rem
-}
-
-.modal {
-  background: #fff;
-  border-radius: 18px;
-  padding: 1.5rem;
-  width: min(700px, 100%);
-  max-height: 90vh;
-  overflow: auto
-}
-
-.modal header button {
-  border: 0;
-  border-radius: 50%;
-  font-size: 1.4rem;
-  width: 34px;
-  height: 34px
-}
-
-.modal form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem
-}
-
-.modal label {
-  display: grid;
-  gap: .4rem;
-  font-weight: 700;
-  font-size: .86rem
-}
-
-.modal .full {
-  grid-column: 1/-1
-}
-
-.modal input,
-.modal select,
-.modal textarea {
-  padding: .75rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  font: inherit
-}
-
-.form-error,
-.modal form footer {
-  grid-column: 1/-1;
-  margin: 0;
-  padding: .7rem;
-  border-radius: 8px
-}
-
-.form-error {
-  grid-column: 1/-1
-}
-
-.summary {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-  margin: 1rem 0
-}
-
-.summary>div {
-  text-align: center;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 1rem
-}
-
-.summary strong {
-  display: block;
-  font-size: 1.6rem
-}
-
-.summary span {
-  color: #64748b;
-  font-size: .8rem
-}
-
-.summary .ok strong {
-  color: #047857
-}
-
-.summary .err strong {
-  color: #b91c1c
-}
-
-.verify-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: .8rem
-}
-
-.verify-list>li {
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 1rem
-}
-
-.verify-list>li.desynced {
-  border-color: #fecaca;
-  background: #fef2f2
-}
-
-.v-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center
-}
-
-.v-top span {
-  font-size: .72rem;
-  font-weight: 700;
-  padding: .25rem .5rem;
-  border-radius: 99px
-}
-
-.verify-list li.synced .v-top span {
-  background: #ecfdf5;
-  color: #047857
-}
-
-.verify-list li.desynced .v-top span {
-  background: #fee2e2;
-  color: #b91c1c
-}
-
-.issues {
-  color: #b91c1c;
-  font-size: .8rem;
-  margin: .5rem 0 0;
-  padding-left: 1.1rem
-}
-
-@media(max-width:800px) {
-  .grid {
-    grid-template-columns: 1fr 1fr
-  }
-}
-
-@media(max-width:600px) {
-
-  .grid,
-  .modal form,
-  .summary {
-    grid-template-columns: 1fr
-  }
-
-  .page>header {
-    align-items: stretch;
-    flex-direction: column
-  }
-
-  /* Bổ sung Badge cho trạng thái PENDING ở màn hình ngoài */
-  .verify-badge.pending {
-    background: #fffbeb;
-    color: #d97706;
-  }
-
-  /* Bổ sung CSS cho thẻ <li> trong Modal khi ở trạng thái PENDING */
-  .verify-list>li.pending {
-    border-color: #fde68a;
-    background: #fffbeb;
-  }
-
-  /* Bổ sung huy hiệu PENDING bên trong Modal */
-  .verify-list li.pending .v-top span {
-    background: #fef3c7;
-    color: #d97706;
-  }
-
-  /* Đổi màu chữ báo lỗi thành màu cam nếu lỗi đó là do đang chờ Blockchain */
-  .issues.pending-text {
-    color: #d97706;
-  }
+/* Responsive */
+@media (max-width: 768px) {
+  .log-grid { grid-template-columns: 1fr; }
+  .modern-form { grid-template-columns: 1fr; min-width: 100%; }
+  .col-span-1 { grid-column: 1 / -1; }
+  .summary-stats { grid-template-columns: 1fr; }
 }
 </style>

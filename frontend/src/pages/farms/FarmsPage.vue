@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { VaButton, VaInnerLoading } from 'vuestic-ui'
+import { 
+  VaButton, VaInnerLoading, VaModal, VaInput, VaSwitch, 
+  VaAlert, VaCard, VaCardTitle, VaCardContent, VaBadge, VaIcon 
+} from 'vuestic-ui'
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../../stores/auth.store'
@@ -26,7 +29,7 @@ const form = reactive({
   status: true,
 })
 
-const formTitle = computed(() => (editingId.value ? 'Cập nhật cơ sở nuôi' : 'Tạo cơ sở nuôi'))
+const formTitle = computed(() => (editingId.value ? 'Cập nhật cơ sở nuôi' : 'Tạo cơ sở nuôi mới'))
 
 function resetForm() {
   editingId.value = null
@@ -84,10 +87,10 @@ async function submit() {
   try {
     if (editingId.value) {
       await farmsStore.update(editingId.value, payload)
-      successMessage.value = 'Đã cập nhật cơ sở nuôi'
+      successMessage.value = 'Đã cập nhật cơ sở nuôi thành công.'
     } else {
       await farmsStore.create(payload)
-      successMessage.value = 'Đã tạo cơ sở nuôi mới'
+      successMessage.value = 'Đã tạo cơ sở nuôi mới thành công.'
     }
     closeForm()
   } catch {
@@ -96,13 +99,13 @@ async function submit() {
 }
 
 async function removeFarm(farm: Farm) {
-  if (!window.confirm(`Xóa cơ sở “${farm.farm_name}”?`)) return
+  if (!window.confirm(`Bạn có chắc chắn muốn xóa cơ sở “${farm.farm_name}”? Mọi dữ liệu liên quan có thể bị mất.`)) return
   successMessage.value = ''
   try {
     await farmsStore.remove(farm.id)
-    successMessage.value = 'Đã xóa cơ sở nuôi'
+    successMessage.value = 'Đã xóa cơ sở nuôi thành công.'
   } catch {
-    // Store hiển thị thông báo từ API, gồm trường hợp cơ sở đang có ao nuôi.
+    // Store sẽ xử lý hiển thị lỗi
   }
 }
 
@@ -119,90 +122,341 @@ onMounted(async () => {
 <template>
   <main class="farms-page">
     <header class="page-header">
-      <div>
+      <div class="header-content">
         <p class="eyebrow">Quản lý vùng nuôi</p>
-        <h1>Cơ sở nuôi của tôi</h1>
-        <p class="subtitle">
-          <template v-if="authStore.organizationName">Thuộc {{ authStore.organizationName }}</template>
+        <h1 class="page-title">Cơ sở nuôi của tôi</h1>
+        <div class="subtitle-badge">
+          <va-icon name="domain" size="small" class="mr-1" />
+          <template v-if="authStore.organizationName">{{ authStore.organizationName }}</template>
           <template v-else>Hộ nuôi độc lập</template>
-        </p>
+        </div>
       </div>
-      <va-button gradient @click="openCreate">+ Thêm cơ sở nuôi</va-button>
+      <va-button icon="add" gradient class="shadow-md" @click="openCreate">
+        Thêm cơ sở mới
+      </va-button>
     </header>
 
-    <p v-if="successMessage" class="notice success">{{ successMessage }}</p>
-    <p v-if="error" class="notice error">{{ error }}</p>
+    <!-- Thông báo -->
+    <va-alert v-if="successMessage" color="success" class="mb-4" icon="check_circle" outline closeable>
+      {{ successMessage }}
+    </va-alert>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
+      {{ error }}
+    </va-alert>
 
     <section class="farms-panel">
       <va-inner-loading :loading="loading">
+        <!-- Empty State -->
         <div v-if="!loading && items.length === 0" class="empty-state">
-          <div class="empty-icon">⌂</div>
-          <h2>Chưa có cơ sở nuôi</h2>
-          <p>Tạo cơ sở đầu tiên để tiếp tục quản lý ao và các vụ nuôi.</p>
-          <va-button @click="openCreate">Tạo cơ sở nuôi</va-button>
+          <div class="empty-icon-wrapper">
+            <va-icon name="water" size="3rem" color="primary" />
+          </div>
+          <h2>Bạn chưa có cơ sở nuôi nào</h2>
+          <p class="text-secondary">Hãy tạo cơ sở đầu tiên để bắt đầu quản lý ao và theo dõi vụ nuôi.</p>
+          <va-button icon="add" class="mt-4" @click="openCreate">Tạo cơ sở ngay</va-button>
         </div>
 
+        <!-- Farm Grid -->
         <div v-else class="farm-grid">
-          <article v-for="farm in items" :key="farm.id" class="farm-card">
-            <div class="card-top">
-              <span class="farm-icon">⌂</span>
-              <span class="status" :class="{ inactive: !farm.status }">
-                {{ farm.status ? 'Đang hoạt động' : 'Ngừng hoạt động' }}
-              </span>
+          <va-card v-for="farm in items" :key="farm.id" class="farm-card hover-elevation">
+            <va-card-content>
+              <div class="card-header">
+                <div class="farm-icon-box">
+                  <va-icon name="home_work" size="large" color="primary" />
+                </div>
+                <va-badge 
+                  :color="farm.status ? 'success' : 'secondary'" 
+                  :text="farm.status ? 'Hoạt động' : 'Tạm ngưng'"
+                  class="status-badge"
+                />
+              </div>
+
+              <div class="card-body">
+                <h3 class="farm-title">{{ farm.farm_name }}</h3>
+                <p class="address-text">
+                  <va-icon name="place" size="small" color="secondary" class="mr-1" />
+                  {{ farm.address || 'Chưa cập nhật địa chỉ' }}
+                </p>
+
+                <div class="stats-grid">
+                  <div class="stat-item">
+                    <span class="stat-label">Diện tích</span>
+                    <span class="stat-value">{{ formatArea(farm.area) }}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-label">Chứng nhận</span>
+                    <span class="stat-value highlight">{{ farm.certification || 'Chưa có' }}</span>
+                  </div>
+                </div>
+              </div>
+            </va-card-content>
+
+            <!-- Card Actions -->
+            <div class="card-actions-custom">
+              <va-button 
+                preset="primary" 
+                icon="water" 
+                class="flex-1"
+                @click="router.push({ name: 'ponds', params: { farmId: farm.id } })"
+              >
+                Quản lý Ao
+              </va-button>
+              <va-button preset="secondary" icon="edit" color="info" @click="openEdit(farm)" />
+              <va-button preset="secondary" icon="delete" color="danger" @click="removeFarm(farm)" />
             </div>
-            <h2>{{ farm.farm_name }}</h2>
-            <p class="address">{{ farm.address || 'Chưa cập nhật địa chỉ' }}</p>
-            <dl>
-              <div><dt>Diện tích</dt><dd>{{ formatArea(farm.area) }}</dd></div>
-              <div><dt>Chứng nhận</dt><dd>{{ farm.certification || 'Chưa có' }}</dd></div>
-            </dl>
-            <div class="card-actions">
-              <va-button size="small" @click="router.push({ name: 'ponds', params: { farmId: farm.id } })">Quản lý ao</va-button>
-              <va-button preset="secondary" size="small" @click="openEdit(farm)">Chỉnh sửa</va-button>
-              <va-button preset="plain" color="danger" size="small" @click="removeFarm(farm)">Xóa</va-button>
-            </div>
-          </article>
+          </va-card>
         </div>
       </va-inner-loading>
     </section>
 
-    <div v-if="showForm" class="modal-backdrop" @click.self="closeForm">
-      <section class="farm-modal" role="dialog" aria-modal="true" :aria-label="formTitle">
-        <header><div><p class="eyebrow">Thông tin cơ sở</p><h2>{{ formTitle }}</h2></div><button class="close" @click="closeForm">×</button></header>
-        <form @submit.prevent="submit">
-          <label class="full">Tên cơ sở nuôi <span>*</span><input v-model="form.farmName" maxlength="255" placeholder="VD: Cơ sở nuôi tôm Minh Hải" /></label>
-          <label class="full">Địa chỉ<input v-model="form.address" maxlength="255" placeholder="Xã, huyện, tỉnh" /></label>
-          <label>Diện tích (ha)<input v-model="form.area" type="number" min="0.01" step="0.01" placeholder="12.5" /></label>
-          <label>Chứng nhận<input v-model="form.certification" maxlength="255" placeholder="VietGAP, ASC..." /></label>
-          <label v-if="editingId" class="checkbox full"><input v-model="form.status" type="checkbox" /> Cơ sở đang hoạt động</label>
-          <p v-if="formError" class="form-error full">{{ formError }}</p>
-          <div class="form-actions full"><va-button preset="secondary" type="button" @click="closeForm">Hủy</va-button><va-button type="submit" :loading="saving">{{ editingId ? 'Lưu thay đổi' : 'Tạo cơ sở' }}</va-button></div>
-        </form>
-      </section>
-    </div>
+    <!-- Vuestic Modal Form -->
+    <va-modal v-model="showForm" hide-default-actions overlay-opacity="0.5">
+      <template #header>
+        <h2 class="modal-title">{{ formTitle }}</h2>
+      </template>
+      
+      <form @submit.prevent="submit" class="modern-form">
+        <va-input 
+          v-model="form.farmName" 
+          label="Tên cơ sở nuôi *" 
+          placeholder="VD: Cơ sở nuôi tôm Minh Hải" 
+          class="col-span-2"
+          :rules="[(v) => !!v || 'Vui lòng nhập tên cơ sở']"
+        />
+        
+        <va-input 
+          v-model="form.address" 
+          label="Địa chỉ" 
+          placeholder="Xã, Huyện, Tỉnh" 
+          class="col-span-2"
+        >
+          <template #prependInner>
+            <va-icon name="place" color="secondary" size="small" />
+          </template>
+        </va-input>
+        
+        <va-input 
+          v-model="form.area" 
+          label="Diện tích (ha)" 
+          type="number" 
+          placeholder="VD: 12.5"
+          :min="0.01"
+          :step="0.01"
+        />
+        
+        <va-input 
+          v-model="form.certification" 
+          label="Chứng nhận" 
+          placeholder="VD: VietGAP, ASC..." 
+        />
+        
+        <div v-if="editingId" class="col-span-2 switch-wrapper">
+          <va-switch 
+            v-model="form.status" 
+            size="small"
+            :label="form.status ? 'Cơ sở đang hoạt động' : 'Tạm ngưng hoạt động'" 
+            :color="form.status ? 'success' : 'secondary'"
+          />
+        </div>
+
+        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">
+          {{ formError }}
+        </va-alert>
+
+        <div class="form-actions col-span-2">
+          <va-button preset="secondary" type="button" color="secondary" @click="closeForm">
+            Hủy bỏ
+          </va-button>
+          <va-button type="submit" :loading="saving" color="primary">
+            {{ editingId ? 'Lưu thay đổi' : 'Hoàn tất tạo' }}
+          </va-button>
+        </div>
+      </form>
+    </va-modal>
   </main>
 </template>
 
 <style scoped>
-.farms-page { width: min(1180px, calc(100% - 2.5rem)); margin: 0 auto; padding: 2.5rem 0 4rem; }
-.page-header { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 1.5rem; }
-.eyebrow { margin: 0 0 .35rem; color: #0f766e; font-size: .76rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.5rem); } .subtitle { color: #64748b; margin: .5rem 0 0; }
-.notice { border-radius: 10px; padding: .8rem 1rem; margin: 0 0 1rem; } .notice.error, .form-error { color: #b91c1c; background: #fef2f2; } .notice.success { color: #047857; background: #ecfdf5; }
-.farms-panel { min-height: 240px; } .farm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-.farm-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 1.25rem; box-shadow: 0 10px 30px rgba(15, 23, 42, .05); }
-.card-top, .card-actions { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
-.farm-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: #ccfbf1; color: #0f766e; font-size: 1.35rem; }
-.status { color: #047857; background: #ecfdf5; padding: .3rem .55rem; border-radius: 999px; font-size: .74rem; font-weight: 700; } .status.inactive { color: #64748b; background: #f1f5f9; }
-.farm-card h2 { margin: 1rem 0 .25rem; font-size: 1.15rem; } .address { color: #64748b; min-height: 2.5em; margin: 0; }
-dl { margin: 1rem 0; border-top: 1px solid #f1f5f9; } dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-bottom: 1px solid #f1f5f9; } dt { color: #64748b; } dd { margin: 0; text-align: right; font-weight: 600; }
-.empty-state { padding: 4rem 1rem; text-align: center; background: #fff; border: 1px dashed #cbd5e1; border-radius: 18px; } .empty-state h2 { margin: .5rem 0; } .empty-state p { color: #64748b; } .empty-icon { font-size: 2rem; color: #0f766e; }
-.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 1rem; background: rgba(15, 23, 42, .55); }
-.farm-modal { width: min(620px, 100%); max-height: 90vh; overflow: auto; border-radius: 20px; padding: 1.5rem; background: #fff; box-shadow: 0 24px 70px rgba(15, 23, 42, .25); }
-.farm-modal header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.25rem; } .farm-modal h2 { margin: 0; } .close { border: 0; background: #f1f5f9; border-radius: 50%; width: 34px; height: 34px; cursor: pointer; font-size: 1.4rem; }
-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } label { display: grid; gap: .4rem; color: #334155; font-size: .86rem; font-weight: 700; } label span { color: #dc2626; } .full { grid-column: 1 / -1; }
-input:not([type='checkbox']) { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 10px; padding: .75rem .8rem; font: inherit; outline: none; } input:focus { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13, 148, 136, .12); }
-.checkbox { display: flex; grid-auto-flow: column; justify-content: start; align-items: center; } .form-error { margin: 0; border-radius: 8px; padding: .7rem; } .form-actions { display: flex; justify-content: flex-end; gap: .75rem; margin-top: .5rem; }
-@media (max-width: 900px) { .farm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 620px) { .page-header { align-items: stretch; flex-direction: column; } .farm-grid, form { grid-template-columns: 1fr; } .full { grid-column: auto; } }
+.farms-page { 
+  width: min(1180px, calc(100% - 2rem)); 
+  margin: 0 auto; 
+  padding: 2.5rem 0 4rem; 
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Header Styles */
+.page-header { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: flex-end; 
+  gap: 1rem; 
+  margin-bottom: 2rem; 
+}
+.eyebrow { 
+  margin: 0 0 0.5rem; 
+  color: var(--va-primary); 
+  font-size: 0.8rem; 
+  font-weight: 700; 
+  letter-spacing: 0.1em; 
+  text-transform: uppercase; 
+}
+.page-title { 
+  margin: 0 0 0.5rem; 
+  font-size: clamp(1.8rem, 4vw, 2.2rem); 
+  font-weight: 800;
+  color: #1e293b;
+}
+.subtitle-badge { 
+  display: inline-flex;
+  align-items: center;
+  color: #475569; 
+  background: #f1f5f9;
+  padding: 0.4rem 0.8rem;
+  border-radius: 99px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Grid & Cards */
+.farms-panel { min-height: 300px; } 
+.farm-grid { 
+  display: grid; 
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); 
+  gap: 1.5rem; 
+}
+
+.farm-card {
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+}
+.farm-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  border-color: var(--va-primary);
+}
+
+.card-header { 
+  display: flex; 
+  align-items: flex-start; 
+  justify-content: space-between; 
+  margin-bottom: 1rem;
+}
+.farm-icon-box { 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px; 
+  height: 48px; 
+  border-radius: 12px; 
+  background: #f0fdfa; /* Light teal matching primary */
+}
+.status-badge { font-weight: 600; letter-spacing: 0.3px; }
+
+.farm-title { 
+  margin: 0 0 0.5rem; 
+  font-size: 1.25rem; 
+  font-weight: 700;
+  color: #0f172a;
+}
+.address-text { 
+  display: flex;
+  align-items: flex-start;
+  color: #64748b; 
+  font-size: 0.9rem;
+  min-height: 2.5rem; 
+  margin: 0 0 1.5rem 0;
+  line-height: 1.4;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #e2e8f0;
+}
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.stat-label { font-size: 0.8rem; color: #64748b; }
+.stat-value { font-weight: 600; color: #1e293b; }
+.stat-value.highlight { color: var(--va-primary); }
+
+.card-actions-custom { 
+  display: flex; 
+  align-items: center; 
+  gap: 0.5rem; 
+  padding: 1rem 1.25rem;
+  background: #f8fafc;
+  border-top: 1px solid #f1f5f9;
+  border-radius: 0 0 16px 16px;
+  margin-top: auto;
+}
+.flex-1 { flex: 1; }
+
+/* Empty State */
+.empty-state { 
+  padding: 5rem 1rem; 
+  text-align: center; 
+  background: #f8fafc; 
+  border: 2px dashed #cbd5e1; 
+  border-radius: 20px; 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.empty-icon-wrapper {
+  width: 80px; height: 80px;
+  background: #e0f2fe;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 1.5rem;
+}
+.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: #1e293b; }
+.text-secondary { color: #64748b; margin: 0; }
+
+/* Modal & Form */
+.modal-title { font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; }
+.modern-form { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 1.25rem; 
+  width: 100%;
+  min-width: 450px;
+}
+.col-span-2 { grid-column: 1 / -1; }
+.switch-wrapper {
+  padding: 0.75rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+.form-actions { 
+  display: flex; 
+  justify-content: flex-end; 
+  gap: 1rem; 
+  margin-top: 1rem; 
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* Utilities */
+.mr-1 { margin-right: 0.25rem; }
+.mb-4 { margin-bottom: 1rem; }
+.mt-4 { margin-top: 1rem; }
+.mt-2 { margin-top: 0.5rem; }
+
+/* Responsive */
+@media (max-width: 768px) { 
+  .page-header { flex-direction: column; align-items: flex-start; } 
+  .farm-grid { grid-template-columns: 1fr; } 
+  .modern-form { grid-template-columns: 1fr; min-width: 100%; }
+  .col-span-2 { grid-column: auto; }
+}
 </style>

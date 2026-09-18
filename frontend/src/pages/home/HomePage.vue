@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { VaBadge, VaButton, VaModal, VaInnerLoading } from 'vuestic-ui'
+import { VaBadge, VaButton, VaModal, VaInnerLoading, VaAlert } from 'vuestic-ui'
 import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../../stores/auth.store'
@@ -130,7 +130,6 @@ onMounted(async () => {
   <main class="home-page-promax">
     <!-- KHU VỰC CHƯA ĐĂNG NHẬP (LANDING PAGE) -->
     <template v-if="!isAuthenticated">
-      <!-- Hero Section -->
       <section class="hero-promax">
         <div class="hero-glow-1"></div>
         <div class="hero-glow-2"></div>
@@ -143,12 +142,15 @@ onMounted(async () => {
             <span class="text-gradient">Nguồn gốc thủy sản</span>
           </h1>
           <p class="hero-desc">
-            Bảo vệ thương hiệu và xây dựng niềm tin. Dữ liệu từ ao nuôi đến bàn ăn được mã hóa bằng chuẩn mật mã học và lưu trữ vĩnh viễn trên mạng lưới Blockchain phân tán.
+            Bảo vệ thương hiệu và xây dựng niềm tin. Dữ liệu từ ao nuôi đến bàn ăn được mã hóa bằng chuẩn mật mã học và
+            lưu trữ vĩnh viễn trên mạng lưới Blockchain phân tán.
           </p>
           <div class="hero-actions">
             <va-button size="large" class="btn-promax-primary" @click="router.push({ name: 'login' })">
               Đăng nhập hệ thống
-              <svg class="icon-right" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+              <svg class="icon-right" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
             </va-button>
             <va-button size="large" preset="secondary" class="btn-promax-outline" @click="router.push({ name: 'register' })">
               Trở thành đối tác
@@ -157,7 +159,6 @@ onMounted(async () => {
         </div>
       </section>
 
-      <!-- Workflow Section -->
       <section class="workflow-section">
         <div class="section-header">
           <h2 class="section-title">Hành trình truy xuất <span class="text-highlight">chuẩn quốc tế</span></h2>
@@ -165,25 +166,39 @@ onMounted(async () => {
         </div>
         <div class="workflow-grid">
           <div class="step-card">
-            <div class="step-icon-wrap"><div class="step-icon">1</div></div>
+            <div class="step-icon-wrap">
+              <div class="step-icon">1</div>
+            </div>
             <h3>Ao nuôi</h3>
             <p>Ghi nhận nhật ký ăn, thuốc thú y, môi trường nước theo chuẩn VietGAP.</p>
           </div>
-          <div class="step-connector"><div class="line-dashed"></div></div>
+          <div class="step-connector">
+            <div class="line-dashed"></div>
+          </div>
           <div class="step-card">
-            <div class="step-icon-wrap"><div class="step-icon">2</div></div>
+            <div class="step-icon-wrap">
+              <div class="step-icon">2</div>
+            </div>
             <h3>Thu hoạch</h3>
             <p>Kiểm định chất lượng sinh học, đóng lô, gắn mã định danh điện tử.</p>
           </div>
-          <div class="step-connector"><div class="line-dashed"></div></div>
+          <div class="step-connector">
+            <div class="line-dashed"></div>
+          </div>
           <div class="step-card">
-            <div class="step-icon-wrap"><div class="step-icon">3</div></div>
+            <div class="step-icon-wrap">
+              <div class="step-icon">3</div>
+            </div>
             <h3>Vận chuyển</h3>
             <p>Giám sát nhiệt độ bảo quản, thời gian và lộ trình di chuyển liên tục.</p>
           </div>
-          <div class="step-connector"><div class="line-dashed"></div></div>
+          <div class="step-connector">
+            <div class="line-dashed"></div>
+          </div>
           <div class="step-card">
-            <div class="step-icon-wrap"><div class="step-icon">4</div></div>
+            <div class="step-icon-wrap">
+              <div class="step-icon">4</div>
+            </div>
             <h3>Bàn ăn</h3>
             <p>Khách hàng quét mã QR để đối soát toàn bộ lịch sử trên Blockchain.</p>
           </div>
@@ -204,7 +219,10 @@ onMounted(async () => {
               <div class="user-badges">
                 <span class="role-badge-promax">{{ roleLabel }}</span>
                 <span v-if="authStore.organizationName" class="org-name-promax">
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
                   {{ authStore.organizationName }}
                 </span>
               </div>
@@ -219,17 +237,22 @@ onMounted(async () => {
         <div class="stats-grid-promax">
           <div class="stat-card-clean">
             <div class="stat-icon-box bg-slate">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
             </div>
             <div class="stat-content">
               <p class="stat-title">Tổng số lô quản lý</p>
               <h3 class="stat-number">{{ summary?.total ?? '0' }}</h3>
             </div>
           </div>
-          
+
           <div class="stat-card-clean">
             <div class="stat-icon-box bg-blue">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
             <div class="stat-content">
               <p class="stat-title">Đang sinh trưởng</p>
@@ -239,7 +262,10 @@ onMounted(async () => {
 
           <div class="stat-card-clean">
             <div class="stat-icon-box bg-teal">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
             <div class="stat-content">
               <p class="stat-title">Đã thu hoạch</p>
@@ -249,7 +275,10 @@ onMounted(async () => {
 
           <div class="stat-card-clean">
             <div class="stat-icon-box bg-amber">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
             </div>
             <div class="stat-content">
               <p class="stat-title">Chờ ghi Blockchain</p>
@@ -265,8 +294,13 @@ onMounted(async () => {
               <h3 class="th-title">Hồ Sơ Lô Thủy Sản</h3>
               <p class="th-subtitle">Danh sách các lô hàng đang được ghi nhận trên hệ thống</p>
             </div>
-            <va-button preset="secondary" color="secondary" @click="loadBatches" :loading="loadingBatches" class="btn-refresh">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" class="mr-1"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <va-button preset="secondary" color="secondary" @click="loadBatches" :loading="loadingBatches"
+              class="btn-refresh">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                class="mr-1">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
               Làm mới
             </va-button>
           </div>
@@ -282,7 +316,10 @@ onMounted(async () => {
 
           <div v-else-if="batches.length === 0" class="empty-state-promax">
             <div class="empty-icon">
-              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+              </svg>
             </div>
             <h4>Không có dữ liệu</h4>
             <p>Bạn chưa có lô thủy sản nào trong hệ thống.</p>
@@ -314,15 +351,17 @@ onMounted(async () => {
                   </td>
                   <td class="cell-text">{{ formatDate(batch.stocking_date) }}</td>
                   <td>
-                    <va-badge
-                      :color="STATUS_COLORS[batch.status] ?? 'grey'"
-                      :text="STATUS_LABELS[batch.status] ?? batch.status"
-                      class="badge-status-promax"
-                    />
+                    <va-badge :color="STATUS_COLORS[batch.status] ?? 'grey'"
+                      :text="STATUS_LABELS[batch.status] ?? batch.status" class="badge-status-promax" />
                   </td>
                   <td class="text-right">
                     <button class="btn-action-promax" @click="openDetail(batch)">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
                       Chi tiết
                     </button>
                   </td>
@@ -334,13 +373,18 @@ onMounted(async () => {
       </div>
     </template>
 
-    <!-- MODAL CHI TIẾT & BLOCKCHAIN TIMELINE -->
-    <va-modal v-model="detailVisible" hide-default-actions size="large" class="modal-promax">
-      <template #header>
-        <div class="modal-header-promax">
+    <!-- MODAL CHI TIẾT & BLOCKCHAIN TIMELINE (Cấu trúc V4 - Trị dứt điểm vỡ layout) -->
+    <va-modal v-model="detailVisible" hide-default-actions size="large" :padding="false">
+      <!-- Container chính tự giới hạn chiều cao và tự cuộn -->
+      <div class="custom-modal-container">
+        
+        <!-- Header Cố định (Sticky Header) -->
+        <div class="custom-modal-header">
           <div class="mh-left">
             <div class="mh-icon">
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
             </div>
             <div>
               <h2 class="mh-title">Hồ Sơ Lô Nuôi</h2>
@@ -348,111 +392,119 @@ onMounted(async () => {
             </div>
           </div>
           <button class="btn-close-modal" @click="detailVisible = false">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-      </template>
 
-      <div v-if="detailLoading" class="modal-loading-promax">
-        <va-inner-loading loading :size="40" color="#0e7490" />
-        <p>Đang truy xuất mạng lưới chuỗi khối...</p>
-      </div>
-
-      <div v-else-if="detail" class="detail-grid-promax">
-        <!-- Cột trái: Thông tin -->
-        <div class="col-info">
-          <div class="card-info-promax mb-4">
-            <h4 class="card-title-promax">Thông Tin Cơ Bản</h4>
-            <div class="info-list-promax">
-              <div class="info-row">
-                <span class="ir-label">Trạng thái</span>
-                <va-badge :color="STATUS_COLORS[detail.batch.status]" :text="STATUS_LABELS[detail.batch.status]" class="badge-status-promax" />
-              </div>
-              <div class="info-row">
-                <span class="ir-label">Chủng loại</span>
-                <span class="ir-val fw-600">{{ SPECIES_LABELS[detail.batch.species] }}</span>
-              </div>
-              <div class="info-row">
-                <span class="ir-label">Cơ sở sản xuất</span>
-                <span class="ir-val">{{ detail.batch.pond?.farm?.farm_name ?? '—' }}</span>
-              </div>
-              <div class="info-row">
-                <span class="ir-label">Khu vực / Ao bể</span>
-                <span class="ir-val">{{ detail.batch.pond?.pond_name ?? '—' }}</span>
-              </div>
-              <div class="info-row">
-                <span class="ir-label">Lượng giống thả</span>
-                <span class="ir-val">{{ formatNumber(detail.batch.seed_quantity) }} con</span>
-              </div>
-              <div class="info-row">
-                <span class="ir-label">Ngày khởi tạo</span>
-                <span class="ir-val">{{ formatDate(detail.batch.stocking_date) }}</span>
-              </div>
-            </div>
+        <!-- Body cuộn được (Scrollable Body) -->
+        <div class="custom-modal-body">
+          <div v-if="detailLoading" class="modal-loading-promax">
+            <va-inner-loading loading :size="40" color="#0e7490" />
+            <p>Đang truy xuất mạng lưới chuỗi khối...</p>
           </div>
 
-          <div class="card-info-promax">
-            <h4 class="card-title-promax">Tổng Hợp Dữ Liệu</h4>
-            <div class="stats-mini-promax">
-              <div class="sm-box">
-                <span class="sm-num text-slate">{{ detail.summary.farmingLogs }}</span>
-                <span class="sm-label">Nhật ký</span>
-              </div>
-              <div class="sm-box">
-                <span class="sm-num text-teal">{{ detail.harvests.length }}</span>
-                <span class="sm-label">Thu hoạch</span>
-              </div>
-              <div class="sm-box">
-                <span class="sm-num text-blue">{{ detail.transports.length }}</span>
-                <span class="sm-label">Vận chuyển</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Cột phải: Blockchain Timeline -->
-        <div class="col-blockchain">
-          <div class="cb-header">
-            <h4 class="card-title-promax mb-0">Nhật Ký Blockchain</h4>
-            <div class="secure-badge-promax">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-              Xác thực Toàn vẹn
-            </div>
-          </div>
-
-          <div v-if="detail.blockchain.length === 0" class="empty-timeline-promax">
-            <p>Chưa có dữ liệu giao dịch trên chuỗi khối.</p>
-          </div>
-
-          <div v-else class="timeline-wrapper-promax">
-            <div class="timeline-item-promax" v-for="(record, index) in detail.blockchain" :key="record.id">
-              <div class="tl-line" v-if="index !== detail.blockchain.length - 1"></div>
-              
-              <div class="tl-marker" :class="`marker-${record.status.toLowerCase()}`">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" :d="getEventIcon(record.event_type)" />
-                </svg>
-              </div>
-
-              <div class="tl-content-card">
-                <div class="tl-card-header">
-                  <h5>{{ EVENT_LABELS[record.event_type] ?? record.event_type }}</h5>
-                  <span class="time">{{ formatBlockDate(record.recorded_at ?? record.created_at) }}</span>
+          <div v-else-if="detail" class="detail-grid-promax">
+            <!-- Cột trái: Thông tin -->
+            <div class="col-info">
+              <div class="card-info-promax mb-4">
+                <h4 class="card-title-promax">Thông Tin Cơ Bản</h4>
+                <div class="info-list-promax">
+                  <div class="info-row">
+                    <span class="ir-label">Trạng thái</span>
+                    <va-badge :color="STATUS_COLORS[detail.batch.status]" :text="STATUS_LABELS[detail.batch.status]" class="badge-status-promax" />
+                  </div>
+                  <div class="info-row">
+                    <span class="ir-label">Chủng loại</span>
+                    <span class="ir-val fw-600">{{ SPECIES_LABELS[detail.batch.species] }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="ir-label">Cơ sở sản xuất</span>
+                    <span class="ir-val">{{ detail.batch.pond?.farm?.farm_name ?? '—' }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="ir-label">Khu vực / Ao bể</span>
+                    <span class="ir-val">{{ detail.batch.pond?.pond_name ?? '—' }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="ir-label">Lượng giống thả</span>
+                    <span class="ir-val">{{ formatNumber(detail.batch.seed_quantity) }} con</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="ir-label">Ngày khởi tạo</span>
+                    <span class="ir-val">{{ formatDate(detail.batch.stocking_date) }}</span>
+                  </div>
                 </div>
-                
-                <div class="tl-card-body terminal-style">
-                  <div class="hash-line">
-                    <span class="h-label">TX_HASH:</span>
-                    <span class="h-value" :title="record.transaction_hash || undefined">{{ shortHash(record.transaction_hash) }}</span>
+              </div>
+
+              <div class="card-info-promax">
+                <h4 class="card-title-promax">Tổng Hợp Dữ Liệu</h4>
+                <div class="stats-mini-promax">
+                  <div class="sm-box">
+                    <span class="sm-num text-slate">{{ detail.summary.farmingLogs }}</span>
+                    <span class="sm-label">Nhật ký</span>
                   </div>
-                  <div class="hash-line">
-                    <span class="h-label">DATA_HASH:</span>
-                    <span class="h-value" :title="record.data_hash || undefined">{{ shortHash(record.data_hash) }}</span>
+                  <div class="sm-box">
+                    <span class="sm-num text-teal">{{ detail.harvests.length }}</span>
+                    <span class="sm-label">Thu hoạch</span>
                   </div>
-                  <div class="hash-status mt-2">
-                    <span class="status-dot" :class="`bg-${statusColor(record)}`"></span>
-                    <span class="status-text">{{ statusLabel(record) }}</span>
-                    <span v-if="record.block_number" class="block-badge">Block #{{ record.block_number }}</span>
+                  <div class="sm-box">
+                    <span class="sm-num text-blue">{{ detail.transports.length }}</span>
+                    <span class="sm-label">Vận chuyển</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cột phải: Blockchain Timeline -->
+            <div class="col-blockchain">
+              <div class="cb-header">
+                <h4 class="card-title-promax mb-0">Nhật Ký Blockchain</h4>
+                <div class="secure-badge-promax">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  Xác thực Toàn vẹn
+                </div>
+              </div>
+
+              <div v-if="detail.blockchain.length === 0" class="empty-timeline-promax">
+                <p>Chưa có dữ liệu giao dịch trên chuỗi khối.</p>
+              </div>
+
+              <div v-else class="timeline-wrapper-promax">
+                <div class="timeline-item-promax" v-for="(record, index) in detail.blockchain" :key="record.id">
+                  <div class="tl-line" v-if="index !== detail.blockchain.length - 1"></div>
+
+                  <div class="tl-marker" :class="`marker-${record.status.toLowerCase()}`">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" :d="getEventIcon(record.event_type)" />
+                    </svg>
+                  </div>
+
+                  <div class="tl-content-card">
+                    <div class="tl-card-header">
+                      <h5>{{ EVENT_LABELS[record.event_type] ?? record.event_type }}</h5>
+                      <span class="time">{{ formatBlockDate(record.recorded_at ?? record.created_at) }}</span>
+                    </div>
+
+                    <div class="tl-card-body terminal-style">
+                      <div class="hash-line">
+                        <span class="h-label">TX_HASH:</span>
+                        <span class="h-value" :title="record.transaction_hash || undefined">{{ shortHash(record.transaction_hash) }}</span>
+                      </div>
+                      <div class="hash-line">
+                        <span class="h-label">DATA_HASH:</span>
+                        <span class="h-value" :title="record.data_hash || undefined">{{ shortHash(record.data_hash) }}</span>
+                      </div>
+                      <div class="hash-status mt-2">
+                        <span class="status-dot" :class="`bg-${statusColor(record)}`"></span>
+                        <span class="status-text">{{ statusLabel(record) }}</span>
+                        <span v-if="record.block_number" class="block-badge">Block #{{ record.block_number }}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -463,7 +515,7 @@ onMounted(async () => {
     </va-modal>
 
     <footer class="footer-promax">
-      <p>&copy; 2024 Nền tảng Truy xuất nguồn gốc Thủy sản Blockchain.</p>
+      <p>&copy; 2026 Nền tảng Truy xuất nguồn gốc Thủy sản Blockchain.</p>
     </footer>
   </main>
 </template>
@@ -508,304 +560,925 @@ onMounted(async () => {
   text-align: center;
   margin-bottom: 5rem;
 }
+
 .hero-glow-1 {
-  position: absolute; width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(14,116,144,0.3) 0%, rgba(2,6,23,0) 70%);
-  top: -200px; left: -100px; border-radius: 50%; pointer-events: none;
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(14, 116, 144, 0.3) 0%, rgba(2, 6, 23, 0) 70%);
+  top: -200px;
+  left: -100px;
+  border-radius: 50%;
+  pointer-events: none;
 }
+
 .hero-glow-2 {
-  position: absolute; width: 800px; height: 800px;
-  background: radial-gradient(circle, rgba(20,184,166,0.15) 0%, rgba(2,6,23,0) 70%);
-  bottom: -400px; right: -200px; border-radius: 50%; pointer-events: none;
+  position: absolute;
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.15) 0%, rgba(2, 6, 23, 0) 70%);
+  bottom: -400px;
+  right: -200px;
+  border-radius: 50%;
+  pointer-events: none;
 }
+
 .hero-content-wrapper {
-  position: relative; z-index: 10; max-width: 860px; margin: 0 auto;
+  position: relative;
+  z-index: 10;
+  max-width: 860px;
+  margin: 0 auto;
 }
+
 .badge-pill-promax {
-  display: inline-flex; align-items: center; gap: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1; padding: 6px 16px; border-radius: 100px;
-  font-size: 0.875rem; font-weight: 500; margin-bottom: 2rem;
+  color: #cbd5e1;
+  padding: 6px 16px;
+  border-radius: 100px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 2rem;
   backdrop-filter: blur(10px);
 }
+
 .badge-dot {
-  width: 8px; height: 8px; background: #2dd4bf; border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  background: #2dd4bf;
+  border-radius: 50%;
   box-shadow: 0 0 10px #2dd4bf;
 }
+
 .hero-title {
-  font-size: 4rem; font-weight: 800; color: #ffffff;
-  line-height: 1.15; margin-bottom: 1.5rem; letter-spacing: -0.03em;
+  font-size: 4rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.15;
+  margin-bottom: 1.5rem;
+  letter-spacing: -0.03em;
 }
+
 .text-gradient {
   background: linear-gradient(135deg, #2dd4bf, #3b82f6);
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
+
 .hero-desc {
-  font-size: 1.15rem; color: #94a3b8; line-height: 1.6;
-  max-width: 680px; margin: 0 auto 3rem; font-weight: 400;
+  font-size: 1.15rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  max-width: 680px;
+  margin: 0 auto 3rem;
+  font-weight: 400;
 }
-.hero-actions { display: flex; gap: 1rem; justify-content: center; }
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
 
 .btn-promax-primary {
   --va-button-color: #0e7490 !important;
   background: linear-gradient(135deg, #0e7490, #0891b2) !important;
-  border-radius: 12px !important; font-weight: 600 !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
   box-shadow: 0 8px 24px rgba(14, 116, 144, 0.3) !important;
   transition: all 0.3s ease !important;
 }
-.btn-promax-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(14, 116, 144, 0.4) !important; }
-.btn-promax-primary .icon-right { margin-left: 8px; transition: transform 0.3s ease; }
-.btn-promax-primary:hover .icon-right { transform: translateX(4px); }
+
+.btn-promax-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(14, 116, 144, 0.4) !important;
+}
+
+.btn-promax-primary .icon-right {
+  margin-left: 8px;
+  transition: transform 0.3s ease;
+}
+
+.btn-promax-primary:hover .icon-right {
+  transform: translateX(4px);
+}
 
 .btn-promax-outline {
   --va-button-color: transparent !important;
-  border: 1px solid rgba(255,255,255,0.2) !important;
-  color: white !important; border-radius: 12px !important; font-weight: 600 !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: white !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
 }
-.btn-promax-outline:hover { background: rgba(255,255,255,0.05) !important; }
+
+.btn-promax-outline:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
 
 /* Workflow */
-.workflow-section { max-width: 1200px; margin: 0 auto 6rem; padding: 0 2rem; }
-.section-header { text-align: center; margin-bottom: 4rem; }
-.section-title { font-size: 2.25rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
-.text-highlight { color: #0e7490; }
-.section-subtitle { color: #64748b; font-size: 1.1rem; }
-.workflow-grid { display: flex; justify-content: space-between; align-items: flex-start; }
-.step-card { flex: 1; text-align: center; padding: 0 1rem; }
+.workflow-section {
+  max-width: 1200px;
+  margin: 0 auto 6rem;
+  padding: 0 2rem;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.section-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.75rem;
+}
+
+.text-highlight {
+  color: #0e7490;
+}
+
+.section-subtitle {
+  color: #64748b;
+  font-size: 1.1rem;
+}
+
+.workflow-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.step-card {
+  flex: 1;
+  text-align: center;
+  padding: 0 1rem;
+}
+
 .step-icon-wrap {
-  width: 72px; height: 72px; margin: 0 auto 1.5rem;
-  background: #f0fdfa; border-radius: 20px;
-  display: flex; align-items: center; justify-content: center;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 1.5rem;
+  background: #f0fdfa;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: 0 10px 25px -5px rgba(20, 184, 166, 0.15);
 }
-.step-icon { font-size: 1.75rem; font-weight: 800; color: #0d9488; }
-.step-card h3 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 0.75rem; }
-.step-card p { font-size: 0.95rem; color: #64748b; line-height: 1.6; }
-.step-connector { flex: 0 0 80px; padding-top: 36px; display: flex; align-items: center; justify-content: center; }
-.line-dashed { width: 100%; border-top: 2px dashed #cbd5e1; position: relative; }
+
+.step-icon {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0d9488;
+}
+
+.step-card h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.75rem;
+}
+
+.step-card p {
+  font-size: 0.95rem;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.step-connector {
+  flex: 0 0 80px;
+  padding-top: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.line-dashed {
+  width: 100%;
+  border-top: 2px dashed #cbd5e1;
+  position: relative;
+}
+
 .line-dashed::after {
-  content: ''; position: absolute; right: -4px; top: -5px;
-  width: 8px; height: 8px; border-right: 2px solid #cbd5e1; border-top: 2px solid #cbd5e1;
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #cbd5e1;
+  border-top: 2px solid #cbd5e1;
   transform: rotate(45deg);
 }
 
 /* ==========================================================
    DASHBOARD (AUTHENTICATED)
    ========================================================== */
-.dashboard-wrapper { max-width: 1240px; margin: 2rem auto; padding: 0 2rem; background: #f8fafc; min-height: 100vh;}
+.dashboard-wrapper {
+  max-width: 1240px;
+  margin: 2rem auto;
+  padding: 0 2rem;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
 .dash-header-promax {
-  display: flex; justify-content: space-between; align-items: center;
-  background: white; padding: 1.5rem 2rem; border-radius: 24px;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -2px rgba(0,0,0,0.02);
-  border: 1px solid #f1f5f9; margin-bottom: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 1.5rem 2rem;
+  border-radius: 24px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  border: 1px solid #f1f5f9;
+  margin-bottom: 2rem;
 }
-.dash-greeting { display: flex; align-items: center; gap: 1.25rem; }
+
+.dash-greeting {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
 .user-avatar-promax {
-  width: 56px; height: 56px; border-radius: 18px;
-  background: linear-gradient(135deg, #0f172a, #334155); color: white;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.25rem; font-weight: 700; box-shadow: 0 8px 16px rgba(15, 23, 42, 0.15);
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0f172a, #334155);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.15);
 }
-.greeting-text { font-size: 0.875rem; color: #64748b; margin: 0; font-weight: 500;}
-.user-name { font-size: 1.5rem; font-weight: 800; color: #0f172a; margin: 0.1rem 0 0.3rem; letter-spacing: -0.01em;}
-.user-badges { display: flex; gap: 0.75rem; align-items: center; }
+
+.greeting-text {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.user-name {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0.1rem 0 0.3rem;
+  letter-spacing: -0.01em;
+}
+
+.user-badges {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
 .role-badge-promax {
-  background: #f1f5f9; color: #475569; padding: 3px 10px; border-radius: 8px;
-  font-size: 0.75rem; font-weight: 600; border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
 }
+
 .org-name-promax {
-  display: flex; align-items: center; gap: 4px; color: #0e7490;
-  font-size: 0.85rem; font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #0e7490;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
+
 .btn-create-batch {
   --va-button-color: #0f172a !important;
-  border-radius: 12px !important; font-weight: 600 !important;
+  border-radius: 12px !important;
+  font-weight: 600 !important;
 }
 
 /* Stats Clean UI */
 .stats-grid-promax {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2rem;
 }
+
 .stat-card-clean {
-  background: white; padding: 1.5rem; border-radius: 20px;
+  background: white;
+  padding: 1.5rem;
+  border-radius: 20px;
   border: 1px solid #f1f5f9;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -2px rgba(0,0,0,0.02);
-  display: flex; align-items: flex-start; gap: 1.25rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
+
 .stat-card-clean:hover {
-  transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
 }
+
 .stat-icon-box {
-  width: 48px; height: 48px; border-radius: 14px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.bg-slate { background: #f1f5f9; color: #475569; }
-.bg-blue { background: #eff6ff; color: #3b82f6; }
-.bg-teal { background: #f0fdfa; color: #14b8a6; }
-.bg-amber { background: #fffbeb; color: #d97706; }
-.stat-title { font-size: 0.875rem; color: #64748b; margin: 0 0 0.25rem; font-weight: 500;}
-.stat-number { font-size: 1.75rem; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;}
+
+.bg-slate {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.bg-blue {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.bg-teal {
+  background: #f0fdfa;
+  color: #14b8a6;
+}
+
+.bg-amber {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.stat-title {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0 0 0.25rem;
+  font-weight: 500;
+}
+
+.stat-number {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
 
 /* Table Promax */
 .table-card-promax {
-  background: white; border-radius: 24px; padding: 1.5rem;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); border: 1px solid #f1f5f9;
+  background: white;
+  border-radius: 24px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+  border: 1px solid #f1f5f9;
+  overflow: hidden;
 }
+
 .table-header-promax {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
   padding: 0 0.5rem;
 }
-.th-title { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem; }
-.th-subtitle { font-size: 0.9rem; color: #64748b; margin: 0; }
-.btn-refresh { border-radius: 10px !important; font-weight: 600 !important; }
 
-.table-promax { width: 100%; border-collapse: collapse; }
+.th-title {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 0.25rem;
+}
+
+.th-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.btn-refresh {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #f1f5f9;
+  border-radius: 16px;
+}
+
+.table-promax {
+  width: 100%;
+  border-collapse: collapse;
+}
+
 .table-promax th {
-  text-align: left; padding: 1rem 1.25rem; font-size: 0.75rem; font-weight: 700;
-  color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;
-  border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+  text-align: left;
+  padding: 1.2rem 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
-.table-promax th:first-child { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
-.table-promax th:last-child { border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
+
 .table-promax td {
-  padding: 1.25rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle;
+  padding: 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
 }
-.table-promax tbody tr { transition: background 0.2s ease; }
-.table-promax tbody tr:hover { background: #f8fafc; }
+
+.table-promax tbody tr {
+  transition: background 0.2s ease;
+}
+
+.table-promax tbody tr:hover {
+  background: #f8fafc;
+}
 
 .badge-code {
   font-family: ui-monospace, SFMono-Regular, monospace;
-  background: #f1f5f9; color: #334155; padding: 6px 10px; border-radius: 8px;
-  font-size: 0.85rem; font-weight: 500; border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
 }
-.cell-title { font-weight: 600; color: #0f172a; font-size: 0.95rem; }
-.cell-sub { font-size: 0.85rem; color: #64748b; margin-top: 2px; }
-.badge-species {
-  background: #f0fdfa; color: #0f766e; padding: 6px 12px;
-  border-radius: 20px; font-size: 0.85rem; font-weight: 600;
-}
-.cell-text { color: #334155; font-size: 0.95rem; }
-.badge-status-promax { border-radius: 8px !important; font-weight: 600 !important; padding: 4px 8px !important;}
-.btn-action-promax {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: white; border: 1px solid #e2e8f0; color: #0f172a;
-  padding: 8px 14px; border-radius: 10px; font-size: 0.85rem; font-weight: 600;
-  cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-.btn-action-promax:hover { background: #f8fafc; border-color: #cbd5e1; }
 
-.empty-state-promax { text-align: center; padding: 4rem 2rem; }
-.empty-icon { color: #cbd5e1; margin-bottom: 1rem; display: flex; justify-content: center; }
-.empty-state-promax h4 { font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem; }
-.empty-state-promax p { color: #64748b; }
+.cell-title {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.cell-sub {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.badge-species {
+  background: #f0fdfa;
+  color: #0f766e;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cell-text {
+  color: #334155;
+  font-size: 0.95rem;
+}
+
+.badge-status-promax {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  padding: 4px 8px !important;
+}
+
+.btn-action-promax {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.btn-action-promax:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.empty-state-promax {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-icon {
+  color: #cbd5e1;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.empty-state-promax h4 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state-promax p {
+  color: #64748b;
+}
 
 /* ==========================================================
-   MODAL & BLOCKCHAIN TIMELINE (TERMINAL STYLE)
+   MODAL & BLOCKCHAIN TIMELINE FIX (V4 - TRỊ DỨT ĐIỂM)
    ========================================================== */
-.modal-promax { --va-modal-padding: 0 !important; }
-.modal-header-promax {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 1.5rem 2rem; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
-  border-top-left-radius: 12px; border-top-right-radius: 12px;
+
+/* 1. Container phủ kín toàn bộ Modal. Đặt giới hạn chiều cao tại đây */
+.custom-modal-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1100px;
+  max-height: calc(100vh - 80px); /* Cách lề trên 40px, lề dưới 40px */
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden; /* Cắt bỏ các phần tử con tràn ra ngoài góc bo tròn */
 }
+
+/* 2. Header: Cố định hoàn toàn trên đỉnh */
+.custom-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0; /* Không bao giờ bị co lại khi nội dung dài */
+  z-index: 10;
+}
+
 .mh-left { display: flex; gap: 1rem; align-items: center; }
-.mh-icon {
-  width: 48px; height: 48px; background: white; border: 1px solid #e2e8f0;
-  border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #0e7490;
-}
+.mh-icon { width: 48px; height: 48px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #0e7490; }
 .mh-title { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem; }
 .mh-subtitle { font-size: 0.9rem; color: #64748b; margin: 0; }
-.btn-close-modal {
-  background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 8px; transition: background 0.2s;
-}
+.btn-close-modal { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 8px; transition: background 0.2s; }
 .btn-close-modal:hover { background: #e2e8f0; color: #0f172a; }
 
-.detail-grid-promax { display: grid; grid-template-columns: 1fr 1.4fr; gap: 2rem; padding: 2rem; }
+/* 3. Body: Tự động lấp đầy phần trống và tự tạo thanh cuộn */
+.custom-modal-body {
+  flex: 1 1 auto; /* Chiếm hết chiều cao còn lại sau khi trừ đi Header */
+  overflow-y: auto; /* Sinh ra thanh cuộn bên trong nếu nội dung quá dài */
+  padding: 2rem;
+  background: #fff;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.custom-modal-body::-webkit-scrollbar { width: 6px; }
+.custom-modal-body::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
+
+.detail-grid-promax {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 2rem;
+}
+
 .card-info-promax {
-  border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; background: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.5rem;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
-.card-title-promax { font-size: 1.05rem; font-weight: 700; color: #0f172a; margin: 0 0 1.25rem; }
-.info-list-promax { display: flex; flex-direction: column; gap: 1rem; }
-.info-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #e2e8f0; padding-bottom: 0.75rem; }
-.info-row:last-child { border-bottom: none; padding-bottom: 0; }
-.ir-label { color: #64748b; font-size: 0.9rem; }
-.ir-val { color: #0f172a; font-size: 0.95rem; font-weight: 500; text-align: right;}
 
-.stats-mini-promax { display: flex; gap: 0.75rem; }
+.card-title-promax {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 1.25rem;
+}
+
+.info-list-promax {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed #e2e8f0;
+  padding-bottom: 0.75rem;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ir-label {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.ir-val {
+  color: #0f172a;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: right;
+}
+
+.stats-mini-promax {
+  display: flex;
+  gap: 0.75rem;
+}
+
 .sm-box {
-  flex: 1; background: #f8fafc; border: 1px solid #f1f5f9; padding: 1rem;
-  border-radius: 12px; text-align: center;
+  flex: 1;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  padding: 1rem;
+  border-radius: 12px;
+  text-align: center;
 }
-.sm-num { display: block; font-size: 1.5rem; font-weight: 800; margin-bottom: 0.25rem; }
-.text-slate { color: #334155; }
-.text-teal { color: #0f766e; }
-.text-blue { color: #1d4ed8; }
-.sm-label { font-size: 0.8rem; color: #64748b; font-weight: 500; }
 
-/* Timeline Terminal Style */
-.col-blockchain { background: white; border: 1px solid #e2e8f0; border-radius: 16px; padding: 1.5rem; }
-.cb-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+.sm-num {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+.text-slate {
+  color: #334155;
+}
+
+.text-teal {
+  color: #0f766e;
+}
+
+.text-blue {
+  color: #1d4ed8;
+}
+
+.sm-label {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Timeline Terminal Style Pro */
+.col-blockchain {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+
+.cb-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
 .secure-badge-promax {
-  display: flex; align-items: center; gap: 6px;
-  background: #ecfdf5; color: #059669; padding: 6px 12px; border-radius: 100px;
-  font-size: 0.85rem; font-weight: 600; border: 1px solid #a7f3d0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #059669;
+  padding: 6px 12px;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid #a7f3d0;
 }
-.timeline-wrapper-promax { position: relative; }
-.timeline-item-promax { position: relative; padding-left: 2.5rem; padding-bottom: 2rem; }
-.timeline-item-promax:last-child { padding-bottom: 0; }
+
+.timeline-wrapper-promax {
+  position: relative;
+}
+
+.timeline-item-promax {
+  position: relative;
+  padding-left: 2.5rem;
+  padding-bottom: 2rem;
+}
+
+.timeline-item-promax:last-child {
+  padding-bottom: 0;
+}
+
 .tl-line {
-  position: absolute; left: 13px; top: 32px; bottom: 0; width: 2px;
-  background: #e2e8f0; z-index: 1;
+  position: absolute;
+  left: 13px;
+  top: 32px;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+  z-index: 1;
 }
+
 .tl-marker {
-  position: absolute; left: 0; top: 0; width: 28px; height: 28px;
-  border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  z-index: 2; background: white; box-shadow: 0 0 0 4px white;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  background: white;
+  box-shadow: 0 0 0 4px white;
+  border: 2px solid #e2e8f0;
 }
-.marker-success { background: #10b981; color: white; }
-.marker-pending { background: #f59e0b; color: white; }
-.marker-failed { background: #ef4444; color: white; }
+
+.marker-success {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
+.marker-pending {
+  background: #f59e0b;
+  color: white;
+  border-color: #f59e0b;
+}
+
+.marker-failed {
+  background: #ef4444;
+  color: white;
+  border-color: #ef4444;
+}
 
 .tl-content-card {
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  transition: transform 0.2s;
 }
+
+.tl-content-card:hover {
+  transform: translateX(2px);
+  border-color: #cbd5e1;
+}
+
 .tl-card-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0; background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1.2rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: white;
 }
-.tl-card-header h5 { margin: 0; font-size: 0.95rem; font-weight: 700; color: #0f172a; }
-.tl-card-header .time { font-size: 0.8rem; color: #64748b; }
 
-/* Terminal Effect */
+.tl-card-header h5 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tl-card-header .time {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Terminal Effect Sạch Hơn */
 .terminal-style {
-  background: #0f172a; padding: 1rem; color: #a5b4fc; font-family: ui-monospace, monospace;
+  background: #0f172a;
+  padding: 1.2rem;
+  color: #a5b4fc;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 0.85rem;
+  line-height: 1.5;
 }
-.hash-line { margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px;}
-.h-label { color: #64748b; font-weight: 600; flex-shrink: 0; }
-.h-value { color: #2dd4bf; word-break: break-all; }
-.hash-status { display: flex; align-items: center; gap: 8px; border-top: 1px dashed #334155; padding-top: 10px; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; }
-.status-text { color: #f8fafc; font-weight: 500; font-family: 'Inter', sans-serif;}
-.block-badge { margin-left: auto; background: rgba(255,255,255,0.1); color: #cbd5e1; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-family: 'Inter', sans-serif;}
 
-.footer-promax { text-align: center; padding: 2rem; color: #94a3b8; font-size: 0.9rem; margin-top: auto; }
+.hash-line {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.h-label {
+  color: #64748b;
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.h-value {
+  color: #2dd4bf;
+  word-break: break-all;
+  cursor: text;
+}
+
+.hash-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px dashed #334155;
+  padding-top: 12px;
+  margin-top: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.status-text {
+  color: #f8fafc;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+}
+
+.block-badge {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+}
+
+.footer-promax {
+  text-align: center;
+  padding: 2rem;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  margin-top: auto;
+}
 
 /* Responsive */
 @media (max-width: 1024px) {
-  .workflow-grid { flex-direction: column; gap: 1.5rem; }
-  .step-connector { transform: rotate(90deg); padding-top: 0; flex: 0 0 40px;}
-  .stats-grid-promax { grid-template-columns: repeat(2, 1fr); }
-  .detail-grid-promax { grid-template-columns: 1fr; }
+  .workflow-grid {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .step-connector {
+    transform: rotate(90deg);
+    padding-top: 0;
+    flex: 0 0 40px;
+  }
+
+  .stats-grid-promax {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .detail-grid-promax {
+    grid-template-columns: 1fr;
+  }
 }
+
 @media (max-width: 768px) {
-  .hero-promax { padding: 5rem 1.5rem 6rem; }
-  .hero-title { font-size: 2.5rem; }
-  .dash-header-promax { flex-direction: column; align-items: stretch; gap: 1.5rem; }
-  .btn-create-batch { width: 100%; justify-content: center; }
-  .table-header-promax { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .hero-promax {
+    padding: 5rem 1.5rem 6rem;
+  }
+
+  .hero-title {
+    font-size: 2.5rem;
+  }
+
+  .dash-header-promax {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.5rem;
+  }
+
+  .btn-create-batch {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .table-header-promax {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .custom-modal-body {
+    padding: 1rem;
+  }
 }
 </style>

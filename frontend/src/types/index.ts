@@ -99,10 +99,29 @@ export interface BatchInput {
   note?: string | null
 }
 
+export interface BatchCorrectionInput extends Partial<BatchInput> {
+  correctionReason: string
+  expectedVersion: number
+}
+export interface BatchVersion {
+  id: string
+  version_number: number
+  snapshot: BatchItem
+  correction_reason: string | null
+  corrected_by: string | null
+  created_at: string
+  blockchain: { status: BlockchainStatus; transaction_hash: string | null } | null
+}
+export interface BatchHistoryResponse { success: boolean; items: BatchVersion[] }
+
 export interface PondBatchListResponse { success: boolean; count: number; items: BatchItem[] }
 export interface PondBatchResponse { success: boolean; batch: BatchItem }
+export interface PondBatchCreateResponse extends PondBatchResponse {
+  blockchain: { status: BlockchainStatus | 'UNKNOWN'; transactionHash: string | null }
+}
 
 export interface BatchItem {
+  current_version: number
   id: string
   batch_code: string
   species: Species

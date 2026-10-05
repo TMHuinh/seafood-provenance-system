@@ -6,6 +6,7 @@ const supabase = require('../../config/supabase')
 
 const SUPPORTED_EVENT_TYPES = [
   'BATCH_CREATED',
+  'BATCH_CORRECTED',
   'FARMING_LOG_RECORDED',
   'HARVEST_RECORDED',
   'TRANSPORT_RECORDED',

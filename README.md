@@ -88,6 +88,34 @@ Truy cập `http://localhost:5173`.
 
 ## Kết nối Blockchain
 
+Khi tạo vụ nuôi, backend lưu vụ vào database rồi gửi sự kiện
+`BATCH_CREATED:<batchId>` lên blockchain. Hash đại diện cho thông tin lúc tạo:
+cơ sở, ao, mã vụ, loài nuôi, nguồn và số lượng giống, ngày thả, ngày dự kiến
+thu hoạch, trạng thái và ghi chú. Chỉnh sửa vụ sau đó không ghi đè sự kiện này.
+
+Đính chính vụ nuôi yêu cầu `correctionReason` (3–1000 ký tự) và
+`expectedVersion` bằng `current_version` đang hiển thị. Database khóa vụ,
+kiểm tra phiên bản và lưu thay đổi cùng snapshot trong một transaction.
+Backend sau đó ghi sự kiện `BATCH_CORRECTED:<batchId>:v<version>` với hash
+của snapshot, lý do và người đính chính. Nếu blockchain lỗi, thay đổi và lịch sử
+vẫn được giữ, API trả trạng thái blockchain riêng; chưa có tự động thử lại.
+Nút **Lịch sử** hiển thị các phiên bản và kết quả giao dịch đã lưu, không phải
+kết quả kiểm chứng lại trực tiếp trên chain.
+
+Trước khi chạy code này, áp dụng
+`supabase/migrations/202609180001_batch_versions.sql` bằng Supabase SQL Editor.
+Migration lưu dữ liệu hiện có làm phiên bản nền; không thể phục hồi những sửa
+đổi trước đây chưa được lưu lịch sử. Phiên bản nền của vụ cũ không được xem là
+bản sao đã kiểm chứng của dữ liệu lúc tạo. Các vụ có lịch sử không thể xóa cứng.
+
+API tạo vụ trả thêm `blockchain.status` và `blockchain.transactionHash`.
+`SUCCESS` nghĩa là giao dịch đã được xác nhận; `PENDING` là chưa gửi do thiếu
+cấu hình; `FAILED` là gửi giao dịch thất bại; `UNKNOWN` là chưa lưu được kết quả
+đối soát và giao dịch có thể đã thành công. Vụ đã tạo được giữ lại trong các
+trường hợp này; giao diện thông báo chưa ghi thành công để tránh tạo trùng.
+Hiện chưa có cơ chế tự động thử lại. Bản ghi `blockchain_records` liên kết với
+vụ sẽ ngăn xóa vụ theo ràng buộc database hiện có.
+
 Smart contract nằm trong `backend/contracts/` (Hardhat project). Code backend dùng
 `ethers` để ghi hash dữ liệu lên chain. Backend chỉ kết nối khi **đủ cả 3 biến**
 trong `backend/.env`: `BLOCKCHAIN_RPC_URL`, `BLOCKCHAIN_CONTRACT_ADDRESS`,

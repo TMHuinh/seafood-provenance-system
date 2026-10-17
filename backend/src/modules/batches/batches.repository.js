@@ -1,5 +1,5 @@
 const supabase = require('../../config/supabase')
-const BATCH_FIELDS = 'id, pond_id, batch_code, species, seed_source, seed_quantity, stocking_date, expected_harvest_date, actual_harvest_date, yield_quantity, status, note, created_at, updated_at'
+const BATCH_FIELDS = 'id, pond_id, batch_code, species, seed_source, seed_quantity, stocking_date, expected_harvest_date, actual_harvest_date, yield_quantity, status, note, created_at, updated_at, current_version'
 
 async function create(pondId, batch) {
   const { data, error } = await supabase.from('batches').insert({ ...batch, pond_id: pondId }).select(BATCH_FIELDS).single()
@@ -13,10 +13,20 @@ async function findAllByPond(pondId) {
   return data ?? []
 }
 
-async function updateByPond(id, pondId, changes) {
-  const { data, error } = await supabase.from('batches').update(changes).eq('id', id).eq('pond_id', pondId).select(BATCH_FIELDS).maybeSingle()
+async function correctByPond(id, pondId, changes, expectedVersion, reason, actorId) {
+  const { data, error } = await supabase.rpc('correct_batch', {
+    p_id: id, p_pond_id: pondId, p_changes: changes,
+    p_expected_version: expectedVersion, p_reason: reason, p_actor: actorId,
+  }).single()
   if (error) throw error
   return data
+}
+
+async function findVersions(batchId) {
+  const { data, error } = await supabase.from('batch_versions').select('*')
+    .eq('batch_id', batchId).order('version_number', { ascending: false })
+  if (error) throw error
+  return data ?? []
 }
 
 async function removeByPond(id, pondId) {
@@ -129,5 +139,6 @@ module.exports = {
   findAllByPond,
   removeByPond,
   findTransports,
-  updateByPond,
+  correctByPond,
+  findVersions,
 }

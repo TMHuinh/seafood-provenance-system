@@ -1,8 +1,12 @@
 const express = require('express')
 const controller = require('./batches.controller')
+const harvests = require('../harvests/harvests.controller')
 const router = express.Router({ mergeParams: true })
 router.get('/', controller.listByPond)
 router.post('/', controller.createForPond)
+router.get('/:id/history', controller.historyForPond)
+router.get('/:id/harvests', harvests.list)
+router.post('/:id/harvests', harvests.create)
 router.patch('/:id', controller.updateForPond)
 router.delete('/:id', controller.removeForPond)
 module.exports = router

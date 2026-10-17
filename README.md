@@ -86,7 +86,31 @@ docker compose up -d --build
 
 Truy cập `http://localhost:5173`.
 
-## Kết nối Blockchain
+## Thu hoạch nhiều đợt và lô hàng
+
+Áp dụng `supabase/migrations/202610050001_harvest_lots.sql` sau migration
+phiên bản vụ nuôi. Trong trang quản lý vụ, chọn **Thu hoạch / Lô** để ghi
+ngày thu, khối lượng (kg), ghi chú và chọn thu một phần hoặc kết thúc thu hoạch.
+Vụ phải ở trạng thái đang nuôi hoặc sẵn sàng thu hoạch. Mỗi lần thu tạo một
+lô riêng, lưu snapshot nguồn gốc cơ sở, ao, vụ và giống tại thời điểm thu.
+Các lần thu cũ vẫn được giữ; migration không tự tạo lô hoặc bằng chứng cho chúng.
+
+Thu hoạch, lô hàng, tổng sản lượng và lịch sử vụ được lưu trong cùng transaction.
+Ngày thu theo múi giờ Việt Nam, không trước ngày thả hoặc sau ngày hiện tại.
+Đợt cuối phải có ngày không trước các đợt đã ghi. Tổng sản lượng được cộng từ
+các lần thu; ngày thu thực tế của vụ là ngày kết thúc. Không thể sửa đè sản
+lượng trong form đính chính hoặc mở lại vụ đã kết thúc thu hoạch.
+
+API `GET/POST /api/farms/:farmId/ponds/:pondId/batches/:id/harvests` chỉ dành
+cho chủ cơ sở. POST nhận `requestId` (UUID), `harvestDate` (YYYY-MM-DD),
+`quantity`, `isFinal` và `note`. Gửi lại cùng mã và dữ liệu trả về lô đã tạo,
+không gửi lại giao dịch blockchain. Thay đổi dữ liệu với cùng mã trả lỗi 409.
+Mỗi lô có sự kiện `HARVEST_RECORDED:<harvestId>`; payload hash là snapshot
+`provenance` đã lưu. Blockchain lỗi vẫn giữ thu hoạch và lô, trả trạng thái
+riêng. Danh sách hiển thị kết quả giao dịch đã lưu, chưa đối soát trực tiếp
+trên chain; chưa có tự động thử lại, chia/gộp lô hoặc QR.
+
+## Ghi dữ liệu vụ nuôi lên blockchain
 
 Smart contract nằm trong `backend/contracts/` (Hardhat project). Code backend dùng
 `ethers` để ghi hash dữ liệu lên chain. Backend chỉ kết nối khi **đủ cả 3 biến**

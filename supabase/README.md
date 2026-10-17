@@ -48,3 +48,48 @@ supabase db push
 ```
 
 Không chạy `supabase db push` với migration hiện tại khi chưa chuẩn hóa.
+
+## Thu hoạch và lô hàng
+
+Sau migration `202609180001_batch_versions.sql`, chạy toàn bộ
+`migrations/202610050001_harvest_lots.sql` trong SQL Editor trước khi dùng
+chức năng thu hoạch mới. Sau đó chạy `migrations/202610170001_harvest_conflict_status.sql`
+để xung đột nghiệp vụ trả HTTP 409, tránh bị thử lại như lỗi serialization.
+Migration thu hoạch thêm `harvests.is_final`, `harvest_lots`,
+RPC `record_batch_harvest` và trigger bảo vệ tổng sản lượng. RPC chỉ được
+gọi bằng `service_role`; lưu thu hoạch, lô, tổng sản lượng và phiên bản vụ
+trong cùng transaction. Bảng lô bật RLS; không mở truy cập công khai.
+Các lần thu hoạch cũ được giữ nguyên, chưa có lô tương ứng và không được
+tự coi là có bằng chứng blockchain. Tổng sản lượng khi ghi thu mới bao gồm
+các lần thu cũ. Chức năng chưa hỗ trợ sửa/xóa lần thu đã ghi.
+
+## Lịch sử phiên bản vụ nuôi
+
+Chạy toàn bộ file `migrations/202609180001_batch_versions.sql` trong SQL Editor
+sau các migration trước đó và trước khi khởi động backend mới. File bổ sung
+`batches.current_version`, bảng `batch_versions`, sự kiện `BATCH_CORRECTED`
+và hàm `correct_batch` chỉ cho backend gọi bằng quyền `service_role`.
+Snapshot và cập nhật vụ được lưu trong cùng transaction; gửi blockchain diễn
+ra sau transaction. Dữ liệu vụ có sẵn được lưu làm phiên bản nền tại thời điểm
+migration, không phải lịch sử được khôi phục từ blockchain.
+
+### Hoàn tác (DOWN)
+
+Phần `-- migrate:down` nằm cuối file
+[migrations/202609180001_batch_versions.sql](migrations/202609180001_batch_versions.sql),
+trong khối chú thích `/* ... */`. Chạy toàn bộ file chỉ thực thi UP.
+Để chạy DOWN, sao chép riêng nội dung bên trong khối chú thích (không lấy
+`/*` và `*/`) sang truy vấn SQL Editor mới và chạy. Không chạy kèm phần UP.
+
+Trước khi chạy, sao lưu `batch_versions` nếu cần giữ lịch sử và đưa ứng dụng
+về phiên bản không phụ thuộc `current_version`, `batch_versions`, `correct_batch`.
+DOWN xóa trigger, hai hàm, bảng lịch sử (toàn bộ dữ liệu) và cột phiên bản.
+Nội dung hiện tại trong `batches`, bảng `blockchain_records` và dữ liệu trên
+blockchain được giữ nguyên; thông tin đã sửa không tự trở về giá trị cũ.
+Giá trị enum `BATCH_CORRECTED` cũng được giữ để bảo toàn các bản ghi tham chiếu.
+
+Không chạy lại UP ngay sau DOWN nếu đã ghi sự kiện đính chính lên blockchain:
+UP sẽ bắt đầu lại từ phiên bản 1, khiến các mã sự kiện của phiên bản tiếp theo
+có thể trùng với mã đã ghi. Cần phục hồi lịch sử và số phiên bản phù hợp trước
+khi bật lại chức năng đính chính. Phần DOWN không thay đổi lịch sử migration
+của Supabase CLI.

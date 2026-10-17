@@ -99,10 +99,29 @@ export interface BatchInput {
   note?: string | null
 }
 
+export interface BatchCorrectionInput extends Partial<BatchInput> {
+  correctionReason: string
+  expectedVersion: number
+}
+export interface BatchVersion {
+  id: string
+  version_number: number
+  snapshot: BatchItem
+  correction_reason: string | null
+  corrected_by: string | null
+  created_at: string
+  blockchain: { status: BlockchainStatus; transaction_hash: string | null } | null
+}
+export interface BatchHistoryResponse { success: boolean; items: BatchVersion[] }
+
 export interface PondBatchListResponse { success: boolean; count: number; items: BatchItem[] }
 export interface PondBatchResponse { success: boolean; batch: BatchItem }
+export interface PondBatchCreateResponse extends PondBatchResponse {
+  blockchain: { status: BlockchainStatus | 'UNKNOWN'; transactionHash: string | null }
+}
 
 export interface BatchItem {
+  current_version: number
   id: string
   batch_code: string
   species: Species
@@ -160,6 +179,30 @@ export interface HarvestRecord {
   quality_grade: string | null
   note: string | null
   created_at: string
+}
+
+export interface HarvestLot {
+  id: string
+  lot_code: string
+  batch_id: string
+  quantity: number
+  status: string
+  blockchain_event_id: string
+  created_at: string
+  harvest: HarvestRecord & { is_final: boolean }
+  provenance: {
+    batch: BatchItem
+    farm: { id: string; name: string; organizationId: string | null }
+    pond: { id: string; code: string; name: string }
+  }
+  blockchain: { status: BlockchainStatus; transaction_hash: string | null; data_hash: string } | null
+}
+export interface HarvestCreateResponse {
+  batch: BatchItem
+  harvest: HarvestLot['harvest']
+  lot: Omit<HarvestLot, 'harvest' | 'blockchain'>
+  replayed: boolean
+  blockchain: { status: BlockchainStatus | 'UNKNOWN'; transactionHash: string | null; dataHash: string }
 }
 
 export interface TransportRecord {

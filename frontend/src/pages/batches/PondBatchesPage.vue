@@ -8,12 +8,21 @@ import {
 } from 'vuestic-ui'
 import { usePondsStore } from '../../stores/ponds.store'
 import { usePondBatchesStore } from '../../stores/pond-batches.store'
-import { SPECIES_LABELS, STATUS_LABELS, type BatchInput, type BatchItem, type BatchStatusCode, type Species } from '../../types'
+import HarvestModal from './HarvestModal.vue'
+import { SPECIES_LABELS, STATUS_LABELS, type BatchVersion, type BatchInput, type BatchItem, type BatchStatusCode, type Species } from '../../types'
 
 const route = useRoute(); const router = useRouter(); const store = usePondBatchesStore(); const pondsStore = usePondsStore()
 const { items, loading, saving, error } = storeToRefs(store)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const pondName = ref('')
-const showForm = ref(false); const editingId = ref<string | null>(null); const formError = ref(''); const success = ref('')
+const showForm = ref(false); const editingId = ref<string | null>(null); const formError = ref(''); const success = ref(''); const warning = ref('')
+const correctionReason = ref(''); const expectedVersion = ref(1)
+const historyItems = ref<BatchVersion[]>([]); const historyTitle = ref(''); const historyLoading = ref(false)
+const harvestBatchId = ref<string | null>(null)
+const harvestBatch = computed(() => items.value.find((item) => item.id === harvestBatchId.value))
+function updateHarvestBatch(batch: BatchItem) {
+  const index = items.value.findIndex((item) => item.id === batch.id)
+  if (index >= 0) items.value[index] = batch
+}
 
 const form = reactive({ batchCode: '', species: 'SHRIMP' as Species, seedSource: '', seedQuantity: '' as string | number, stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '' as string | number, status: 'GROWING' as BatchStatusCode, note: '' })
 
@@ -33,36 +42,65 @@ const statusColors: Record<string, string> = {
 
 const canEnterHarvest = computed(() => Boolean(editingId.value) && ['HARVESTED', 'COMPLETED'].includes(form.status))
 const numeric = (value: string | number) => value === '' ? null : Number(value)
-const dateOnly = (value: string | null | undefined) => value ? value.slice(0, 10) : ''
+const dateOnly = (value: string | null | undefined) => value
+  ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value)) : ''
 
-function reset() { editingId.value = null; Object.assign(form, { batchCode: '', species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
+function reset() { correctionReason.value = ''; expectedVersion.value = 1; editingId.value = null; Object.assign(form, { batchCode: '', species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
 function openCreate() { reset(); showForm.value = true }
-function openEdit(item: BatchItem) { editingId.value = item.id; Object.assign(form, { batchCode: item.batch_code, species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
-function close() { showForm.value = false; reset() }
+function openEdit(item: BatchItem) { correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { batchCode: item.batch_code, species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
+function close() { if (saving.value) return; showForm.value = false; reset() }
 
 async function submit() {
-  formError.value = ''; success.value = ''
+  if (saving.value) return
+  formError.value = ''; success.value = ''; warning.value = ''
   if (!form.batchCode.trim() || !form.stockingDate || numeric(form.seedQuantity) === null) { formError.value = 'Vui lòng nhập đầy đủ mã vụ, số lượng giống và ngày thả giống.'; return }
 
   const payload: BatchInput = { batchCode: form.batchCode.trim(), species: form.species, seedSource: form.seedSource.trim() || null, seedQuantity: Number(form.seedQuantity), stockingDate: form.stockingDate, expectedHarvestDate: form.expectedHarvestDate || null, status: form.status, note: form.note.trim() || null }
 
-  if (editingId.value) {
-    payload.actualHarvestDate = canEnterHarvest.value ? (form.actualHarvestDate || null) : null
-    payload.yieldQuantity = canEnterHarvest.value ? numeric(form.yieldQuantity) : null
+  if (editingId.value && correctionReason.value.trim().length < 3) {
+    formError.value = 'Vui lòng nhập lý do đính chính (ít nhất 3 ký tự).'
+    return
   }
 
   try {
-    if (editingId.value) {
-      await store.update(farmId.value, pondId.value, editingId.value, payload);
-      success.value = 'Đã cập nhật thông tin vụ nuôi.'
+    const editing = Boolean(editingId.value)
+    const result = editingId.value
+      ? await store.update(farmId.value, pondId.value, editingId.value, {
+          ...payload,
+          correctionReason: correctionReason.value.trim(),
+          expectedVersion: expectedVersion.value,
+        })
+      : await store.create(farmId.value, pondId.value, payload)
+    const action = editing ? 'đính chính' : 'tạo'
+    if (result.blockchain.status === 'SUCCESS') {
+      success.value = `Đã ${action} vụ nuôi và ghi blockchain thành công.`
     } else {
-      await store.create(farmId.value, pondId.value, payload);
-      success.value = 'Đã tạo vụ nuôi mới thành công.'
+      warning.value = result.blockchain.status === 'UNKNOWN'
+        ? `Đã lưu ${action} vụ nuôi, nhưng chưa xác định được kết quả ghi blockchain. Không cần gửi lại.`
+        : `Đã lưu ${action} vụ nuôi, nhưng chưa ghi blockchain thành công. Không cần gửi lại.`
     }
     close()
   } catch {
     formError.value = error.value
   }
+}
+
+async function openHistory(item: BatchItem) {
+  historyTitle.value = item.batch_code
+  historyItems.value = []
+  historyLoading.value = true
+  try {
+    historyItems.value = await store.history(farmId.value, pondId.value, item.id)
+  } catch {
+    historyTitle.value = ''
+    warning.value = 'Không thể tải lịch sử vụ nuôi. Vui lòng thử lại.'
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function toggleHistory(value: boolean) {
+  if (!value) historyTitle.value = ''
 }
 
 async function remove(item: BatchItem) {
@@ -103,6 +141,9 @@ onMounted(async () => {
     <!-- Alerts -->
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable>
       {{ success }}
+    </va-alert>
+    <va-alert v-if="warning" color="warning" class="mb-4" icon="warning" outline closeable>
+      {{ warning }}
     </va-alert>
     <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
       {{ error }}
@@ -163,17 +204,22 @@ onMounted(async () => {
               @click="router.push({ name: 'farming-logs', params: { farmId, pondId, batchId: item.id } })">
               Nhật ký
             </va-button>
-            <va-button preset="secondary" icon="edit" color="info" @click="openEdit(item)" />
+            <va-button preset="secondary" icon="edit" color="info" aria-label="Đính chính" @click="openEdit(item)" />
+            <va-button preset="secondary" icon="history" color="secondary" aria-label="Lịch sử" @click="openHistory(item)" />
+            <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch / Lô</va-button>
             <va-button preset="secondary" icon="delete" color="danger" @click="remove(item)" />
           </div>
         </va-card>
       </div>
     </va-inner-loading>
 
+    <HarvestModal v-if="harvestBatch" :key="harvestBatch.id" :batch="harvestBatch" :farm-id="farmId" :pond-id="pondId"
+      @close="harvestBatchId = null" @updated="updateHarvestBatch" />
+
     <!-- Modal Form -->
     <va-modal v-model="showForm" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header>
-        <h2 class="modal-title">{{ editingId ? 'Cập nhật Vụ nuôi' : 'Tạo Vụ nuôi mới' }}</h2>
+        <h2 class="modal-title">{{ editingId ? 'Đính chính Vụ nuôi' : 'Tạo Vụ nuôi mới' }}</h2>
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
@@ -198,14 +244,17 @@ onMounted(async () => {
           <div class="harvest-section col-span-2">
             <h3 class="section-title">Thông tin thu hoạch thực tế</h3>
             <div class="harvest-grid">
-              <va-input v-model="form.actualHarvestDate" type="date" label="Ngày thu hoạch thực tế" />
+              <va-input v-model="form.actualHarvestDate" type="date" label="Ngày kết thúc thu hoạch" readonly />
               <va-input v-model="form.yieldQuantity" type="number" label="Sản lượng thu hoạch (kg)" min="0"
-                step="0.01" />
+                step="0.01" readonly />
             </div>
           </div>
         </template>
 
         <va-textarea v-model="form.note" label="Ghi chú" placeholder="Thông tin thêm..." class="col-span-2" />
+
+        <va-textarea v-if="editingId" v-model="correctionReason" label="Lý do đính chính *"
+          placeholder="Ví dụ: Nhập sai số lượng con giống" minlength="3" maxlength="1000" class="col-span-2" />
 
         <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">
           {{ formError }}
@@ -215,11 +264,49 @@ onMounted(async () => {
           <va-button preset="secondary" type="button" color="secondary" @click="close">
             Hủy bỏ
           </va-button>
-          <va-button type="submit" :loading="saving" color="primary">
-            {{ editingId ? 'Lưu thay đổi' : 'Hoàn tất tạo' }}
+          <va-button type="submit" :loading="saving" :disabled="saving" color="primary">
+            {{ editingId ? 'Đính chính và ghi blockchain' : 'Tạo và ghi blockchain' }}
           </va-button>
         </div>
       </form>
+    </va-modal>
+
+    <va-modal :model-value="Boolean(historyTitle)" hide-default-actions size="large"
+      @update:model-value="toggleHistory">
+      <template #header>
+        <h2 class="modal-title">Lịch sử vụ {{ historyTitle }}</h2>
+      </template>
+      <va-inner-loading :loading="historyLoading">
+        <div class="version-list">
+          <va-card v-for="version in historyItems" :key="version.id" class="version-card">
+            <va-card-content>
+              <div class="version-heading">
+                <strong>Phiên bản {{ version.version_number }}</strong>
+                <va-badge :color="version.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'">
+                  {{ version.blockchain?.status === 'SUCCESS' ? 'Đã ghi blockchain' : 'Chưa xác nhận' }}
+                </va-badge>
+              </div>
+              <p>{{ version.correction_reason || 'Dữ liệu được lưu trước lần đính chính đầu tiên' }}</p>
+              <dl class="version-details">
+                <div><dt>Mã vụ / loài</dt><dd>{{ version.snapshot.batch_code }} / {{ SPECIES_LABELS[version.snapshot.species] }}</dd></div>
+                <div><dt>Nguồn giống</dt><dd>{{ version.snapshot.seed_source || '—' }}</dd></div>
+                <div><dt>Số lượng giống</dt><dd>{{ version.snapshot.seed_quantity.toLocaleString('vi-VN') }}</dd></div>
+                <div><dt>Ngày thả / dự kiến thu</dt><dd>{{ dateOnly(version.snapshot.stocking_date) }} / {{ dateOnly(version.snapshot.expected_harvest_date) || '—' }}</dd></div>
+                <div><dt>Ngày thu / sản lượng (kg)</dt><dd>{{ dateOnly(version.snapshot.actual_harvest_date) || '—' }} / {{ version.snapshot.yield_quantity ?? '—' }}</dd></div>
+                <div><dt>Trạng thái</dt><dd>{{ STATUS_LABELS[version.snapshot.status] }}</dd></div>
+                <div><dt>Ghi chú</dt><dd>{{ version.snapshot.note || '—' }}</dd></div>
+              </dl>
+              <p v-if="version.blockchain?.transaction_hash" class="transaction">
+                Giao dịch: {{ version.blockchain.transaction_hash }}
+              </p>
+            </va-card-content>
+          </va-card>
+          <p v-if="!historyLoading && !historyItems.length" class="text-secondary">Chưa có dữ liệu lịch sử.</p>
+        </div>
+      </va-inner-loading>
+      <div class="form-actions">
+        <va-button preset="secondary" @click="historyTitle = ''">Đóng</va-button>
+      </div>
     </va-modal>
   </main>
 </template>
@@ -394,6 +481,7 @@ onMounted(async () => {
 /* Card Actions */
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 1.25rem;
@@ -460,6 +548,42 @@ onMounted(async () => {
   border-top: 1px solid #f1f5f9;
 }
 
+.version-list {
+  display: grid;
+  gap: 1rem;
+  min-width: 500px;
+}
+
+.version-card {
+  border: 1px solid #e2e8f0;
+}
+
+.version-heading,
+.version-details div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.version-details div {
+  padding: 0.6rem 0;
+  border-top: 1px solid #f1f5f9;
+}
+
+.version-details dd {
+  max-width: 65%;
+  margin: 0;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.transaction {
+  overflow-wrap: anywhere;
+  color: #475569;
+  font-size: 0.85rem;
+}
+
 /* Utilities */
 .mr-1 {
   margin-right: 0.35rem;
@@ -493,7 +617,8 @@ onMounted(async () => {
   }
 
   .modern-form,
-  .harvest-grid {
+  .harvest-grid,
+  .version-list {
     grid-template-columns: 1fr;
     min-width: 100%;
   }

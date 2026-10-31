@@ -110,6 +110,40 @@ Mỗi lô có sự kiện `HARVEST_RECORDED:<harvestId>`; payload hash là snaps
 riêng. Danh sách hiển thị kết quả giao dịch đã lưu, chưa đối soát trực tiếp
 trên chain; chưa có tự động thử lại, chia/gộp lô hoặc QR.
 
+## Vận chuyển lô sau thu hoạch
+
+Chạy lần lượt các file `202610190001_harvest_lot_transport.sql`,
+`202610190002_transporter_workflow.sql`,
+`202610190003_transport_blockchain_events.sql` và
+`202610260001_transport_recipient_confirmation.sql` trong Supabase SQL Editor
+trước khi khởi động backend mới. Migration thứ ba thêm lịch sử sự kiện
+append-only và hàng đợi gửi blockchain có tự thử lại; migration cuối gắn chuyến
+với nhà phân phối nhận hàng.
+
+Các mốc được ghi theo thứ tự: tạo yêu cầu, nhận chuyến, khởi hành, các cập nhật
+hành trình tại điểm lấy/trung chuyển/giao hàng, kiểm tra nhiệt độ/vị trí, người
+vận chuyển báo giao, nhà phân phối nhận lô xác nhận đã nhận hàng, hoặc hủy
+chuyến. Chuyến chỉ chuyển sang `DELIVERED` sau khi đúng nhà phân phối nhận hàng
+xác nhận. Chạy tiếp `202610260002_transport_tracking_updates.sql` để bật các cập
+nhật hành trình chi tiết do người vận chuyển ghi, rồi chạy
+`202610260003_transport_tracking_temperature.sql` để lưu nhiệt độ cùng trạng
+thái, địa điểm và ghi chú trong một mốc duy nhất. Chạy thêm
+`202610260004_transport_delivery_report_simplified.sql` để bỏ các trường tên
+người nhận/mã biên nhận khỏi bước báo giao; nhà phân phối được chọn vẫn là bên
+xác nhận đã nhận hàng. Cuối cùng chạy
+`202610260005_transport_success_in_tracking.sql` để gộp trạng thái giao thành
+công vào form hành trình và bỏ nút/API báo giao riêng; nhà phân phối vẫn phải
+xác nhận trước khi chuyến được đóng.
+Mỗi mốc có mã sự kiện riêng, hash dữ liệu và liên kết hash mốc trước; nội dung
+chi tiết lưu ở Supabase, blockchain chỉ lưu hash. Các chuyến cũ không được tạo
+thêm lịch sử giả; timeline áp dụng cho mốc phát sinh sau migration.
+
+Trạng thái `SUCCESS` nghĩa backend đã đọc lại hash từ contract hoặc nhận receipt
+giao dịch. `PENDING`/`FAILED` sẽ được worker thử lại. Để ghi lên chain thật, phải
+cấu hình đủ `BLOCKCHAIN_RPC_URL`, `BLOCKCHAIN_CONTRACT_ADDRESS` và
+`BLOCKCHAIN_PRIVATE_KEY` trong `backend/.env`; nếu thiếu, dữ liệu vẫn nằm trong
+database và chưa có bằng chứng on-chain.
+
 ## Ghi dữ liệu vụ nuôi lên blockchain
 
 Smart contract nằm trong `backend/contracts/` (Hardhat project). Code backend dùng

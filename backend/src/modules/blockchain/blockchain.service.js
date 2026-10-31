@@ -91,20 +91,38 @@ async function submitToContract({ eventId, dataHash }) {
   }
 
   try {
-    // 1. Kết nối mạng và ví
     const provider = new ethers.JsonRpcProvider(env.blockchainRpcUrl)
     const wallet = new ethers.Wallet(env.blockchainPrivateKey, provider)
-
-    // 2. Khai báo ABI của Smart Contract (Phải khớp với code Solidity)
     const contractABI = [
-      "function recordData(string id, string dataHash) public"
+      'function recordData(string id, string dataHash) public',
+      'function getDataHash(string eventId) external view returns (string)',
+      'function getRecord(string eventId) external view returns (string dataHash, address recordedBy, uint256 timestamp, uint256 blockNumber, uint256 writeCount)',
     ]
-    const contract = new ethers.Contract(env.blockchainContractAddress, contractABI, wallet)
+    const readContract = new ethers.Contract(env.blockchainContractAddress, contractABI, provider)
+    const onChainHash = await readContract.getDataHash(eventId)
 
-    // 3. Thực thi giao dịch (Gửi data lên Blockchain)
+    // Recover safely if the chain accepted a transaction but the API lost its response.
+    if (onChainHash) {
+      if (onChainHash !== dataHash) {
+        return {
+          transactionHash: null,
+          blockNumber: null,
+          contractAddress: env.blockchainContractAddress,
+          status: 'FAILED',
+          error: 'Event ID đã tồn tại trên blockchain với hash khác',
+        }
+      }
+      const onChainRecord = await readContract.getRecord(eventId)
+      return {
+        transactionHash: null,
+        blockNumber: Number(onChainRecord.blockNumber),
+        contractAddress: env.blockchainContractAddress,
+        status: 'SUCCESS',
+      }
+    }
+
+    const contract = new ethers.Contract(env.blockchainContractAddress, contractABI, wallet)
     const tx = await contract.recordData(eventId, dataHash)
-    
-    // 4. CHỜ MẠNG LƯỚI XÁC NHẬN (Cực kỳ quan trọng để đổi từ PENDING sang SUCCESS)
     const receipt = await tx.wait()
 
     return {
@@ -119,7 +137,8 @@ async function submitToContract({ eventId, dataHash }) {
       transactionHash: null,
       blockNumber: null,
       contractAddress: env.blockchainContractAddress,
-      status: 'FAILED'
+      status: 'FAILED',
+      error: error instanceof Error ? error.message : String(error),
     }
   }
 }
@@ -146,36 +165,68 @@ async function createRecord({ batchId, entityType, entityId, eventType, eventId,
 
   const dataHash = hashData(payload)
   const resolvedEventId = eventId ?? buildEventId(eventType, entityId)
-  
-  // Mỗi thực thể/sự kiện có khóa riêng, tránh các bản ghi cùng batch ghi đè nhau.
+
+  // Save a durable local record before broadcasting. A retry can then recover
+  // the same event instead of creating another chain event or losing its status.
+  const { data: existing, error: lookupError } = await supabase
+    .from('blockchain_records')
+    .select('*')
+    .eq('event_id', resolvedEventId)
+    .maybeSingle()
+  if (lookupError) throw lookupError
+  if (existing && existing.data_hash !== dataHash) {
+    const error = new Error('Event ID đã được dùng với dữ liệu khác')
+    error.status = 409
+    throw error
+  }
+  if (existing?.status === 'SUCCESS') return { record: existing, submitted: true, dataHash }
+
+  let record = existing
+  if (record) {
+    const { data, error } = await supabase
+      .from('blockchain_records')
+      .update({ status: 'PENDING', transaction_hash: null, block_number: null, contract_address: env.blockchainContractAddress || null })
+      .eq('id', record.id)
+      .select()
+      .single()
+    if (error) throw error
+    record = data
+  } else {
+    const { data, error } = await supabase
+      .from('blockchain_records')
+      .insert({
+        batch_id: batchId,
+        entity_type: entityType,
+        entity_id: entityId,
+        event_type: eventType,
+        event_id: resolvedEventId,
+        data_hash: dataHash,
+        contract_address: env.blockchainContractAddress || null,
+        status: 'PENDING',
+      })
+      .select()
+      .single()
+    if (error) throw error
+    record = data
+  }
+
   const chain = await submitToContract({ eventId: resolvedEventId, dataHash })
-
-  // Quyết định trạng thái cuối cùng dựa trên kết quả trả về từ Blockchain
-  const finalStatus = chain.status || (status ?? 'PENDING')
-
+  const finalStatus = chain.status || status || 'PENDING'
   const { data, error } = await supabase
     .from('blockchain_records')
-    .insert({
-      batch_id: batchId,
-      entity_type: entityType,
-      entity_id: entityId,
-      event_type: eventType,
-      event_id: resolvedEventId,
-      data_hash: dataHash,
+    .update({
       transaction_hash: chain.transactionHash,
       block_number: chain.blockNumber,
       contract_address: chain.contractAddress,
-      status: finalStatus, // Lưu trạng thái SUCCESS hoặc PENDING vào DB
-      recorded_at: new Date().toISOString(),
+      status: finalStatus,
+      recorded_at: finalStatus === 'SUCCESS' ? new Date().toISOString() : null,
     })
+    .eq('id', record.id)
     .select()
     .single()
+  if (error) throw error
 
-  if (error) {
-    throw error
-  }
-
-  return { record: data, submitted: finalStatus === 'SUCCESS', dataHash }
+  return { record: data, submitted: finalStatus === 'SUCCESS', dataHash, error: chain.error ?? null }
 }
 
 async function getRecordsByBatch(batchId, select = '*') {

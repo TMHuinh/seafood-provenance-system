@@ -197,6 +197,55 @@ export interface HarvestLot {
   }
   blockchain: { status: BlockchainStatus; transaction_hash: string | null; data_hash: string } | null
 }
+export type TransportStatus = 'PLANNING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
+export type TransportEventType = 'REQUESTED' | 'CLAIMED' | 'IN_TRANSIT' | 'CHECKPOINT' | 'DELIVERY_REPORTED' | 'RECIPIENT_ASSIGNED' | 'TRACKING_UPDATE' | 'DELIVERED' | 'CANCELLED'
+export interface TransportEvent {
+  id: string
+  transport_id: string
+  batch_id: string
+  sequence: number
+  event_id: string
+  event_type: TransportEventType
+  actor_id: string | null
+  occurred_at: string
+  payload: Record<string, unknown>
+  previous_hash: string | null
+  data_hash: string | null
+  blockchain_status: BlockchainStatus
+  transaction_hash: string | null
+  block_number: number | null
+  contract_address: string | null
+  attempt_count: number
+  last_error: string | null
+  recorded_at: string | null
+}
+export interface LotTransport {
+  id: string
+  batch_id: string
+  harvest_lot_id: string
+  recipient_organization_id?: string | null
+  handler_id: string | null
+  delivery_reported_at?: string | null
+  delivery_reported_by?: string | null
+  delivery_report?: Record<string, unknown> | null
+  transport_code: string
+  transport_date: string
+  vehicle: string | null
+  driver: string | null
+  from_location: string
+  to_location: string
+  temperature: number | null
+  quantity: number
+  status: TransportStatus
+  note: string | null
+  blockchain?: { status: BlockchainStatus; transaction_hash: string | null; data_hash: string | null } | null
+  events?: TransportEvent[]
+}
+export interface TransportRecipient {
+  id: string
+  name: string
+  address: string | null
+}
 export interface HarvestCreateResponse {
   batch: BatchItem
   harvest: HarvestLot['harvest']

@@ -30,6 +30,18 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/transports',
+      name: 'transports',
+      component: () => import('../pages/transports/TransporterDashboard.vue'),
+      meta: { requiresAuth: true, role: 'TRANSPORTER' },
+    },
+    {
+      path: '/receipts',
+      name: 'receipts',
+      component: () => import('../pages/transports/DistributorReceipts.vue'),
+      meta: { requiresAuth: true, role: 'DISTRIBUTOR' },
+    },
+    {
       path: '/farms/:farmId/ponds',
       name: 'ponds',
       component: () => import('../pages/ponds/PondsPage.vue'),
@@ -54,7 +66,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const authStore = useAuthStore()
 
   if (to.meta.guestOnly && authStore.isAuthenticated) {
@@ -64,6 +76,9 @@ router.beforeEach((to) => {
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+
+  if (to.meta.role && !authStore.user) await authStore.fetchMe()
+  if (to.meta.role && authStore.user?.role !== to.meta.role) return { name: 'home' }
 
   return true
 })

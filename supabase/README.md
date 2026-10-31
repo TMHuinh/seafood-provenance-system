@@ -63,6 +63,45 @@ Các lần thu hoạch cũ được giữ nguyên, chưa có lô tương ứng v
 tự coi là có bằng chứng blockchain. Tổng sản lượng khi ghi thu mới bao gồm
 các lần thu cũ. Chức năng chưa hỗ trợ sửa/xóa lần thu đã ghi.
 
+## Vận chuyển lô sau thu hoạch
+
+Sau migration `202610190001_harvest_lot_transport.sql`, chạy tiếp
+`migrations/202610190002_transporter_workflow.sql`, rồi chạy
+`migrations/202610190003_transport_blockchain_events.sql` trong SQL Editor.
+Migration thứ ba thêm lịch sử sự kiện vận chuyển bất biến, hàng đợi gửi lại
+blockchain, mốc nhiệt độ/vị trí và báo giao của người vận chuyển. Migration kế
+tiếp gắn quyền xác nhận với đúng nhà phân phối nhận hàng.
+
+Sau đó chạy `migrations/202610260001_transport_recipient_confirmation.sql`.
+Migration này gắn yêu cầu mới với tổ chức nhà phân phối nhận hàng và chuyển
+quyền xác nhận `DELIVERED` từ cơ sở gửi sang tài khoản `DISTRIBUTOR` thuộc tổ
+chức nhận. Chọn tổ chức nhận trong danh sách nhà phân phối đang có tài khoản;
+các chuyến cũ chưa gắn người nhận có thể được cơ sở tạo yêu cầu gán nhà phân
+phối từ lịch sử chuyến (việc gán được ghi thành sự kiện). Chuyến đã giao hoặc
+đã hủy không thể gán lại.
+
+Chạy tiếp `migrations/202610260002_transport_tracking_updates.sql` để bật các
+mốc hành trình do người vận chuyển chủ động ghi: lấy hàng, đang trên đường,
+đến/rời điểm trung chuyển, đang giao và giao chưa thành công. Mỗi mốc cần địa
+điểm hiện tại, có thể kèm ghi chú. Sau đó chạy
+`migrations/202610260003_transport_tracking_temperature.sql` để gộp nhiệt độ
+vào cùng mốc cập nhật hành trình; mỗi lần lưu chỉ tạo một sự kiện và một lượt
+đưa vào hàng đợi blockchain. Cuối cùng chạy
+`migrations/202610260004_transport_delivery_report_simplified.sql`: người vận
+chuyển chỉ báo đã tới điểm giao, còn nhà phân phối đã chọn xác nhận đã nhận.
+Tên người nhận và mã biên nhận không còn bắt buộc. Cuối cùng chạy
+`migrations/202610260005_transport_success_in_tracking.sql` để đưa trạng thái
+giao thành công vào cùng form cập nhật hành trình và bỏ endpoint báo giao riêng.
+Trạng thái này chỉ đánh dấu đang chờ nhà phân phối xác nhận; không tự đóng chuyến.
+
+Các mốc được neo theo thứ tự, mỗi mốc dùng hash riêng và tham chiếu hash mốc
+trước. Backend tự thử gửi lại khi blockchain lỗi; trạng thái giao diện chỉ là
+`Đã xác nhận trên blockchain` sau khi có xác nhận từ contract. Bản ghi blockchain
+chỉ chứa hash, còn nội dung chi tiết nằm trong Supabase. Cần cấu hình đủ
+`BLOCKCHAIN_RPC_URL`, `BLOCKCHAIN_CONTRACT_ADDRESS` và `BLOCKCHAIN_PRIVATE_KEY`
+trong `backend/.env`; thiếu cấu hình thì giao dịch sẽ ở trạng thái chờ và chưa
+được ghi lên chain thật.
+
 ## Lịch sử phiên bản vụ nuôi
 
 Chạy toàn bộ file `migrations/202609180001_batch_versions.sql` trong SQL Editor

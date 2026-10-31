@@ -11,9 +11,11 @@ function errorHandler(error, request, response, next) {
 
   console.error(error)
 
+  const exposeDetails = process.env.NODE_ENV !== 'production'
   response.status(error.status ?? 500).json({
     success: false,
-    message: error.status ? error.message : 'Internal server error',
+    message: error.status || exposeDetails ? error.message : 'Internal server error',
+    ...(exposeDetails && error.code ? { code: error.code } : {}),
   })
 }
 

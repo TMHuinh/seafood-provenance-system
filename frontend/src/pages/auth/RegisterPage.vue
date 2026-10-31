@@ -362,7 +362,7 @@ async function handleSubmit() {
   position: relative;
   flex: 1;
   display: none; /* Ẩn trên mobile */
-  background: linear-gradient(135deg, #0f172a 0%, #0e7490 100%);
+  background: linear-gradient(135deg, #17383d 0%, #0f766e 100%);
   color: white;
   padding: 4rem;
   overflow: hidden;
@@ -434,7 +434,7 @@ async function handleSubmit() {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #14b8a6;
+  background: #31a98f;
   color: white;
   font-size: 0.8rem;
   font-weight: bold;
@@ -567,12 +567,12 @@ async function handleSubmit() {
 }
 
 .checkbox-container:hover .modern-checkbox ~ .checkmark {
-  border-color: #0e7490;
+  border-color: #0f766e;
 }
 
 .modern-checkbox:checked ~ .checkmark {
-  background-color: #0e7490;
-  border-color: #0e7490;
+  background-color: #0f766e;
+  border-color: #0f766e;
 }
 
 .checkmark:after {
@@ -622,7 +622,7 @@ async function handleSubmit() {
 }
 
 .auth-link {
-  color: #0e7490;
+  color: #0f766e;
   font-weight: 600;
   text-decoration: none;
   margin-left: 0.25rem;
@@ -630,7 +630,7 @@ async function handleSubmit() {
 }
 
 .auth-link:hover {
-  color: #14b8a6;
+  color: #0e8a7d;
   text-decoration: underline;
 }
 

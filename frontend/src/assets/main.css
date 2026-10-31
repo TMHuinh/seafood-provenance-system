@@ -1,29 +1,54 @@
 @import './base.css';
 
-html {
+html,
+body,
+#app {
   min-height: 100%;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: linear-gradient(180deg, #f8fafc 0%, #f0faf9 100%);
-  color: #0f172a;
 }
 
 #app {
   min-height: 100vh;
 }
 
-:root {
-  --section-gap: 160px;
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+.page-container,
+.farms-page,
+.ponds-page,
+.logs-page,
+.transport-page {
+  color: var(--app-ink);
 }
 
-button {
+.page-title,
+.section-title,
+.home-page-promax h1,
+.home-page-promax h2,
+.home-page-promax h3 {
+  letter-spacing: -0.035em;
+}
+
+.va-modal__inner,
+.va-modal__container {
+  border-radius: 18px;
+}
+
+.va-input-wrapper,
+.va-select {
   font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

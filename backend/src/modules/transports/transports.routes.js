@@ -1,0 +1,16 @@
+const express = require('express')
+const { requireAuth } = require('../auth/auth.middleware')
+const controller = require('./transports.controller')
+
+const router = express.Router()
+router.use(requireAuth)
+router.get('/', controller.dashboard)
+router.get('/recipients', controller.listRecipients)
+router.get('/receiving', controller.receivingDashboard)
+router.post('/:transportId/confirm-delivery', controller.confirmDelivery)
+router.patch('/:transportId/recipient', controller.assignRecipient)
+router.post('/:transportId/claim', controller.claim)
+router.post('/:transportId/checkpoints', controller.recordCheckpoint)
+router.post('/:transportId/tracking-updates', controller.recordTrackingUpdate)
+router.patch('/:transportId/status', controller.updateOwnStatus)
+module.exports = router

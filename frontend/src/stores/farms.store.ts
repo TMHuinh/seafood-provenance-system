@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 
 import { api, ApiError } from '../api/client'
+import { captureStoreRequest, requireCurrent } from './request-guard'
 import type { Farm, FarmInput, FarmListResponse, FarmResponse } from '../types'
 
 interface FarmsState {
+  requestVersion: number
   items: Farm[]
   loading: boolean
   saving: boolean
@@ -15,60 +17,69 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export const useFarmsStore = defineStore('farms', {
-  state: (): FarmsState => ({ items: [], loading: false, saving: false, error: '' }),
+  state: (): FarmsState => ({ requestVersion: 0, items: [], loading: false, saving: false, error: '' }),
 
   actions: {
     async load(): Promise<void> {
+      this.requestVersion++
+      const current = captureStoreRequest(this)
+      this.items = []; this.saving = false
       this.loading = true
       this.error = ''
       try {
         const result = await api.get<FarmListResponse>('/farms')
-        this.items = result.items ?? []
+        if (current()) this.items = result.items ?? []
       } catch (error) {
-        this.error = errorMessage(error, 'Không thể tải danh sách cơ sở nuôi')
+        if (current()) this.error = errorMessage(error, 'Không thể tải danh sách cơ sở nuôi')
       } finally {
-        this.loading = false
+        if (current()) this.loading = false
       }
     },
 
     async create(input: FarmInput): Promise<Farm> {
+      const current = captureStoreRequest(this)
       this.saving = true
       this.error = ''
       try {
         const result = await api.post<FarmResponse>('/farms', input)
+        requireCurrent(current)
         this.items.unshift(result.farm)
         return result.farm
       } catch (error) {
-        this.error = errorMessage(error, 'Không thể tạo cơ sở nuôi')
+        if (current()) this.error = errorMessage(error, 'Không thể tạo cơ sở nuôi')
         throw error
       } finally {
-        this.saving = false
+        if (current()) this.saving = false
       }
     },
 
     async update(id: string, input: Partial<FarmInput>): Promise<Farm> {
+      const current = captureStoreRequest(this)
       this.saving = true
       this.error = ''
       try {
         const result = await api.patch<FarmResponse>(`/farms/${id}`, input)
+        requireCurrent(current)
         const index = this.items.findIndex((farm) => farm.id === id)
         if (index >= 0) this.items[index] = result.farm
         return result.farm
       } catch (error) {
-        this.error = errorMessage(error, 'Không thể cập nhật cơ sở nuôi')
+        if (current()) this.error = errorMessage(error, 'Không thể cập nhật cơ sở nuôi')
         throw error
       } finally {
-        this.saving = false
+        if (current()) this.saving = false
       }
     },
 
     async remove(id: string): Promise<void> {
+      const current = captureStoreRequest(this)
       this.error = ''
       try {
         await api.delete<void>(`/farms/${id}`)
+        requireCurrent(current)
         this.items = this.items.filter((farm) => farm.id !== id)
       } catch (error) {
-        this.error = errorMessage(error, 'Không thể xóa cơ sở nuôi')
+        if (current()) this.error = errorMessage(error, 'Không thể xóa cơ sở nuôi')
         throw error
       }
     },

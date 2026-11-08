@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../../stores/auth.store'
 import { useBatchesStore } from '../../stores/batches.store'
+import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { api } from '../../api/client'
 import {
   SPECIES_LABELS,
@@ -20,7 +21,7 @@ const batchesStore = useBatchesStore()
 const router = useRouter()
 
 const {
-  batches,
+  batches, page, pageSize, search, status, count, detailError,
   batchesError,
   detail,
   detailLoading,
@@ -29,23 +30,13 @@ const {
   selectedBatch,
   summary,
 } = storeToRefs(batchesStore)
-const { loadBatches, openDetail } = batchesStore
+const { loadBatches, openDetail, closeDetail, setPage, applyFilters } = batchesStore
 const farmCount = ref<number | null>(null)
 const transportOverview = ref<{ available: Array<{ transport_code: string; from_location: string; to_location: string; quantity: number; lot: { lot_code: string } }>; assigned: Array<{ transport_code: string; status: string; from_location: string; to_location: string; quantity: number; lot: { lot_code: string } }> }>({ available: [], assigned: [] })
 const loadingTransportOverview = ref(false)
 const transportOverviewError = ref('')
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
-const initials = computed(() => {
-  const name = authStore.fullName !== 'Khách' ? authStore.fullName : ''
-  return name
-    .split(/\s+/)
-    .map((word) => word[0])
-    .slice(-2)
-    .join('')
-    .toUpperCase()
-})
-
 const roleLabel = computed(() => {
   const role = authStore.user?.role as Role | undefined
   return role ? (ROLE_LABELS[role] ?? role) : ''
@@ -55,8 +46,8 @@ const role = computed(() => authStore.user?.role ?? 'FARMER')
 const roleCopy = computed(() => ({
   FARMER: { eyebrow: 'KHÔNG GIAN NGƯỜI NUÔI', title: 'Quản lý vùng nuôi, theo dõi từng vụ mùa', description: 'Từ cơ sở, ao nuôi đến thu hoạch và vận chuyển — mọi thông tin quan trọng được tập trung tại đây.', action: 'Mở cơ sở nuôi', actionIcon: 'domain', tableTitle: 'Vụ nuôi gần đây', tableDescription: 'Theo dõi trạng thái và hồ sơ nguồn gốc của các vụ nuôi.' },
   TRANSPORTER: { eyebrow: 'KHÔNG GIAN NGƯỜI VẬN CHUYỂN', title: 'Điều phối những chuyến hàng của bạn', description: 'Nhận yêu cầu vận chuyển, cập nhật thông tin phương tiện và theo dõi lô hàng đến điểm giao.', action: 'Mở điều phối', actionIcon: 'local_shipping', tableTitle: 'Tổng quan vận chuyển', tableDescription: 'Các yêu cầu chờ nhận và chuyến đang thực hiện.' },
-  DISTRIBUTOR: { eyebrow: 'KHÔNG GIAN ĐỐI TÁC PHÂN PHỐI', title: 'Tra cứu hồ sơ nguồn gốc thủy sản', description: 'Xem thông tin lô hàng được chia sẻ với tổ chức của bạn và đối chiếu lịch sử truy xuất.', action: 'Xem hồ sơ lô', actionIcon: 'inventory_2', tableTitle: 'Hồ sơ lô có thể tra cứu', tableDescription: 'Thông tin truy xuất hiện có trong phạm vi tổ chức.' },
-  ADMIN: { eyebrow: 'TRUNG TÂM QUẢN TRỊ', title: 'Tổng quan hoạt động hệ thống', description: 'Theo dõi hồ sơ lô, trạng thái sản xuất và hoạt động truy xuất trên toàn nền tảng.', action: 'Xem hồ sơ lô', actionIcon: 'admin_panel_settings', tableTitle: 'Hồ sơ lô mới nhất', tableDescription: 'Tình hình các vụ nuôi được ghi nhận trên nền tảng.' },
+  DISTRIBUTOR: { eyebrow: 'KHÔNG GIAN ĐỐI TÁC PHÂN PHỐI', title: 'Tra cứu hồ sơ nguồn gốc thủy sản', description: 'Xem thông tin lô hàng được chia sẻ với tổ chức của bạn và đối chiếu lịch sử truy xuất.', action: 'Xem vụ nuôi', actionIcon: 'inventory_2', tableTitle: 'Vụ nuôi có thể tra cứu', tableDescription: 'Thông tin truy xuất hiện có trong phạm vi tổ chức.' },
+  ADMIN: { eyebrow: 'TRUNG TÂM QUẢN TRỊ', title: 'Tổng quan hoạt động hệ thống', description: 'Theo dõi vụ nuôi, trạng thái sản xuất và hoạt động truy xuất trên toàn nền tảng.', action: 'Xem vụ nuôi', actionIcon: 'admin_panel_settings', tableTitle: 'Vụ nuôi mới nhất', tableDescription: 'Tình hình các vụ nuôi được ghi nhận trên nền tảng.' },
 }[role.value]))
 
 const homeStats = computed(() => {
@@ -68,18 +59,18 @@ const homeStats = computed(() => {
   ]
   if (role.value === 'FARMER') return [
     { label: 'Cơ sở nuôi', value: farmCount.value ?? '—', hint: 'Đang quản lý', icon: 'domain', tone: 'teal' },
-    { label: 'Tổng vụ nuôi', value: summary.value?.total ?? 0, hint: 'Hồ sơ đã ghi nhận', icon: 'inventory_2', tone: 'blue' },
+    { label: 'Tổng vụ nuôi', value: summary.value?.total ?? 0, hint: search.value || status.value ? 'Theo bộ lọc hiện tại' : 'Hồ sơ đã ghi nhận', icon: 'inventory_2', tone: 'blue' },
     { label: 'Đang nuôi', value: summary.value?.byStatus?.GROWING ?? 0, hint: 'Vụ đang sinh trưởng', icon: 'water', tone: 'green' },
     { label: 'Chờ thu hoạch', value: summary.value?.byStatus?.READY_FOR_HARVEST ?? 0, hint: 'Có thể ghi nhận thu hoạch', icon: 'agriculture', tone: 'amber' },
   ]
   if (role.value === 'DISTRIBUTOR') return [
-    { label: 'Lô có thể tra cứu', value: summary.value?.total ?? 0, hint: 'Trong phạm vi tổ chức', icon: 'qr_code_2', tone: 'teal' },
+    { label: 'Vụ nuôi có thể tra cứu', value: summary.value?.total ?? 0, hint: 'Trong phạm vi tổ chức', icon: 'qr_code_2', tone: 'teal' },
     { label: 'Đã thu hoạch', value: summary.value?.byStatus?.HARVESTED ?? 0, hint: 'Có nguồn gốc lô hàng', icon: 'inventory_2', tone: 'green' },
     { label: 'Đang hoàn thiện', value: summary.value?.byStatus?.GROWING ?? 0, hint: 'Đang trong giai đoạn nuôi', icon: 'schedule', tone: 'blue' },
     { label: 'Đã hoàn tất', value: summary.value?.byStatus?.COMPLETED ?? 0, hint: 'Hồ sơ vụ đã hoàn thành', icon: 'task_alt', tone: 'amber' },
   ]
   return [
-    { label: 'Tổng hồ sơ lô', value: summary.value?.total ?? 0, hint: 'Toàn hệ thống', icon: 'inventory_2', tone: 'teal' },
+    { label: 'Tổng vụ nuôi', value: summary.value?.total ?? 0, hint: search.value || status.value ? 'Theo bộ lọc hiện tại' : 'Toàn hệ thống', icon: 'inventory_2', tone: 'teal' },
     { label: 'Đang nuôi', value: summary.value?.byStatus?.GROWING ?? 0, hint: 'Vụ đang sinh trưởng', icon: 'water', tone: 'blue' },
     { label: 'Chờ thu hoạch', value: summary.value?.byStatus?.READY_FOR_HARVEST ?? 0, hint: 'Cần theo dõi tiếp', icon: 'schedule', tone: 'amber' },
     { label: 'Đã thu hoạch', value: summary.value?.byStatus?.HARVESTED ?? 0, hint: 'Đã tạo lô thu hoạch', icon: 'task_alt', tone: 'green' },
@@ -111,7 +102,7 @@ async function loadTransportOverview() {
 }
 
 const EVENT_LABELS: Record<string, string> = {
-  BATCH_CREATED: 'Khởi tạo lô mới',
+  BATCH_CREATED: 'Khởi tạo vụ nuôi',
   FARMING_LOG_RECORDED: 'Cập nhật nhật ký nuôi',
   HARVEST_RECORDED: 'Thu hoạch',
   TRANSPORT_RECORDED: 'Vận chuyển',
@@ -355,6 +346,7 @@ onMounted(async () => {
             </va-button>
           </div>
 
+          <CollectionToolbar :query="search" :status="status" :statuses="Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))" :total="count" :page="page" :page-size="pageSize" :loading="loadingBatches" label="vụ nuôi" @update:query="applyFilters($event, status)" @update:status="applyFilters(search, $event)" @update:page="setPage" />
           <va-alert v-if="batchesError" color="danger" class="mb-4">
             {{ batchesError }}
           </va-alert>
@@ -364,22 +356,22 @@ onMounted(async () => {
             <p class="mt-4 text-gray-500">Đang đồng bộ dữ liệu từ máy chủ...</p>
           </div>
 
-          <div v-else-if="batches.length === 0" class="empty-state-promax">
+          <div v-else-if="!batchesError && batches.length === 0" class="empty-state-promax">
             <div class="empty-icon">
               <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1">
                 <path stroke-linecap="round" stroke-linejoin="round"
                   d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
               </svg>
             </div>
-            <h4>Không có dữ liệu</h4>
-            <p>{{ role === 'FARMER' ? 'Tạo cơ sở và vụ nuôi để bắt đầu xây dựng hồ sơ nguồn gốc.' : role === 'DISTRIBUTOR' ? 'Hiện chưa có hồ sơ lô nào được chia sẻ với tổ chức của bạn.' : 'Chưa có hồ sơ nào được ghi nhận trên hệ thống.' }}</p>
+            <h4>Không có vụ nuôi phù hợp</h4>
+            <p>{{ role === 'FARMER' ? 'Tạo cơ sở và vụ nuôi để bắt đầu xây dựng hồ sơ nguồn gốc.' : role === 'DISTRIBUTOR' ? 'Hiện chưa có vụ nuôi nào được chia sẻ với tổ chức của bạn.' : 'Chưa có hồ sơ nào được ghi nhận trên hệ thống.' }}</p>
           </div>
 
-          <div v-else class="table-responsive">
+          <div v-else-if="batches.length" class="table-responsive" role="region" aria-label="Danh sách vụ nuôi" tabindex="0">
             <table class="table-promax">
               <thead>
                 <tr>
-                  <th>Mã định danh (ID)</th>
+                  <th>Mã vụ nuôi</th>
                   <th>Cơ sở / Vùng nuôi</th>
                   <th>Chủng loại</th>
                   <th>Ngày thả giống</th>
@@ -424,7 +416,7 @@ onMounted(async () => {
     </template>
 
     <!-- MODAL CHI TIẾT & BLOCKCHAIN TIMELINE (Cấu trúc V4 - Trị dứt điểm vỡ layout) -->
-    <va-modal v-model="detailVisible" hide-default-actions size="large" :padding="false">
+    <va-modal :model-value="detailVisible" @update:model-value="(value: boolean) => { if (!value) closeDetail() }" hide-default-actions size="large" :padding="false">
       <!-- Container chính tự giới hạn chiều cao và tự cuộn -->
       <div class="custom-modal-container">
         
@@ -437,11 +429,11 @@ onMounted(async () => {
               </svg>
             </div>
             <div>
-              <h2 class="mh-title">Hồ Sơ Lô Nuôi</h2>
+              <h2 class="mh-title">Hồ sơ vụ nuôi</h2>
               <p class="mh-subtitle">Mã truy xuất: <span class="text-primary font-mono">{{ selectedBatch?.batch_code }}</span></p>
             </div>
           </div>
-          <button class="btn-close-modal" @click="detailVisible = false">
+          <button class="btn-close-modal" aria-label="Đóng hồ sơ vụ nuôi" @click="closeDetail">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -455,6 +447,7 @@ onMounted(async () => {
             <p>Đang truy xuất mạng lưới chuỗi khối...</p>
           </div>
 
+          <va-alert v-else-if="detailError" color="danger">{{ detailError }} <va-button v-if="selectedBatch" preset="secondary" @click="openDetail(selectedBatch)">Thử lại</va-button></va-alert>
           <div v-else-if="detail" class="detail-grid-promax">
             <!-- Cột trái: Thông tin -->
             <div class="col-info">

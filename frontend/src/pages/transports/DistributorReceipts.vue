@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { VaAlert, VaBadge, VaButton, VaCard, VaCardContent, VaInnerLoading } from 'vuestic-ui'
+import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { api } from '../../api/client'
 import type { LotTransport, TransportEvent } from '../../types'
 
@@ -12,6 +13,13 @@ const loading = ref(false)
 const busyId = ref<string | null>(null)
 const error = ref('')
 const notice = ref('')
+const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const pageSize = 8
+const statusOptions = [{ value: 'PLANNING', label: 'Chờ người vận chuyển' }, { value: 'IN_TRANSIT', label: 'Đang vận chuyển' }, { value: 'DELIVERED', label: 'Đã nhận hàng' }, { value: 'CANCELLED', label: 'Đã hủy' }]
+const filteredTrips = computed(() => trips.value.filter((trip) => (!filterStatus.value || trip.status === filterStatus.value) && `${trip.transport_code} ${trip.lot?.lot_code ?? ''} ${trip.from_location} ${trip.to_location}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const visibleTrips = computed(() => filteredTrips.value.slice((listPage.value - 1) * pageSize, listPage.value * pageSize))
+watch([query, filterStatus], () => { listPage.value = 1 })
+watch(() => filteredTrips.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / pageSize))) })
+let loadVersion = 0; let active = true
 let refreshTimer: number | undefined
 const pendingCount = computed(() => trips.value.filter((trip) => trip.status === 'IN_TRANSIT' && trip.delivery_reported_at).length)
 
@@ -51,13 +59,15 @@ function eventSummary(event: TransportEvent) {
   return ''
 }
 async function load(silent = false) {
+  const version = ++loadVersion
   if (!silent) loading.value = true
   error.value = ''
-  try { trips.value = (await api.get<{ items: ReceivingTrip[] }>('/transports/receiving')).items }
-  catch (e) { error.value = e instanceof Error ? e.message : 'Không tải được các chuyến gửi tới nhà phân phối' }
-  finally { loading.value = false }
+  try { const result = await api.get<{ items: ReceivingTrip[] }>('/transports/receiving'); if (active && version === loadVersion) trips.value = result.items }
+  catch (e) { if (active && version === loadVersion) error.value = e instanceof Error ? e.message : 'Không tải được các chuyến gửi tới nhà phân phối' }
+  finally { if (active && version === loadVersion) loading.value = false }
 }
 async function confirmReceipt(trip: ReceivingTrip) {
+  if (busyId.value) return
   if (!window.confirm(`Xác nhận nhà phân phối đã nhận chuyến ${trip.transport_code} (${trip.quantity} kg)?`)) return
   busyId.value = trip.id; error.value = ''; notice.value = ''
   try {
@@ -68,7 +78,7 @@ async function confirmReceipt(trip: ReceivingTrip) {
   finally { busyId.value = null }
 }
 onMounted(() => { void load(); refreshTimer = window.setInterval(() => void load(true), 15000) })
-onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
+onUnmounted(() => { active = false; ++loadVersion; if (refreshTimer) window.clearInterval(refreshTimer) })
 </script>
 
 <template>
@@ -77,11 +87,12 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
       <div><p class="eyebrow">NHÀ PHÂN PHỐI</p><h1>Hàng đang giao tới bạn</h1><p>Xác nhận tại đây sau khi đã kiểm tra và nhận hàng thực tế.</p></div>
       <va-badge color="warning">{{ pendingCount }} chuyến chờ xác nhận</va-badge>
     </header>
-    <va-alert v-if="error" color="danger" class="message">{{ error }}</va-alert>
+    <va-alert v-if="error" color="danger" class="message">{{ error }} <va-button preset="secondary" size="small" @click="load()">Thử lại</va-button></va-alert>
     <va-alert v-if="notice" color="success" class="message">{{ notice }}</va-alert>
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statusOptions" :total="filteredTrips.length" :page-size="pageSize" :loading="loading" label="chuyến trong danh sách đã tải" />
     <va-inner-loading :loading="loading">
       <section v-if="trips.length" class="trip-grid">
-        <va-card v-for="trip in trips" :key="trip.id" class="trip-card"><va-card-content>
+        <va-card v-for="trip in visibleTrips" :key="trip.id" class="trip-card"><va-card-content>
           <div class="trip-heading"><div><small>MÃ CHUYẾN</small><h2>{{ trip.transport_code }}</h2></div>
             <va-badge :color="trip.status === 'DELIVERED' ? 'success' : trip.status === 'CANCELLED' ? 'danger' : 'warning'">
               {{ trip.status === 'DELIVERED' ? 'Đã nhận hàng' : trip.status === 'CANCELLED' ? 'Đã hủy' : trip.delivery_reported_at ? 'Chờ xác nhận' : trip.status === 'IN_TRANSIT' ? 'Đang vận chuyển' : 'Chờ người vận chuyển' }}
@@ -99,7 +110,8 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
           </ol>
         </va-card-content></va-card>
       </section>
-      <p v-else-if="!loading" class="empty-state">Chưa có chuyến nào được gửi tới nhà phân phối của bạn.</p>
+      <p v-if="!loading && !error && trips.length && !filteredTrips.length" class="empty-state" role="status">Không có chuyến phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
+      <p v-else-if="!loading && !error && !trips.length" class="empty-state">Chưa có chuyến nào được gửi tới nhà phân phối của bạn.</p>
     </va-inner-loading>
   </main>
 </template>
@@ -110,9 +122,9 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
 .eyebrow, .trip-heading small { color: #688582; font-size: .72rem; font-weight: 800; letter-spacing: .1em; margin: 0; }
 h1 { margin: .25rem 0; font-size: 1.8rem; }
 .page-heading p:last-child { margin: .25rem 0 0; color: #688582; }
-.trip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
-.trip-card { border: 1px solid #dce9e6; border-radius: 16px; }
-.trip-heading { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.trip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1rem; }
+.trip-card { min-width:0; overflow-wrap:anywhere; border: 1px solid #dce9e6; border-radius: 16px; }
+.trip-heading { flex-wrap:wrap; display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .trip-heading h2 { margin: .25rem 0; font-size: 1.2rem; }
 .route { font-weight: 700; margin: 1rem 0 .3rem; }
 .meta, .delivery-report p { color: #688582; font-size: .9rem; }

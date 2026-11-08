@@ -51,6 +51,14 @@ function isContractReadable() {
   return Boolean(env.blockchainRpcUrl && env.blockchainContractAddress)
 }
 
+function createProvider() {
+  const request = new ethers.FetchRequest(env.blockchainRpcUrl)
+  request.timeout = 10000
+  const provider = new ethers.JsonRpcProvider(request)
+  provider.pollingInterval = 1000
+  return provider
+}
+
 async function getDataHashFromContract(eventId, contractAddress = env.blockchainContractAddress) {
   if (!env.blockchainRpcUrl || !contractAddress) {
     const error = new Error('Thiếu cấu hình Blockchain RPC hoặc Contract Address')
@@ -58,8 +66,9 @@ async function getDataHashFromContract(eventId, contractAddress = env.blockchain
     throw error
   }
 
+  let provider
   try {
-    const provider = new ethers.JsonRpcProvider(env.blockchainRpcUrl)
+    provider = createProvider()
     const code = await provider.getCode(contractAddress)
     if (code === '0x') return null
     const contract = new ethers.Contract(
@@ -70,12 +79,11 @@ async function getDataHashFromContract(eventId, contractAddress = env.blockchain
 
     return await contract.getDataHash(eventId)
   } catch (cause) {
-    console.error('❌ Lỗi khi đọc dữ liệu từ Smart Contract:', cause)
+    console.error('Không thể đọc dữ liệu Blockchain', { code: cause.code ?? null })
     const error = new Error('Không thể đọc dữ liệu từ Blockchain')
     error.status = 503
-    error.cause = cause
     throw error
-  }
+  } finally { provider?.destroy() }
 }
 
 // Hoàn thiện logic gọi Smart Contract bằng Ethers.js
@@ -90,8 +98,9 @@ async function submitToContract({ eventId, dataHash }) {
     }
   }
 
+  let provider
   try {
-    const provider = new ethers.JsonRpcProvider(env.blockchainRpcUrl)
+    provider = createProvider()
     const wallet = new ethers.Wallet(env.blockchainPrivateKey, provider)
     const contractABI = [
       'function recordData(string id, string dataHash) public',
@@ -123,7 +132,7 @@ async function submitToContract({ eventId, dataHash }) {
 
     const contract = new ethers.Contract(env.blockchainContractAddress, contractABI, wallet)
     const tx = await contract.recordData(eventId, dataHash)
-    const receipt = await tx.wait()
+    const receipt = await tx.wait(1, 90000)
 
     return {
       transactionHash: receipt.hash,
@@ -132,15 +141,15 @@ async function submitToContract({ eventId, dataHash }) {
       status: 'SUCCESS' // Đánh dấu thành công khi đã có biên lai
     }
   } catch (error) {
-    console.error('❌ Lỗi khi gửi giao dịch Smart Contract:', error)
+    console.error('Không thể gửi dữ liệu Blockchain', { code: error.code ?? null })
     return {
       transactionHash: null,
       blockNumber: null,
       contractAddress: env.blockchainContractAddress,
       status: 'FAILED',
-      error: error instanceof Error ? error.message : String(error),
+      error: 'Giao dịch chưa được xác nhận. Hệ thống cần đối soát lại trước khi thử tiếp.',
     }
-  }
+  } finally { provider?.destroy() }
 }
 
 function assertEventType(eventType) {

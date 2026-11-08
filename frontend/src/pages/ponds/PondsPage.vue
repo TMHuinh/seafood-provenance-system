@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch, onUnmounted } from 'vue'
+import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import {
   VaButton, VaInnerLoading, VaModal, VaInput, VaSelect,
   VaAlert, VaCard, VaCardContent, VaBadge, VaIcon
 } from 'vuestic-ui'
-import { api, ApiError } from '../../api/client'
+import { api } from '../../api/client'
 import { usePondsStore } from '../../stores/ponds.store'
 import type { FarmResponse, Pond, PondInput, PondStatus } from '../../types'
 
@@ -17,11 +18,18 @@ const store = usePondsStore()
 const { items, loading, saving, error } = storeToRefs(store)
 const farmId = computed(() => String(route.params.farmId))
 const farmName = ref('')
+let contextVersion = 0
 
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formError = ref('')
 const success = ref('')
+
+const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 9
+const filteredItems = computed(() => items.value.filter((item) => (!filterStatus.value || item.status === filterStatus.value) && `${item.pond_code} ${item.pond_name ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const visibleItems = computed(() => filteredItems.value.slice((listPage.value - 1) * listPageSize, listPage.value * listPageSize))
+watch([query, filterStatus], () => { listPage.value = 1 })
+watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
 
 const form = reactive({
   pondCode: '',
@@ -69,12 +77,13 @@ function reset() {
   formError.value = ''
 }
 
-function openCreate() {
+function openCreate() { if (saving.value || loading.value) return;
   reset()
   showForm.value = true
 }
 
 function openEdit(pond: Pond) {
+  if (saving.value || loading.value) return
   editingId.value = pond.id
   form.pondCode = pond.pond_code
   form.pondName = pond.pond_name
@@ -86,11 +95,14 @@ function openEdit(pond: Pond) {
 }
 
 function close() {
+  if (saving.value) return
   showForm.value = false
   reset()
 }
 
 async function submit() {
+  if (saving.value || loading.value) return
+  const version = contextVersion
   formError.value = ''
   success.value = ''
 
@@ -111,35 +123,44 @@ async function submit() {
   try {
     if (editingId.value) {
       await store.update(farmId.value, editingId.value, payload)
+      if (version !== contextVersion) return
       success.value = 'Đã cập nhật thông tin ao nuôi.'
     } else {
       await store.create(farmId.value, payload)
+      if (version !== contextVersion) return
       success.value = 'Đã tạo ao nuôi mới thành công.'
     }
     close()
   } catch {
-    formError.value = error.value
+    if (version === contextVersion) formError.value = error.value
   }
 }
 
 async function remove(pond: Pond) {
+  if (saving.value || loading.value) return
+  const version = contextVersion
   if (!confirm(`Bạn có chắc chắn muốn xóa ao “${pond.pond_name}”? Dữ liệu không thể khôi phục.`)) return
   success.value = ''
   try {
     await store.remove(farmId.value, pond.id)
+    if (version !== contextVersion) return
     success.value = 'Đã xóa ao nuôi khỏi hệ thống.'
   } catch { }
 }
 
-onMounted(async () => {
+async function loadContext() {
+  const version = ++contextVersion; const id = farmId.value
+  showForm.value = false; reset(); success.value = ''; farmName.value = ''; query.value = ''; filterStatus.value = ''
+  await store.load(id)
+  if (version !== contextVersion) return
   try {
-    const res = await api.get<FarmResponse>(`/farms/${farmId.value}`)
-    farmName.value = res.farm.farm_name
-    await store.load(farmId.value)
-  } catch (e) {
-    if (e instanceof ApiError) store.error = e.message
-  }
-})
+    const res = await api.get<FarmResponse>(`/farms/${id}`)
+    if (version === contextVersion) farmName.value = res.farm.farm_name
+  } catch (e) { if (version === contextVersion) store.error = e instanceof Error ? e.message : 'Không tải được cơ sở nuôi.' }
+}
+watch(farmId, loadContext, { immediate: true })
+
+onUnmounted(() => { ++contextVersion })
 </script>
 
 <template>
@@ -156,8 +177,9 @@ onMounted(async () => {
           {{ farmName || 'Đang tải...' }}
         </p>
         <h1 class="page-title">Danh sách Ao nuôi</h1>
+        <p class="page-description">Quản lý thông tin ao và mở từng vụ nuôi tại cơ sở này.</p>
       </div>
-      <va-button icon="add" gradient class="shadow-md" @click="openCreate">
+      <va-button icon="add" :disabled="loading || saving" gradient class="shadow-md" @click="openCreate">
         Thêm ao nuôi
       </va-button>
     </header>
@@ -167,12 +189,14 @@ onMounted(async () => {
       {{ success }}
     </va-alert>
     <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
-      {{ error }}
+      {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
+    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
     <va-inner-loading :loading="loading">
       <!-- Empty State -->
-      <div v-if="!loading && !items.length" class="empty-state">
+      <div v-if="!loading && !error && !items.length" class="empty-state">
         <div class="empty-icon-wrapper">
           <va-icon name="water" size="3rem" color="info" />
         </div>
@@ -183,7 +207,7 @@ onMounted(async () => {
 
       <!-- Grid Layout -->
       <div v-else class="pond-grid">
-        <va-card v-for="pond in items" :key="pond.id" class="pond-card hover-elevation">
+        <va-card v-for="pond in visibleItems" :key="pond.id" class="pond-card hover-elevation">
           <va-card-content>
             <div class="card-top">
               <div class="pond-code-badge">
@@ -220,15 +244,15 @@ onMounted(async () => {
               @click="router.push({ name: 'pond-batches', params: { farmId, pondId: pond.id } })">
               Quản lý Vụ
             </va-button>
-            <va-button preset="secondary" icon="edit" color="info" @click="openEdit(pond)" />
-            <va-button preset="secondary" icon="delete" color="danger" @click="remove(pond)" />
+            <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(pond)" />
+            <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(pond)" />
           </div>
         </va-card>
       </div>
     </va-inner-loading>
 
     <!-- Modal Form -->
-    <va-modal v-model="showForm" hide-default-actions overlay-opacity="0.5">
+    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
       <template #header>
         <h2 class="modal-title">{{ editingId ? 'Cập nhật Ao nuôi' : 'Tạo Ao nuôi mới' }}</h2>
       </template>
@@ -268,6 +292,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
+
 .ponds-page {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
@@ -344,7 +370,7 @@ onMounted(async () => {
 /* Grid Layout */
 .pond-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 1.5rem;
 }
 

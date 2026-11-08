@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch, onUnmounted } from 'vue'
+import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -15,6 +16,7 @@ const route = useRoute(); const router = useRouter(); const logStore = useFarmin
 const { items, loading, saving, verifying } = storeToRefs(logStore)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const batchId = computed(() => String(route.params.batchId))
 const pondName = ref(''); const batchInfo = ref<BatchItem | null>(null); const error = ref('')
+let contextVersion = 0; let historyVersion = 0; let verifyVersion = 0
 const showForm = ref(false); const formError = ref(''); const success = ref('')
 const editingId = ref<string | null>(null)
 const editingMode = ref<'DRAFT' | 'CORRECTION'>('DRAFT'); const historyResult = ref<FarmingLogHistoryResponse | null>(null)
@@ -32,8 +34,13 @@ const numeric = (value: string | number) => value === '' ? null : Number(value)
 // LOGIC SẮP XẾP VÀ GOM NHÓM THEO NGÀY
 // --------------------------------------------------
 
+const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 12
+const filterOptions = [{ value: 'DRAFT', label: 'Bản nháp' }, { value: 'CONFIRMED', label: 'Đã chứng thực' }, { value: 'REVOKED', label: 'Đã thu hồi' }]
+const filteredLogs = computed(() => items.value.filter((log) => (!filterStatus.value || log.lifecycle_status === filterStatus.value) && `${FARMING_LOG_TYPE_LABELS[log.log_type]} ${Object.values(log.details ?? {}).join(' ')}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+watch([query, filterStatus], () => { listPage.value = 1 })
+watch(() => filteredLogs.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
 const groupedLogs = computed(() => {
-  const sorted = [...items.value].sort((a, b) => new Date(b.log_date).getTime() - new Date(a.log_date).getTime())
+  const sorted = [...filteredLogs.value].sort((a, b) => new Date(b.log_date).getTime() - new Date(a.log_date).getTime()).slice((listPage.value - 1) * listPageSize, listPage.value * listPageSize)
   const groups: { date: string, items: FarmingLog[] }[] = []
   sorted.forEach(log => {
     const dateStr = new Date(log.log_date).toLocaleDateString('vi-VN')
@@ -91,8 +98,9 @@ function shortHash(value: string) { return value.length <= 18 ? value : `${value
 function detailsRows(log: FarmingLog) { return Object.entries(log.details ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: String(v) })) }
 function reset() { Object.assign(form, { logType: 'FEEDING', logDate: '', feedType: '', feedAmount: '', temperature: '', salinity: '', ph: '', dissolvedOxygen: '', medicineName: '', dose: '', mortalityCount: '', cause: '', description: '', imageUrl: '', correctionReason: '' }); formError.value = '' }
 
-function openCreate() { editingId.value = null; reset(); showForm.value = true }
+function openCreate() { if (saving.value || loading.value || !batchInfo.value) return; editingId.value = null; reset(); showForm.value = true }
 function openEdit(log: FarmingLog) {
+  if (saving.value || loading.value) return
   reset()
   editingId.value = log.id
   editingMode.value = log.lifecycle_status === 'DRAFT' ? 'DRAFT' : 'CORRECTION'
@@ -116,7 +124,7 @@ function openEdit(log: FarmingLog) {
   })
   showForm.value = true
 }
-function close() { showForm.value = false; editingId.value = null; editingMode.value = 'DRAFT'; reset() }
+function close() { if (saving.value) return; showForm.value = false; editingId.value = null; editingMode.value = 'DRAFT'; reset() }
 
 function buildDetails(): Record<string, unknown> {
   switch (form.logType) {
@@ -137,13 +145,17 @@ function validate(): string {
 }
 
 async function submit() {
+  if (saving.value || loading.value) return
+  const version = contextVersion
   formError.value = ''; success.value = ''
   if (!form.logDate) { formError.value = 'Vui lòng chọn thời gian ghi nhật ký'; return }
   const required = validate()
   if (required) { formError.value = required; return }
   if (editingId.value && editingMode.value === 'CORRECTION' && form.correctionReason.trim().length < 3) { formError.value = 'Vui lòng nhập lý do đính chính (tối thiểu 3 ký tự)'; return }
 
-  const isoLogDate = new Date(form.logDate).toISOString()
+  const parsedDate = new Date(form.logDate)
+  if (Number.isNaN(parsedDate.getTime())) { formError.value = 'Thời gian nhật ký không hợp lệ'; return }
+  const isoLogDate = parsedDate.toISOString()
 
   const input: FarmingLogInput = { 
     batchId: batchId.value, 
@@ -159,42 +171,79 @@ async function submit() {
       const current = items.value.find((item) => item.id === editingId.value)
       if (editingMode.value === 'CORRECTION' && current) await logStore.correct(editingId.value, { ...input, expectedVersion: current.current_version })
       else await logStore.update(editingId.value, input)
+      if (version !== contextVersion) return
       verifiedStatus.value = {}
       success.value = editingMode.value === 'CORRECTION' ? 'Đã đính chính và chứng thực phiên bản mới' : 'Đã lưu thay đổi bản nháp'
     } else {
       await logStore.create(input)
+      if (version !== contextVersion) return
       success.value = 'Đã lưu bản nháp'
     }
     close()
-  } catch { formError.value = logStore.error }
+  } catch { if (version === contextVersion) formError.value = logStore.error }
 }
 
-async function confirmLog(log: FarmingLog) { try { await logStore.confirm(log.id); success.value = 'Đã xác nhận và chứng thực Blockchain' } catch { error.value = logStore.error } }
-async function revokeLog(log: FarmingLog) { const reason = window.prompt('Nhập lý do thu hồi:')?.trim(); if (!reason) return; try { await logStore.revoke(log.id, reason); success.value = 'Đã thu hồi nhật ký' } catch { error.value = logStore.error } }
-async function showHistory(log: FarmingLog) { try { historyResult.value = await logStore.history(log.id) } catch { error.value = logStore.error } }
-
+async function confirmLog(log: FarmingLog) {
+  if (saving.value || loading.value) return
+  const version = contextVersion
+  try { await logStore.confirm(log.id); if (version === contextVersion) success.value = 'Đã xác nhận và chứng thực Blockchain' }
+  catch { if (version === contextVersion) error.value = logStore.error }
+}
+async function revokeLog(log: FarmingLog) {
+  if (saving.value || loading.value) return
+  const reason = window.prompt('Nhập lý do thu hồi:')?.trim(); if (!reason) return
+  const version = contextVersion
+  try { await logStore.revoke(log.id, reason); if (version === contextVersion) success.value = 'Đã thu hồi nhật ký' }
+  catch { if (version === contextVersion) error.value = logStore.error }
+}
+async function showHistory(log: FarmingLog) {
+  const context = contextVersion; const version = ++historyVersion
+  try { const result = await logStore.history(log.id); if (context === contextVersion && version === historyVersion) historyResult.value = result }
+  catch { if (context === contextVersion && version === historyVersion) error.value = logStore.error }
+}
 async function checkSync() {
-  verifyError.value = ''; verifyResults.value = null;
+  if (loading.value || !batchInfo.value) return
+  const context = contextVersion; const version = ++verifyVersion
+  verifyError.value = ''; verifyResults.value = null
   try {
-    verifyResults.value = await logStore.verify(batchId.value)
+    const result = await logStore.verify(batchId.value)
+    if (context !== contextVersion || version !== verifyVersion) return
+    verifyResults.value = result
     const map: Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'> = {}
-    for (const item of verifyResults.value.details) {
-      if (item.record?.status === 'PENDING') map[item.id] = 'PENDING'
-      else map[item.id] = item.status
-    }
+    for (const item of result.details) map[item.id] = item.record?.status === 'PENDING' ? 'PENDING' : item.status
     verifiedStatus.value = map
-  } catch { verifyError.value = logStore.error }
+  } catch { if (context === contextVersion && version === verifyVersion) verifyError.value = logStore.error }
 }
+async function loadContext() {
+  const version = ++contextVersion; ++historyVersion; ++verifyVersion
+  const farm = farmId.value; const pond = pondId.value; const batch = batchId.value
+  showForm.value = false; editingId.value = null; editingMode.value = 'DRAFT'; reset()
+  query.value = ''; filterStatus.value = ''; listPage.value = 1
+  pondName.value = ''; batchInfo.value = null; historyResult.value = null; verifyResults.value = null; verifiedStatus.value = {}; verifyError.value = ''; error.value = ''; success.value = ''
+  // Hide and invalidate old logs while validating the complete parent chain.
+  logStore.requestVersion++; logStore.items = []; logStore.scope = ''; logStore.loading = true
+  try {
+    await pondsStore.load(farm)
+    if (version !== contextVersion) return
+    const selectedPond = pondsStore.items.find((item) => item.id === pond)
+    if (pondsStore.error || !selectedPond) throw new Error(pondsStore.error || 'Ao nuôi không thuộc cơ sở trong đường dẫn')
+    pondName.value = selectedPond.pond_name
+    await batchesStore.load(farm, pond)
+    if (version !== contextVersion) return
+    const selectedBatch = batchesStore.items.find((item) => item.id === batch)
+    if (batchesStore.error || !selectedBatch) throw new Error(batchesStore.error || 'Vụ nuôi không thuộc ao trong đường dẫn')
+    batchInfo.value = selectedBatch
+    await logStore.load(batch)
+    if (version === contextVersion) error.value = logStore.error
+  } catch (cause) {
+    if (version === contextVersion) {
+      logStore.items = []; logStore.scope = ''
+      error.value = cause instanceof Error ? cause.message : 'Không tải được thông tin vụ nuôi'
+    }
+  } finally { if (version === contextVersion) logStore.loading = false }
 
-onMounted(async () => {
-  await pondsStore.load(farmId.value)
-  pondName.value = pondsStore.items.find((x) => x.id === pondId.value)?.pond_name ?? ''
-  await batchesStore.load(farmId.value, pondId.value)
-  batchInfo.value = batchesStore.items.find((x) => x.id === batchId.value) ?? null
-  error.value = logStore.error
-  await logStore.load(batchId.value)
-  error.value = logStore.error
-})
+}
+watch(() => `${farmId.value}/${pondId.value}/${batchId.value}`, loadContext, { immediate: true })
 
 // Helpers màu sắc
 const lifecycleColors: Record<string, string> = { DRAFT: 'secondary', CONFIRMED: 'success', REVOKED: 'danger' }
@@ -205,6 +254,7 @@ const verifyLabels: Record<string, string> = { SYNCED: '✓ Đồng bộ', DESYN
 // Fix lỗi số 1 và số 2 (Undefined Index Type)
 function getVerifyColor(status?: string) { return status ? verifyColors[status] : 'secondary'; }
 function getVerifyLabel(status?: string) { return status ? verifyLabels[status] : ''; }
+onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 </script>
 
 <template>
@@ -220,18 +270,21 @@ function getVerifyLabel(status?: string) { return status ? verifyLabels[status] 
           {{ batchInfo ? `${batchInfo.batch_code} · ${SPECIES_LABELS[batchInfo.species]}` : 'Vụ nuôi' }} · {{ pondName }}
         </p>
         <h1 class="page-title">Nhật ký nuôi</h1>
+        <p class="page-description">Ghi hoạt động chăm sóc và theo dõi lịch sử chứng thực theo từng ngày.</p>
       </div>
       <div class="header-actions">
-        <va-button preset="secondary" icon="sync" :loading="verifying" @click="checkSync">Kiểm tra Blockchain</va-button>
-        <va-button icon="add" gradient @click="openCreate">Ghi nhật ký</va-button>
+        <va-button preset="secondary" icon="sync" :loading="verifying" :disabled="loading || !batchInfo" @click="checkSync">Kiểm tra Blockchain</va-button>
+        <va-button icon="add" :disabled="loading || saving || !batchInfo" gradient @click="openCreate">Ghi nhật ký</va-button>
       </div>
     </header>
 
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable>{{ success }}</va-alert>
-    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>{{ error }}</va-alert>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>{{ error }} <va-button size="small" preset="secondary" @click="loadContext">Thử lại</va-button></va-alert>
 
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="filterOptions" :total="filteredLogs.length" :page-size="listPageSize" :loading="loading" label="nhật ký trong danh sách đã tải" />
+    <p v-if="!loading && !error && items.length && !filteredLogs.length" role="status">Không có nhật ký phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
     <va-inner-loading :loading="loading">
-      <div v-if="!loading && !items.length" class="empty-state">
+      <div v-if="!loading && !error && !items.length" class="empty-state">
         <div class="empty-icon-wrapper"><va-icon name="edit_document" size="3rem" color="info" /></div>
         <h2>Chưa có nhật ký nuôi</h2>
         <p class="text-secondary">Hãy ghi lại hoạt động đầu tiên cho vụ nuôi này.</p>
@@ -295,7 +348,7 @@ function getVerifyLabel(status?: string) { return status ? verifyLabels[status] 
     </va-inner-loading>
 
     <!-- Modal: Ghi Nhật Ký -->
-    <va-modal v-model="showForm" hide-default-actions size="large" overlay-opacity="0.5">
+    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header>
         <h2 class="modal-title">{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2>
       </template>
@@ -416,6 +469,8 @@ function getVerifyLabel(status?: string) { return status ? verifyLabels[status] 
 </template>
 
 <style scoped>
+.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
+
 .page-container { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 1.5rem 0 4rem; font-family: 'Inter', sans-serif; }
 .back-btn { margin-bottom: 1rem; margin-left: -0.5rem; }
 

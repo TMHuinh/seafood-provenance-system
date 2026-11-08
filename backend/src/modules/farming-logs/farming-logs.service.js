@@ -59,7 +59,7 @@ async function update(profile, id, input) {
     batchId: existing.batch_id,
   })
 
-  const log = await farmingLogsRepository.update(id, changes)
+  const log = await farmingLogsRepository.update(id, changes, existing)
   await farmingLogsRepository.createAudit(profile.id, id, 'UPDATE', existing, log)
   return log
 }
@@ -99,7 +99,7 @@ async function confirm(profile, id) {
   if (existing.lifecycle_status !== 'DRAFT') throw createHttpError('Chỉ bản nháp mới có thể xác nhận', 409)
   const eventId = blockchainService.buildEventId('FARMING_LOG_RECORDED', id)
   const { anchored, version } = await anchorVersion(existing, profile, eventId)
-  const log = await farmingLogsRepository.update(id, { data_hash: anchored.data_hash, tx_hash: anchored.tx_hash, lifecycle_status: 'CONFIRMED', current_version_id: version.id })
+  const log = await farmingLogsRepository.update(id, { data_hash: anchored.data_hash, tx_hash: anchored.tx_hash, lifecycle_status: 'CONFIRMED', current_version_id: version.id }, existing)
   await farmingLogsRepository.createAudit(profile.id, id, 'CONFIRM', existing, log)
   return log
 }
@@ -118,8 +118,8 @@ async function correct(profile, id, input) {
   const candidate = { ...existing, ...changes, current_version: nextVersion }
   const eventId = `${blockchainService.buildEventId('FARMING_LOG_RECORDED', id)}:v${nextVersion}`
   const { anchored, version } = await anchorVersion(candidate, profile, eventId, reason, { supersedesVersionId: existing.current_version_id, evidenceUrl: input.evidenceUrl })
+  const log = await farmingLogsRepository.update(id, { ...changes, current_version: nextVersion, current_version_id: version.id, data_hash: anchored.data_hash, tx_hash: anchored.tx_hash }, existing)
   await farmingLogsRepository.updateVersion(existing.current_version_id, { status: 'SUPERSEDED' })
-  const log = await farmingLogsRepository.update(id, { ...changes, current_version: nextVersion, current_version_id: version.id, data_hash: anchored.data_hash, tx_hash: anchored.tx_hash })
   await farmingLogsRepository.createAudit(profile.id, id, 'UPDATE', existing, log)
   return log
 }
@@ -136,7 +136,7 @@ async function revoke(profile, id, input) {
   const result = await blockchainService.createRecord({ batchId: existing.batch_id, entityType: 'FARMING_LOG', entityId: id, eventType: 'FARMING_LOG_RECORDED', eventId, payload: { targetEventId: existing.current_version_id, reason }, status: 'PENDING' })
   if (!result.submitted) throw createHttpError('Không thể ghi nhận thu hồi trên Blockchain', 502)
   await farmingLogsRepository.updateVersion(existing.current_version_id, { status: 'REVOKED', revoked_by: profile.id, revoked_at: new Date().toISOString(), revocation_reason: reason })
-  const log = await farmingLogsRepository.update(id, { lifecycle_status: 'REVOKED' })
+  const log = await farmingLogsRepository.update(id, { lifecycle_status: 'REVOKED' }, existing)
   await farmingLogsRepository.createAudit(profile.id, id, 'REVOKE', existing, log)
   return log
 }
@@ -160,7 +160,9 @@ async function verify(profile, batchId) {
 
   const logs = await farmingLogsRepository.findAllByBatch(batchId)
   const records = await blockchainService.getRecordsByBatch(batchId)
-  const recordByEntityId = new Map(records.map((record) => [record.entity_id, record]))
+  const recordByEventId = new Map(records.map((record) => [record.event_id, record]))
+  const versions = await farmingLogsRepository.findCurrentVersions(logs.map(log => log.current_version_id))
+  const versionsById = new Map(versions.map(version => [version.id, version]))
 
   const details = await Promise.all(logs.map(async (log) => {
     const payload = blockchainPayload(log)
@@ -173,8 +175,9 @@ async function verify(profile, batchId) {
     })
     const validPayloadHashes = new Set([recomputedHash, legacyHash, legacyInputHash])
     const storedMatches = Boolean(log.data_hash) && validPayloadHashes.has(log.data_hash)
-    const record = recordByEntityId.get(log.id) ?? null
-    const eventId = record?.event_id ?? blockchainService.buildEventId('FARMING_LOG_RECORDED', log.id)
+    const baseEventId = blockchainService.buildEventId('FARMING_LOG_RECORDED', log.id)
+    const eventId = versionsById.get(log.current_version_id)?.blockchain_event_id ?? (log.current_version > 1 ? `${baseEventId}:v${log.current_version}` : baseEventId)
+    const record = recordByEventId.get(eventId) ?? null
     const onChainDataHash = log.lifecycle_status === 'DRAFT'
       ? ''
       : await blockchainService.getDataHashFromContract(eventId, record?.contract_address)
@@ -221,4 +224,20 @@ async function verify(profile, batchId) {
   return { batchId, checkedAt: new Date().toISOString(), summary, details }
 }
 
-module.exports = { create, update, confirm, correct, revoke, history, listByBatch, verify }
+// Serialize mutations within this process; CAS above also detects stale writes.
+// This is not a cross-process transaction and cannot atomically commit DB + chain.
+const mutatingLogs = new Set()
+async function mutate(id, operation) {
+  validateId(id, 'Mã nhật ký')
+  if (mutatingLogs.has(id)) throw createHttpError('Nhật ký đang được xử lý. Vui lòng tải lại sau', 409)
+  if (mutatingLogs.size >= 100) throw createHttpError('Hệ thống đang xử lý nhiều nhật ký. Vui lòng thử lại', 503)
+  mutatingLogs.add(id)
+  try { return await operation() } finally { mutatingLogs.delete(id) }
+}
+module.exports = {
+  create, history, listByBatch, verify,
+  update: (profile, id, input) => mutate(id, () => update(profile, id, input)),
+  confirm: (profile, id) => mutate(id, () => confirm(profile, id)),
+  correct: (profile, id, input) => mutate(id, () => correct(profile, id, input)),
+  revoke: (profile, id, input) => mutate(id, () => revoke(profile, id, input)),
+}

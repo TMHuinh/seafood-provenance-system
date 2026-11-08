@@ -2,7 +2,7 @@ const batchesService = require('./batches.service')
 
 async function list(request, response, next) {
   try {
-    const result = await batchesService.list(request.auth.profile)
+    const result = await batchesService.list(request.auth.profile, request.query)
     response.json({ success: true, ...result })
   } catch (error) {
     next(error)
@@ -11,7 +11,7 @@ async function list(request, response, next) {
 
 async function detail(request, response, next) {
   try {
-    const result = await batchesService.detail(request.params.id)
+    const result = await batchesService.detail(request.auth.profile, request.params.id)
     response.json({ success: true, ...result })
   } catch (error) {
     next(error)

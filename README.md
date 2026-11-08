@@ -208,3 +208,72 @@ docker compose exec frontend npm install ten-thu-vien
 
 Commit cả `package.json` và `package-lock.json` sau khi thay đổi dependency.
 Không commit `.env`, secret key, private key hoặc `node_modules/`.
+
+## QR truy xuất công khai theo lô thu hoạch
+
+Áp dụng **thủ công** migration `supabase/migrations/202611070001_lot_trace_codes.sql`
+sau các migration hiện có. Migration bổ sung bảng `lot_trace_codes`, không thay đổi
+bảng QR theo vụ cũ và không tự công khai lô cũ. Không chạy migration nếu chưa xác nhận
+đúng môi trường và có phê duyệt cho database đó.
+
+Trong **Thu hoạch / Lô**, chủ cơ sở chọn **Phát hành QR công khai** cho từng lô.
+Sau khi phát hành có thể mở hồ sơ hoặc tải SVG để in. Một vụ thu nhiều đợt có nhiều
+QR; phát hành lặp lại cho cùng lô giữ nguyên mã. Các gói thuộc cùng lô có thể dùng
+chung mã. Thu hồi yêu cầu lý do 3–500 ký tự, có hiệu lực với lần đọc tiếp theo và
+không thể phát hành lại; mã vẫn dẫn đến thông báo thu hồi, không xóa lịch sử.
+Hồ sơ đã được tải/chụp trước đó không thể thu hồi khỏi thiết bị người xem.
+
+QR chứa URL frontend `/trace/:traceCode`, không phải URL API. URL được tạo từ
+origin/base path đang mở: trước khi in phải mở ứng dụng qua địa chỉ HTTPS công khai
+ổn định. `localhost` không dùng được từ điện thoại khác. Hosting cần chuyển các
+đường dẫn `/trace/*` về `index.html` để mở trực tiếp; không đổi tên miền sau khi in
+nếu chưa duy trì chuyển hướng. Cấu hình API và CORS hiện có phải phù hợp deployment.
+Tính năng này không tự deploy hay thay đổi hosting/network.
+
+API chủ cơ sở (đăng nhập, kiểm tra toàn bộ cơ sở/ao/vụ/lô):
+
+- `GET/POST /api/farms/:farmId/ponds/:pondId/batches/:id/lots/:lotId/qr`
+- `POST` cùng đường dẫn thêm `/revoke`, body `{ "reason": "Lý do thu hồi" }`.
+
+Khách dùng `GET /api/public/trace/:traceCode`, không đăng nhập. API chọn trường
+công khai từ snapshot nguồn gốc lô, nhật ký hiện còn xác nhận đến hết ngày
+thu hoạch theo giờ Việt Nam và chuyến gắn đúng lô. Không trả toàn bộ snapshot, bản nháp, người thao
+tác, liên hệ cá nhân, tài xế, vị trí giao chi tiết hoặc ghi chú tự do. Đây là nhật
+ký liên quan của vụ, không phải snapshot nhật ký bất biến tại ngày phát hành QR;
+đính chính/thu hồi nhật ký có thể làm nội dung công khai thay đổi.
+
+Trang QR ưu tiên nguồn gốc, thức ăn và thuốc/hóa chất đã ghi nhận. Bản tổng hợp
+gom tên sản phẩm sau khi chuẩn hóa Unicode, khoảng trắng và chữ hoa/thường;
+hiển thị số lần ghi nhận và ngày đầu/cuối, không suy diễn sử dụng liên tục hoặc
+cộng liều lượng khác đơn vị. Nhật ký thiếu tên sản phẩm được đếm riêng.
+Không có ghi nhận thuốc không có nghĩa là không sử dụng thuốc, và nhật ký không
+thay thế kết quả kiểm nghiệm. Phần nhật ký chi tiết thu gọn mặc định, lọc theo
+loại, nội dung và khoảng ngày Việt Nam; mỗi trang 20 bản ghi.
+Việc tổng hợp/lọc/phân trang thực hiện trên trình duyệt từ dữ liệu công khai
+API đã chọn lọc; giới hạn 500 nhật ký của API bên dưới vẫn áp dụng.
+
+Đối soát Blockchain trực tiếp chỉ áp dụng snapshot thu hoạch, phân biệt khớp/lệch,
+chờ ghi và không thể kiểm tra. Nhật ký/vận chuyển hiển thị trạng thái ghi nhận lưu
+trong database, không giả định đã đối soát lại. Không gửi giao dịch khi quét QR.
+Đóng gói/kiểm định/bán lẻ chưa được triển khai nên không suy diễn các bước này.
+QR có thể sao chép, không phải tem chống giả riêng từng gói.
+
+Giới hạn hiện tại: tối đa 500 nhật ký, 100 chuyến và 500 sự kiện vận chuyển mỗi
+hồ sơ; vượt giới hạn trả lỗi tạm thời thay vì âm thầm hiển thị thiếu. Giới hạn
+120 lượt/phút và 4 lượt đồng thời trên mỗi process; triển khai nhiều replica cần
+bổ sung giới hạn tại gateway. Không cache hồ sơ công khai, luôn kiểm tra trạng thái
+thu hồi; không xem lỗi chain là hồ sơ đã xác thực.
+
+Kiểm thử không cần database hoặc `.env`:
+
+```bash
+cd backend
+npm test
+cd ../frontend
+npm test
+npm run type-check
+npm run build-only
+```
+
+Nếu `dist` hiện có thuộc user khác, có thể kiểm tra build vào thư mục scratch bằng
+`npm run build-only -- --outDir /tmp/seafood-qr-build`; không tự thay quyền hệ thống.

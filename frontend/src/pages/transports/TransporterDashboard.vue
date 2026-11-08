@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { VaAlert, VaBadge, VaButton, VaCard, VaCardContent, VaIcon, VaInnerLoading } from 'vuestic-ui'
+import { VaAlert, VaButton, VaIcon, VaInnerLoading } from 'vuestic-ui'
 import { api } from '../../api/client'
 import type { LotTransport, Species, TransportEvent } from '../../types'
 
@@ -133,7 +133,6 @@ async function recordTrackingUpdate(job: TransportJob) {
   } catch (e) { error.value = e instanceof Error ? e.message : 'Không cập nhật được hành trình' }
   finally { busyId.value = null }
 }
-function location(job: TransportJob) { return `${job.lot.provenance.farm.name} · ${job.lot.provenance.pond.name} · ${job.lot.provenance.batch.batch_code}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) }
 function proofLabel(status?: string) { return status === 'SUCCESS' ? 'Đã xác nhận' : status === 'FAILED' ? 'Cần thử lại' : 'Đang chờ blockchain' }
 function eventSummary(event: TransportEvent) {

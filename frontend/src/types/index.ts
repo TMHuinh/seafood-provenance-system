@@ -169,6 +169,9 @@ export interface BatchListResponse {
   count: number
   items: BatchItem[]
   summary: BatchSummary
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 export interface HarvestRecord {

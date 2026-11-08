@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch, onUnmounted } from 'vue'
+import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -24,6 +25,14 @@ function updateHarvestBatch(batch: BatchItem) {
   if (index >= 0) items.value[index] = batch
 }
 
+const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 9
+const filteredItems = computed(() => items.value.filter((item) => (!filterStatus.value || item.status === filterStatus.value) && `${item.batch_code} ${item.seed_source ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const visibleItems = computed(() => filteredItems.value.slice((listPage.value - 1) * listPageSize, listPage.value * listPageSize))
+watch([query, filterStatus], () => { listPage.value = 1 })
+watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
+
+let contextVersion = 0; let historyVersion = 0
+
 const form = reactive({ batchCode: '', species: 'SHRIMP' as Species, seedSource: '', seedQuantity: '' as string | number, stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '' as string | number, status: 'GROWING' as BatchStatusCode, note: '' })
 
 // Chuyển đổi options cho Vuestic Select
@@ -46,12 +55,13 @@ const dateOnly = (value: string | null | undefined) => value
   ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value)) : ''
 
 function reset() { correctionReason.value = ''; expectedVersion.value = 1; editingId.value = null; Object.assign(form, { batchCode: '', species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
-function openCreate() { reset(); showForm.value = true }
-function openEdit(item: BatchItem) { correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { batchCode: item.batch_code, species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
+function openCreate() { if (saving.value || loading.value) return; reset(); showForm.value = true }
+function openEdit(item: BatchItem) { if (saving.value || loading.value) return; correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { batchCode: item.batch_code, species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
 function close() { if (saving.value) return; showForm.value = false; reset() }
 
 async function submit() {
-  if (saving.value) return
+  if (saving.value || loading.value) return
+  const version = contextVersion
   formError.value = ''; success.value = ''; warning.value = ''
   if (!form.batchCode.trim() || !form.stockingDate || numeric(form.seedQuantity) === null) { formError.value = 'Vui lòng nhập đầy đủ mã vụ, số lượng giống và ngày thả giống.'; return }
 
@@ -71,6 +81,7 @@ async function submit() {
           expectedVersion: expectedVersion.value,
         })
       : await store.create(farmId.value, pondId.value, payload)
+    if (version !== contextVersion) return
     const action = editing ? 'đính chính' : 'tạo'
     if (result.blockchain.status === 'SUCCESS') {
       success.value = `Đã ${action} vụ nuôi và ghi blockchain thành công.`
@@ -81,41 +92,54 @@ async function submit() {
     }
     close()
   } catch {
-    formError.value = error.value
+    if (version === contextVersion) formError.value = error.value
   }
 }
 
 async function openHistory(item: BatchItem) {
+  const version = ++historyVersion
   historyTitle.value = item.batch_code
   historyItems.value = []
   historyLoading.value = true
   try {
-    historyItems.value = await store.history(farmId.value, pondId.value, item.id)
+    const result = await store.history(farmId.value, pondId.value, item.id)
+    if (version === historyVersion) historyItems.value = result
   } catch {
+    if (version !== historyVersion) return
     historyTitle.value = ''
     warning.value = 'Không thể tải lịch sử vụ nuôi. Vui lòng thử lại.'
   } finally {
-    historyLoading.value = false
+    if (version === historyVersion) historyLoading.value = false
   }
 }
 
 function toggleHistory(value: boolean) {
-  if (!value) historyTitle.value = ''
+  if (!value) { ++historyVersion; historyTitle.value = ''; historyLoading.value = false }
 }
 
 async function remove(item: BatchItem) {
+  if (saving.value || loading.value) return
+  const version = contextVersion
   if (!confirm(`Bạn có chắc chắn muốn xóa vụ “${item.batch_code}”? Mọi dữ liệu nhật ký liên quan có thể bị mất.`)) return;
   try {
     await store.remove(farmId.value, pondId.value, item.id);
+    if (version !== contextVersion) return
     success.value = 'Đã xóa vụ nuôi khỏi hệ thống.'
   } catch { }
 }
 
-onMounted(async () => {
-  await pondsStore.load(farmId.value);
-  pondName.value = pondsStore.items.find((x) => x.id === pondId.value)?.pond_name ?? '';
-  await store.load(farmId.value, pondId.value)
-})
+async function loadContext() {
+  const version = ++contextVersion; ++historyVersion
+  const farm = farmId.value; const pond = pondId.value
+  showForm.value = false; reset(); historyTitle.value = ''; historyItems.value = []; historyLoading.value = false; harvestBatchId.value = null; pondName.value = ''; success.value = ''; warning.value = ''; query.value = ''; filterStatus.value = ''
+  await store.load(farm, pond)
+  if (version !== contextVersion) return
+  await pondsStore.load(farm)
+  if (version === contextVersion) pondName.value = pondsStore.items.find((x) => x.id === pond)?.pond_name ?? ''
+}
+watch(() => `${farmId.value}/${pondId.value}`, loadContext, { immediate: true })
+
+onUnmounted(() => { ++contextVersion; ++historyVersion })
 </script>
 
 <template>
@@ -132,8 +156,9 @@ onMounted(async () => {
           {{ pondName || 'Đang tải...' }}
         </p>
         <h1 class="page-title">Quản lý Vụ nuôi</h1>
+        <p class="page-description">Theo dõi vụ nuôi, nhật ký chăm sóc và các lô thu hoạch.</p>
       </div>
-      <va-button icon="add" gradient class="shadow-md" @click="openCreate">
+      <va-button icon="add" :disabled="loading || saving" gradient class="shadow-md" @click="openCreate">
         Tạo vụ nuôi mới
       </va-button>
     </header>
@@ -146,12 +171,14 @@ onMounted(async () => {
       {{ warning }}
     </va-alert>
     <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
-      {{ error }}
+      {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statusOptions" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
+    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
     <va-inner-loading :loading="loading">
       <!-- Empty State -->
-      <div v-if="!loading && !items.length" class="empty-state">
+      <div v-if="!loading && !error && !items.length" class="empty-state">
         <div class="empty-icon-wrapper">
           <va-icon name="set_meal" size="3rem" color="info" />
         </div>
@@ -162,7 +189,7 @@ onMounted(async () => {
 
       <!-- Lưới Card -->
       <div v-else class="batch-grid">
-        <va-card v-for="item in items" :key="item.id" class="batch-card hover-elevation">
+        <va-card v-for="item in visibleItems" :key="item.id" class="batch-card hover-elevation">
           <va-card-content>
             <div class="card-top">
               <div class="batch-code-badge">
@@ -207,7 +234,7 @@ onMounted(async () => {
             <va-button preset="secondary" icon="edit" color="info" aria-label="Đính chính" @click="openEdit(item)" />
             <va-button preset="secondary" icon="history" color="secondary" aria-label="Lịch sử" @click="openHistory(item)" />
             <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch / Lô</va-button>
-            <va-button preset="secondary" icon="delete" color="danger" @click="remove(item)" />
+            <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(item)" />
           </div>
         </va-card>
       </div>
@@ -217,7 +244,7 @@ onMounted(async () => {
       @close="harvestBatchId = null" @updated="updateHarvestBatch" />
 
     <!-- Modal Form -->
-    <va-modal v-model="showForm" hide-default-actions size="large" overlay-opacity="0.5">
+    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header>
         <h2 class="modal-title">{{ editingId ? 'Đính chính Vụ nuôi' : 'Tạo Vụ nuôi mới' }}</h2>
       </template>
@@ -312,6 +339,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
+
 .page-container {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
@@ -388,7 +417,7 @@ onMounted(async () => {
 /* Grid Layout */
 .batch-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
   gap: 1.5rem;
 }
 

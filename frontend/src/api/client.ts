@@ -1,13 +1,29 @@
 const BASE_API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
-const TOKEN_KEY = 'seafood_provenance_token'
+export const TOKEN_KEY = 'seafood_provenance_token'
+let sessionVersion = 0
+
+export class StaleRequestError extends Error {
+  constructor() {
+    super('Phiên làm việc hoặc dữ liệu đã thay đổi. Vui lòng thử lại.')
+    this.name = 'StaleRequestError'
+  }
+}
+
+export function captureSession(): () => boolean {
+  const version = sessionVersion
+  const token = getToken()
+  return () => version === sessionVersion && token === getToken()
+}
 
 export class ApiError extends Error {
   status: number
+  code?: string
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -16,6 +32,7 @@ export function getToken(): string | null {
 }
 
 export function setToken(token: string | null): void {
+  sessionVersion++
   if (token) {
     localStorage.setItem(TOKEN_KEY, token)
   } else {
@@ -33,6 +50,7 @@ interface RequestOptions {
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, auth = true } = options
+  const sessionCurrent = captureSession()
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -55,19 +73,22 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
+    if (auth && !sessionCurrent()) throw new StaleRequestError()
     throw new ApiError('Không thể kết nối tới máy chủ. Vui lòng thử lại', 0)
   }
 
   const data = await response.json().catch(() => null)
+  if (auth && !sessionCurrent()) throw new StaleRequestError()
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (auth && (response.status === 401 || (response.status === 403 && data?.code === 'ACCOUNT_DISABLED'))) {
       setToken(null)
       window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
     }
     throw new ApiError(
       data?.message ?? `Yêu cầu thất bại (mã ${response.status})`,
       response.status,
+      data?.code,
     )
   }
 

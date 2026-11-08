@@ -39,12 +39,25 @@ async function previousEvent(event) {
 }
 
 async function finish(event, values) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('transport_events')
     .update({ ...values, lease_token: null, lease_until: null })
     .eq('id', event.id)
-    .eq('lease_token', event.lease_token)
+    .eq('lease_token', event.lease_token).gt('lease_until', new Date().toISOString())
+    .select('id').maybeSingle()
   if (error) throw error
+  if (!data) throw new Error('Quyền xử lý sự kiện đã hết hạn hoặc đã chuyển sang worker khác')
+}
+
+async function renewLease(event) {
+  const now = new Date()
+  const { data, error } = await supabase.from('transport_events')
+    .update({ lease_until: new Date(now.getTime() + 300000).toISOString() })
+    .eq('id', event.id).eq('lease_token', event.lease_token)
+    .gt('lease_until', now.toISOString()).select('id').maybeSingle()
+    .abortSignal(AbortSignal.timeout(10000))
+  if (error) throw error
+  if (!data) throw new Error('Worker không còn quyền xử lý sự kiện')
 }
 
 async function processEvent(event) {
@@ -67,6 +80,8 @@ async function processEvent(event) {
       if (error) throw error
     }
 
+    if (stopped) return
+    await renewLease(event)
     const { record } = await blockchain.createRecord({
       batchId: event.batch_id,
       entityType: 'TRANSPORT',
@@ -109,12 +124,15 @@ async function processBatch() {
   if (running || stopped) return
   running = true
   try {
-    const { data, error } = await supabase.rpc('claim_transport_event_outbox', {
-      p_limit: 20,
-      p_lease_seconds: 300,
-    })
-    if (error) throw error
-    for (const event of data ?? []) await processEvent(event)
+    // Claim immediately before processing, not 20 leases that expire while queued.
+    for (let i = 0; i < 20 && !stopped; i++) {
+      const { data, error } = await supabase.rpc('claim_transport_event_outbox', {
+        p_limit: 1, p_lease_seconds: 300,
+      }).abortSignal(AbortSignal.timeout(10000))
+      if (error) throw error
+      if (!data?.length) break
+      await processEvent(data[0])
+    }
   } catch (error) {
     console.error('Không đọc được outbox vận chuyển:', error)
   } finally {

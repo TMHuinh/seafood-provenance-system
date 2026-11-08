@@ -35,18 +35,36 @@ async function removeByPond(id, pondId) {
   return data
 }
 
-async function findRecent() {
-  const { data, count, error } = await supabase
-    .from('batches')
-    .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .limit(50)
-
-  if (error) {
-    throw error
+const BATCH_STATUSES = ['PREPARING', 'GROWING', 'READY_FOR_HARVEST', 'HARVESTED', 'COMPLETED', 'CANCELLED']
+function scopedQuery(profile, { search = '', status = '' } = {}, head = false) {
+  // Inner joins ensure scope filtering happens in SQL before count/range.
+  const fields = head ? 'id,pond:ponds!inner(id,farm:farms!inner(id))'
+    : `${BATCH_FIELDS},pond:ponds!inner(id,pond_code,pond_name,status,farm:farms!inner(farm_name,organization_id,owner_id))`
+  let query = supabase.from('batches').select(fields, { count: 'exact', head })
+  if (profile.role !== 'ADMIN') {
+    if (profile.organization_id) {
+      query = query.or(`owner_id.eq.${profile.id},organization_id.eq.${profile.organization_id}`, { referencedTable: 'pond.farm' })
+    } else query = query.eq('pond.farm.owner_id', profile.id)
   }
-
-  return { items: data ?? [], count }
+  if (search) query = query.ilike('batch_code', `%${search.replace(/[\\%_]/g, '\\$&')}%`)
+  if (status) query = query.eq('status', status)
+  return query
+}
+async function findPage(profile, options) {
+  const { data, count, error } = await scopedQuery(profile, options)
+    .order('created_at', { ascending: false }).order('id')
+    .range((options.page - 1) * options.pageSize, options.page * options.pageSize - 1)
+  if (error) throw error
+  return { items: data ?? [], count: count ?? 0 }
+}
+async function summarize(profile, search) {
+  const counts = await Promise.all(BATCH_STATUSES.map(async status => {
+    const { count, error } = await scopedQuery(profile, { search, status }, true)
+    if (error) throw error
+    return [status, count ?? 0]
+  }))
+  const byStatus = Object.fromEntries(counts)
+  return { total: counts.reduce((sum, [, count]) => sum + count, 0), byStatus }
 }
 
 async function findPondsByIds(pondIds) {
@@ -135,7 +153,9 @@ module.exports = {
   findDistributions,
   findHarvests,
   findPondsByIds,
-  findRecent,
+  findPage,
+  summarize,
+  BATCH_STATUSES,
   findAllByPond,
   removeByPond,
   findTransports,

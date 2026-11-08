@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
 import { 
   VaButton, VaInnerLoading, VaModal, VaInput, VaSwitch, 
-  VaAlert, VaCard, VaCardTitle, VaCardContent, VaBadge, VaIcon 
+  VaAlert, VaCard, VaCardContent, VaBadge, VaIcon
 } from 'vuestic-ui'
 import { useRouter } from 'vue-router'
 
@@ -20,6 +21,12 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formError = ref('')
 const successMessage = ref('')
+
+const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 9
+const filteredItems = computed(() => items.value.filter((item) => `${item.farm_name} ${item.address ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const visibleItems = computed(() => filteredItems.value.slice((listPage.value - 1) * listPageSize, listPage.value * listPageSize))
+watch([query, filterStatus], () => { listPage.value = 1 })
+watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
 
 const form = reactive({
   farmName: '',
@@ -141,13 +148,15 @@ onMounted(async () => {
       {{ successMessage }}
     </va-alert>
     <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
-      {{ error }}
+      {{ error }} <va-button preset="secondary" size="small" @click="farmsStore.load()">Thử lại</va-button>
     </va-alert>
 
     <section class="farms-panel">
-      <va-inner-loading :loading="loading">
+      <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
+    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
+    <va-inner-loading :loading="loading">
         <!-- Empty State -->
-        <div v-if="!loading && items.length === 0" class="empty-state">
+        <div v-if="!loading && !error && items.length === 0" class="empty-state">
           <div class="empty-icon-wrapper">
             <va-icon name="water" size="3rem" color="primary" />
           </div>
@@ -158,7 +167,7 @@ onMounted(async () => {
 
         <!-- Farm Grid -->
         <div v-else class="farm-grid">
-          <va-card v-for="farm in items" :key="farm.id" class="farm-card hover-elevation">
+          <va-card v-for="farm in visibleItems" :key="farm.id" class="farm-card hover-elevation">
             <va-card-content>
               <div class="card-header">
                 <div class="farm-icon-box">
@@ -201,8 +210,8 @@ onMounted(async () => {
               >
                 Quản lý Ao
               </va-button>
-              <va-button preset="secondary" icon="edit" color="info" @click="openEdit(farm)" />
-              <va-button preset="secondary" icon="delete" color="danger" @click="removeFarm(farm)" />
+              <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(farm)" />
+              <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="removeFarm(farm)" />
             </div>
           </va-card>
         </div>

@@ -34,6 +34,13 @@ async function requireAuth(request, response, next) {
       throw createUnauthorized('Hồ sơ người dùng chưa được khởi tạo')
     }
 
+    if (profile.status !== true) {
+      const error = new Error('Tài khoản đã bị khóa hoặc ngừng hoạt động')
+      error.status = 403
+      error.code = 'ACCOUNT_DISABLED'
+      throw error
+    }
+
     request.auth = { token, user: data.user, profile }
     next()
   } catch (error) {

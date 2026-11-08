@@ -1,4 +1,4 @@
-const { ORG_TYPES, USER_ROLES } = require('./auth.constants')
+const { ORG_TYPES, REGISTRATION_ROLES } = require('./auth.constants')
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -18,7 +18,7 @@ function validateRegister({ fullName, email, password, role, organizationType })
   if (!password || String(password).length < 8) {
     throw createValidationError('Mật khẩu phải có ít nhất 8 ký tự')
   }
-  if (role !== undefined && role !== null && !USER_ROLES.includes(role)) {
+  if (role !== undefined && role !== null && !REGISTRATION_ROLES.includes(role)) {
     throw createValidationError('Vai trò không hợp lệ')
   }
   if (organizationType && !ORG_TYPES.includes(organizationType)) {

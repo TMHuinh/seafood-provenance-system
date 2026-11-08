@@ -23,67 +23,38 @@ function createNotFound(message = 'Không tìm thấy lô hàng') {
   return error
 }
 
-function resolveVisibility(profile) {
-  if (profile.role === 'ADMIN') {
-    return { kind: 'all' }
+function pagination(input = {}) {
+  const page = Number(input.page ?? 1)
+  const pageSize = Number(input.pageSize ?? 12)
+  if (!Number.isSafeInteger(page) || page < 1 || page > 100000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+    throw httpError('Phân trang không hợp lệ (tối đa 100 mục mỗi trang)', 400)
   }
-  if (profile.organization_id) {
-    return { kind: 'organization', organizationId: profile.organization_id }
-  }
-  return { kind: 'none' }
+  if (input.search !== undefined && (typeof input.search !== 'string' || input.search.length > 100)) throw httpError('Từ khóa tìm kiếm tối đa 100 ký tự', 400)
+  const status = input.status ?? ''
+  if (status && !batchesRepository.BATCH_STATUSES.includes(status)) throw httpError('Trạng thái vụ nuôi không hợp lệ', 400)
+  return { page, pageSize, search: (input.search ?? '').trim(), status }
+}
+async function list(profile, input) {
+  const options = pagination(input)
+  const [result, summary] = await Promise.all([
+    batchesRepository.findPage(profile, options), batchesRepository.summarize(profile, options.search),
+  ])
+  const items = result.items.map(batch => ({ ...batch, pond: batch.pond ? {
+    id: batch.pond.id, pond_code: batch.pond.pond_code, pond_name: batch.pond.pond_name,
+    status: batch.pond.status, farm_name: batch.pond.farm?.farm_name ?? null,
+  } : null }))
+  return { count: result.count, items, summary, page: options.page, pageSize: options.pageSize, totalPages: Math.ceil(result.count / options.pageSize) }
+}
+function canReadBatch(profile, batch) {
+  const farm = batch.pond?.farm
+  return profile.role === 'ADMIN' || farm?.owner_id === profile.id ||
+    Boolean(profile.organization_id && farm?.organization_id === profile.organization_id)
 }
 
-async function createPondsMap(items) {
-  const pondIds = [...new Set(items.map((batch) => batch.pond_id))]
-  const ponds = await batchesRepository.findPondsByIds(pondIds)
-  return new Map(ponds.map((pond) => [pond.id, pond]))
-}
-
-async function list(profile) {
-  const visibility = resolveVisibility(profile)
-  if (visibility.kind === 'none') {
-    return { count: 0, items: [], summary: { total: 0, byStatus: {} } }
-  }
-
-  const result = await batchesRepository.findRecent()
-  let visible = result.items
-  let pondsMap = await createPondsMap(visible)
-
-  if (visibility.kind === 'organization') {
-    visible = visible.filter(
-      (batch) => pondsMap.get(batch.pond_id)?.farm?.organization_id === visibility.organizationId,
-    )
-    pondsMap = await createPondsMap(visible)
-  }
-
-  const items = visible.map((batch) => {
-    const pond = pondsMap.get(batch.pond_id)
-    return {
-      ...batch,
-      pond: pond
-        ? {
-            id: pond.id,
-            pond_code: pond.pond_code,
-            pond_name: pond.pond_name,
-            status: pond.status,
-            farm_name: pond.farm?.farm_name ?? null,
-          }
-        : null,
-    }
-  })
-
-  const count = visibility.kind === 'all' ? (result.count ?? items.length) : items.length
-  const byStatus = {}
-  for (const batch of items) {
-    byStatus[batch.status] = (byStatus[batch.status] ?? 0) + 1
-  }
-
-  return { count, items, summary: { total: count, byStatus } }
-}
-
-async function detail(id) {
+async function detail(profile, id) {
+  if (!UUID.test(String(id))) throw createNotFound()
   const batch = await batchesRepository.findById(id)
-  if (!batch) {
+  if (!batch || !canReadBatch(profile, batch)) {
     throw createNotFound()
   }
 

@@ -23,8 +23,9 @@ const initials = computed(() => {
 const roleName = computed(() => authStore.user?.role ? ROLE_LABELS[authStore.user.role] : '')
 
 async function handleLogout() {
-  await authStore.logout()
-  router.push({ name: 'home' })
+  try { await authStore.logout() }
+  catch { /* Local session cleanup is guaranteed even if the server is unreachable. */ }
+  finally { await router.push({ name: 'home' }) }
 }
 
 async function handleHome() {

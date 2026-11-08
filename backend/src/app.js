@@ -30,6 +30,7 @@ app.use('/api/batches', batchesRoutes)
 app.use('/api/farms', farmsRoutes)
 app.use('/api/farming-logs', farmingLogsRoutes)
 app.use('/api/transports', transportsRoutes)
+app.use('/api/public/trace', require('./modules/trace/trace.routes').publicRouter)
 
 app.use(notFoundHandler)
 app.use(errorHandler)

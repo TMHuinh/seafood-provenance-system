@@ -25,19 +25,45 @@ async function findById(id) {
   return data
 }
 
-async function update(id, changes) {
-  const { data, error } = await supabase
-    .from('farming_logs')
-    .update(changes)
-    .eq('id', id)
-    .select(LOG_FIELDS)
-    .maybeSingle()
-
+async function update(id, changes, expected) {
+  if (!expected) throw new Error('Expected log state is required')
+  let query = supabase.from('farming_logs').update(changes).eq('id', id)
+    .eq('lifecycle_status', expected.lifecycle_status).eq('current_version', expected.current_version)
+    .eq('updated_at', expected.updated_at)
+  query = expected.current_version_id ? query.eq('current_version_id', expected.current_version_id) : query.is('current_version_id', null)
+  const { data, error } = await query.select(LOG_FIELDS).maybeSingle()
   if (error) throw error
+  if (!data) throw Object.assign(new Error('Nhật ký đã thay đổi. Vui lòng tải lại trước khi thao tác'), { status: 409 })
   return data
 }
 
+async function findVersionByEvent(eventId) {
+  const { data, error } = await supabase.from('farming_log_versions').select('*').eq('blockchain_event_id', eventId).maybeSingle()
+  if (error) throw error
+  return data
+}
+async function findCurrentVersions(ids) {
+  const rows = []
+  const unique = [...new Set(ids.filter(Boolean))]
+  for (let i = 0; i < unique.length; i += 100) {
+    const { data, error } = await supabase.from('farming_log_versions').select('id,blockchain_event_id').in('id', unique.slice(i, i + 100))
+    if (error) throw error
+    rows.push(...data)
+  }
+  return rows
+}
+
 async function createVersion(log, correctedBy, correctionReason, blockchainEventId, options = {}) {
+  function reusable(version) {
+    if (version && version.farming_log_id === log.id && version.version_number === log.current_version && version.data_hash === log.data_hash && version.status === 'ACTIVE' &&
+      (version.image_url ?? null) === (log.image_url ?? null) &&
+      (version.correction_reason ?? null) === correctionReason &&
+      (version.evidence_url ?? null) === (options.evidenceUrl ?? null) &&
+      (version.supersedes_version_id ?? null) === (options.supersedesVersionId ?? null)) return version
+    throw Object.assign(new Error('Phiên bản nhật ký đã thay đổi hoặc dữ liệu chứng thực khác nhau'), { status: 409 })
+  }
+  const existing = await findVersionByEvent(blockchainEventId)
+  if (existing) return reusable(existing)
   const { data, error } = await supabase
     .from('farming_log_versions')
     .insert({
@@ -61,6 +87,7 @@ async function createVersion(log, correctedBy, correctionReason, blockchainEvent
     .select()
     .single()
 
+  if (error?.code === '23505') return reusable(await findVersionByEvent(blockchainEventId))
   if (error) throw error
   return data
 }
@@ -105,4 +132,4 @@ async function findAllByBatch(batchId) {
   return data ?? []
 }
 
-module.exports = { create, findById, update, createVersion, updateVersion, findVersions, createAudit, updateHashes, findAllByBatch }
+module.exports = { findCurrentVersions, create, findById, update, createVersion, updateVersion, findVersions, createAudit, updateHashes, findAllByBatch }

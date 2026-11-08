@@ -7,6 +7,11 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/trace/:traceCode',
+      name: 'trace',
+      component: () => import('../pages/trace/TracePage.vue'),
+    },
+    {
       path: '/',
       name: 'home',
       component: HomePage,
@@ -78,6 +83,9 @@ router.beforeEach(async (to) => {
   }
 
   if (to.meta.role && !authStore.user) await authStore.fetchMe()
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
   if (to.meta.role && authStore.user?.role !== to.meta.role) return { name: 'home' }
 
   return true

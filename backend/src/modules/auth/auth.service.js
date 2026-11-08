@@ -32,7 +32,7 @@ function mapAuthError(error) {
   return createHttpError(error?.message || 'Lỗi xác thực', 400)
 }
 
-async function register(input) {
+async function register(input = {}) {
   const {
     fullName,
     email,
@@ -107,14 +107,8 @@ async function login(input) {
 
   const profile = await authRepository.findProfileById(data.user.id)
 
-  return {
-    accessToken: data.session.access_token,
-    user: profile ?? {
-      id: data.user.id,
-      email: data.user.email,
-      role: 'FARMER',
-    },
-  }
+  if (!profile || profile.status !== true) throw Object.assign(createHttpError('Tài khoản không hoạt động hoặc chưa có hồ sơ', 403), { code: 'ACCOUNT_DISABLED' })
+  return { accessToken: data.session.access_token, user: profile }
 }
 
 async function getMe(userId) {
@@ -122,12 +116,13 @@ async function getMe(userId) {
   if (!profile) {
     throw createHttpError('Hồ sơ người dùng chưa được khởi tạo', 404)
   }
+  if (profile.status !== true) throw Object.assign(createHttpError('Tài khoản đã bị khóa hoặc ngừng hoạt động', 403), { code: 'ACCOUNT_DISABLED' })
   return profile
 }
 
 async function logout(token) {
-  const { error } = await supabase.auth.signOut(token)
-  void error
+  const { error } = await supabase.auth.admin.signOut(token, 'local')
+  if (error) throw mapAuthError(error)
   return true
 }
 

@@ -289,7 +289,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 </script>
 
 <template>
-  <main class="page-container">
+  <main class="page-container" :aria-busy="loading">
     <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn" @click="router.push({ name: 'pond-batches', params: { farmId, pondId } })">
       Quay lại Các vụ nuôi
     </va-button>
@@ -309,8 +309,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
       </div>
     </header>
 
-    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable>{{ success }}</va-alert>
-    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>{{ error }} <va-button size="small" preset="secondary" @click="loadContext">Thử lại</va-button></va-alert>
+    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">{{ success }}</va-alert>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable role="alert">{{ error }} <va-button size="small" preset="secondary" @click="loadContext">Thử lại</va-button></va-alert>
 
     <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="filterOptions" :total="filteredLogs.length" :page-size="listPageSize" :loading="loading" label="nhật ký trong danh sách đã tải" />
     <p v-if="!loading && !error && items.length && !filteredLogs.length" role="status">Không có nhật ký phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
@@ -352,10 +352,10 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
                   <span>Xem ảnh nhật ký</span>
                 </a>
 
-                <div v-if="log.data_hash" class="hash-block">
+                <details v-if="log.data_hash" class="hash-block"><summary>Thông tin xác thực</summary>
                   <div class="hash-line"><span>DATA:</span> {{ shortHash(log.data_hash) }}</div>
                   <div v-if="log.tx_hash" class="hash-line"><span>TX:</span> {{ shortHash(log.tx_hash) }}</div>
-                </div>
+                </details>
 
                 <div v-if="verifiedStatus[log.id]" class="mt-2">
                   <va-badge :color="getVerifyColor(verifiedStatus[log.id])" outline>
@@ -424,7 +424,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
           <input id="farming-log-image" type="file" accept="image/jpeg,image/png,image/webp" :disabled="imageUploading || saving" @change="uploadImage" />
           <p class="image-upload-hint">JPG, PNG hoặc WebP; tối đa 10 MB. Ảnh được lưu trên Cloudinary.</p>
           <p v-if="imageUploading" class="image-upload-hint" role="status">Đang tải ảnh lên Cloudinary…</p>
-          <va-alert v-if="imageError" color="danger" outline size="small">{{ imageError }}</va-alert>
+          <va-alert v-if="imageError" color="danger" outline size="small" role="alert">{{ imageError }}</va-alert>
           <div v-if="form.imageUrl" class="image-preview-wrap">
             <img class="image-preview" :src="form.imageUrl" alt="Ảnh đã tải lên cho nhật ký" />
             <va-button preset="secondary" size="small" type="button" :disabled="imageUploading || saving" @click="form.imageUrl = ''; imageError = ''">Gỡ ảnh</va-button>
@@ -432,7 +432,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
         </div>
         <va-textarea v-if="editingId && editingMode === 'CORRECTION'" v-model="form.correctionReason" label="Lý do đính chính *" placeholder="Ví dụ: Nhập nhầm số lượng thức ăn" class="col-span-2" required />
 
-        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">{{ formError }}</va-alert>
+        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2" role="alert">{{ formError }}</va-alert>
 
         <div class="form-actions col-span-2">
           <va-button preset="secondary" type="button" color="secondary" :disabled="imageUploading" @click="close">Hủy bỏ</va-button>
@@ -473,7 +473,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     <va-modal v-model="showVerifyModal" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header><h2 class="modal-title">Kết quả đồng bộ Blockchain</h2></template>
       <div v-if="verifyResults">
-        <va-alert v-if="verifyError" color="danger" outline class="mb-4">{{ verifyError }}</va-alert>
+        <va-alert v-if="verifyError" color="danger" outline class="mb-4" role="alert">{{ verifyError }}</va-alert>
 
         <div class="summary-stats mb-4">
           <div class="stat-box"><strong>{{ verifyResults.summary.total }}</strong><span>Tổng cộng</span></div>
@@ -522,14 +522,14 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 /* Header */
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
 .eyebrow { display: flex; align-items: center; margin: 0 0 0.5rem; color: var(--va-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
-.page-title { margin: 0; font-size: clamp(1.8rem, 4vw, 2.2rem); font-weight: 800; color: #1e293b; }
+.page-title { margin: 0; font-size: clamp(1.8rem, 4vw, 2.2rem); font-weight: 800; color: var(--app-ink); }
 .header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 
 /* Empty State */
-.empty-state { padding: 5rem 1rem; text-align: center; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 20px; display: flex; flex-direction: column; align-items: center; }
+.empty-state { padding: 5rem 1rem; text-align: center; background: var(--app-canvas); border: 2px dashed #cbd5e1; border-radius: 20px; display: flex; flex-direction: column; align-items: center; }
 .empty-icon-wrapper { width: 80px; height: 80px; background: #e0f2fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
-.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: #1e293b; }
-.text-secondary { color: #64748b; margin: 0; }
+.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: var(--app-ink); }
+.text-secondary { color: var(--app-muted); margin: 0; }
 
 /* Gom Nhóm Ngày */
 .date-group { margin-bottom: 2.5rem; }
@@ -538,16 +538,16 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
   align-items: center; 
   font-size: 1.15rem; 
   font-weight: 700; 
-  color: #1e293b; 
+  color: var(--app-ink);
   margin-bottom: 1.2rem; 
   padding-bottom: 0.5rem; 
-  border-bottom: 2px solid #e2e8f0; 
+  border-bottom: 2px solid var(--app-line);
 }
 .date-group-small { margin-bottom: 1.5rem; }
 .date-header-small {
   font-size: 0.95rem; 
   font-weight: 700; 
-  color: #475569; 
+  color: var(--app-muted);
   margin: 0 0 0.75rem 0; 
   text-transform: uppercase; 
   letter-spacing: 0.05em;
@@ -557,27 +557,27 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 
 /* Grid & Cards */
 .log-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
-.log-card { border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important; display: flex; flex-direction: column; }
+.log-card { border-radius: 16px; border: 1px solid var(--app-line); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important; display: flex; flex-direction: column; }
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
-.log-type-title { font-size: 1.15rem; color: #0f172a; }
-.log-date { display: flex; align-items: center; color: #64748b; font-size: 0.85rem; margin: 0 0 1rem; }
+.log-type-title { font-size: 1.15rem; color: var(--app-ink); }
+.log-date { display: flex; align-items: center; color: var(--app-muted); font-size: 0.85rem; margin: 0 0 1rem; }
 
 /* Detail Rows */
 .log-details { border-top: 1px solid #f1f5f9; padding-top: 0.75rem; margin-bottom: 1rem; }
 .detail-row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; }
-.detail-label { color: #64748b; }
-.detail-value { font-weight: 600; color: #1e293b; text-align: right; }
+.detail-label { color: var(--app-muted); }
+.detail-value { font-weight: 600; color: var(--app-ink); text-align: right; }
 
 /* Hash & Code blocks */
-.hash-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.5rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.75rem; color: #475569; word-break: break-all; }
-.hash-line span { font-weight: 700; color: #94a3b8; margin-right: 0.25rem; }
+.hash-block { background: var(--app-canvas); border: 1px solid var(--app-line); border-radius: 8px; padding: 0.5rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--app-muted); word-break: break-all; }
+.hash-line span { font-weight: 700; color: var(--app-muted); margin-right: 0.25rem; }
 
 /* Actions */
-.card-actions { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.25rem; background: #f8fafc; border-top: 1px solid #f1f5f9; border-radius: 0 0 16px 16px; margin-top: auto; }
+.card-actions { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.25rem; background: var(--app-canvas); border-top: 1px solid #f1f5f9; border-radius: 0 0 16px 16px; margin-top: auto; }
 .grow { flex-grow: 1; }
 
 /* Modals & Forms */
-.modal-title { font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; }
+.modal-title { font-size: 1.4rem; font-weight: 700; color: var(--app-ink); margin-bottom: 1rem; }
 .modern-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; width: 100%; min-width: 500px; }
 .col-span-1 { grid-column: span 1; }
 .col-span-2 { grid-column: 1 / -1; }
@@ -589,20 +589,20 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 .correction-reason { font-size: 0.9rem; color: #334155; margin-bottom: 0.5rem; background: #f1f5f9; padding: 0.5rem; border-radius: 6px; }
 
 .summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-.stat-box { text-align: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; }
-.stat-box strong { display: block; font-size: 1.5rem; margin-bottom: 0.25rem; color: #1e293b; }
-.stat-box span { font-size: 0.8rem; color: #64748b; text-transform: uppercase; font-weight: 600; }
+.stat-box { text-align: center; background: var(--app-canvas); border: 1px solid var(--app-line); border-radius: 12px; padding: 1rem; }
+.stat-box strong { display: block; font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--app-ink); }
+.stat-box span { font-size: 0.8rem; color: var(--app-muted); text-transform: uppercase; font-weight: 600; }
 .stat-box.ok strong { color: var(--va-success); }
 .stat-box.err strong { color: var(--va-danger); }
 
 .issues-list { list-style: none; padding: 0; margin: 0.5rem 0; color: var(--va-danger); font-size: 0.85rem; }
 .issues-list li { display: flex; align-items: flex-start; margin-bottom: 0.25rem; }
 .image-upload-field { display: grid; gap: 0.5rem; }
-.image-upload-field > label { color: #475569; font-size: 0.9rem; font-weight: 600; }
+.image-upload-field > label { color: var(--app-muted); font-size: 0.9rem; font-weight: 600; }
 .image-upload-field input[type="file"] { max-width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; }
-.image-upload-hint { margin: 0; color: #64748b; font-size: 0.82rem; }
+.image-upload-hint { margin: 0; color: var(--app-muted); font-size: 0.82rem; }
 .image-preview-wrap { display: flex; align-items: flex-start; gap: 0.75rem; }
-.image-preview { width: 132px; height: 96px; border-radius: 8px; object-fit: cover; border: 1px solid #e2e8f0; }
+.image-preview { width: 132px; height: 96px; border-radius: 8px; object-fit: cover; border: 1px solid var(--app-line); }
 .log-image-link { display: inline-flex; flex-direction: column; gap: 0.35rem; margin: 0.25rem 0 1rem; color: var(--va-primary); font-size: 0.82rem; }
 .log-image { width: 100%; max-width: 280px; max-height: 180px; border-radius: 8px; object-fit: cover; }
 .text-warning { color: var(--va-warning) !important; }
@@ -626,4 +626,5 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
   .col-span-1 { grid-column: 1 / -1; }
   .summary-stats { grid-template-columns: 1fr; }
 }
+.hash-block summary { min-height: 36px; cursor: pointer; color: var(--app-primary-dark); font-size: 12px; font-weight: 600; }
 </style>

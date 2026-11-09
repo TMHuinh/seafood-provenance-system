@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { VaButton, VaInput } from 'vuestic-ui'
+import { VaAlert, VaButton, VaInput } from 'vuestic-ui'
 
 import { ApiError } from '../../api/client'
 import { useAuthStore } from '../../stores/auth.store'
@@ -57,7 +57,7 @@ async function handleSubmit() {
     <!-- Cột thương hiệu (Bên trái) -->
     <div class="auth-hero">
       <div class="hero-content">
-        <div class="brand-badge animate-float">
+        <div class="brand-badge">
           <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 17c3-6 7-9 10-10-3 2-4 5-4 7 2-2 5-3 8-2" />
             <path d="M15 12c-2-4-1-8 2-9-1 4 0 7 4 8" />
@@ -65,16 +65,15 @@ async function handleSubmit() {
         </div>
         <h1 class="hero-title">Hệ thống truy xuất<br />nguồn gốc thủy sản</h1>
         <p class="hero-tagline">
-          Minh bạch từ ao nuôi đến bàn ăn. Dữ liệu được lưu tại nơi ghi chép, 
-          tính bất biến được bảo đảm trên chuỗi khối (Blockchain).
+          Theo dõi vùng nuôi, nhật ký chăm sóc và hành trình bàn giao. Đối chiếu các bản ghi với dữ liệu Blockchain khi có kết quả xác thực.
         </p>
         
         <div class="hero-features">
           <div class="feature-item">
-            <span class="feature-icon">✓</span> Dữ liệu minh bạch 100%
+            <span class="feature-icon">✓</span> Theo dõi hồ sơ theo lô
           </div>
           <div class="feature-item">
-            <span class="feature-icon">✓</span> Bảo mật đa tầng
+            <span class="feature-icon">✓</span> Phân quyền theo vai trò
           </div>
         </div>
       </div>
@@ -85,14 +84,15 @@ async function handleSubmit() {
 
     <!-- Cột đăng nhập (Bên phải) -->
     <div class="auth-panel">
-      <div class="auth-form-container animate-fade-in">
+      <div class="auth-form-container">
+        <router-link to="/" class="auth-back">← Thủy sản Xanh</router-link>
         <div class="auth-header">
           <h2>Đăng nhập hệ thống</h2>
           <p>Chào mừng bạn trở lại, vui lòng nhập thông tin tài khoản</p>
         </div>
 
         <form novalidate @submit.prevent="handleSubmit">
-          <va-alert v-if="errorMessage" color="danger" class="mb-4 alert-smooth">
+          <va-alert v-if="errorMessage" color="danger" class="mb-4 alert-smooth" role="alert">
             {{ errorMessage }}
           </va-alert>
 
@@ -102,6 +102,7 @@ async function handleSubmit() {
               id="login-email"
               v-model="email"
               type="email"
+              autocomplete="email"
               placeholder="ví dụ: admin@thuysan.vn"
               :error="Boolean(fieldErrors.email)"
               :error-messages="fieldErrors.email"
@@ -122,7 +123,6 @@ async function handleSubmit() {
           <div class="input-group mb-5">
             <div class="password-header">
               <label class="form-label" for="login-password">Mật khẩu</label>
-              <a href="#" class="forgot-link">Quên mật khẩu?</a>
             </div>
             <va-input
               id="login-password"
@@ -198,7 +198,7 @@ async function handleSubmit() {
   display: flex;
   min-height: 100vh;
   width: 100%;
-  background-color: #f8fafc;
+  background-color: var(--app-canvas);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -207,7 +207,7 @@ async function handleSubmit() {
   position: relative;
   flex: 1;
   display: none; /* Ẩn trên mobile */
-  background: linear-gradient(135deg, #17383d 0%, #0f766e 100%);
+  background: linear-gradient(135deg, #17383d 0%, var(--app-primary) 100%);
   color: white;
   padding: 4rem;
   overflow: hidden;
@@ -321,12 +321,12 @@ async function handleSubmit() {
 .auth-header h2 {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin-bottom: 0.5rem;
 }
 
 .auth-header p {
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 0.95rem;
 }
 
@@ -347,7 +347,7 @@ async function handleSubmit() {
 
 .forgot-link {
   font-size: 0.875rem;
-  color: #0f766e;
+  color: var(--app-primary);
   text-decoration: none;
   font-weight: 500;
   transition: color 0.2s ease;
@@ -361,7 +361,7 @@ async function handleSubmit() {
 .eye-toggle {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--app-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -370,7 +370,7 @@ async function handleSubmit() {
 }
 
 .eye-toggle:hover {
-  color: #0f172a;
+  color: var(--app-ink);
 }
 
 /* Nút Submit */
@@ -391,12 +391,12 @@ async function handleSubmit() {
 .auth-footer {
   margin-top: 2rem;
   text-align: center;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 0.95rem;
 }
 
 .auth-link {
-  color: #0f766e;
+  color: var(--app-primary);
   font-weight: 600;
   text-decoration: none;
   margin-left: 0.25rem;
@@ -457,5 +457,22 @@ async function handleSubmit() {
   .auth-header h2 {
     font-size: 1.5rem;
   }
+}
+.auth-back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 24px; font-size: 14px; font-weight: 650; color: var(--app-primary-dark); }
+.auth-layout { background: var(--app-canvas); }
+.auth-panel { padding: 40px 32px; }
+.auth-form-container { max-width: 520px; width: 100%; padding: 32px; border: 1px solid var(--app-line); border-radius: 20px; background: white; box-shadow: var(--app-shadow); }
+.auth-header h2 { font-size: 28px; font-weight: 650; }
+.auth-header p { font-size: 14px; color: var(--app-muted); line-height: 1.6; }
+.auth-hero { background: linear-gradient(145deg, #0c3f52, #087f83); padding: 48px; }
+.hero-title { font-size: clamp(32px, 3.5vw, 48px); font-weight: 650; }
+.auth-form-scroll { max-height: none; overflow: visible; padding-right: 0; }
+.eye-toggle { min-width: 44px; min-height: 44px; }
+.auth-submit { border-radius: 10px; min-height: 48px; box-shadow: none; }
+@media (max-width: 600px) {
+  .auth-panel { padding: 24px 16px; align-items: flex-start; }
+  .auth-form-container { padding: 24px 20px; }
+  .row-inputs { flex-direction: column; gap: 20px; }
+  .auth-header h2 { font-size: 24px; }
 }
 </style>

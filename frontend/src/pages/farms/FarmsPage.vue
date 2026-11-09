@@ -127,7 +127,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="farms-page">
+  <main class="farms-page" :aria-busy="loading">
     <header class="page-header">
       <div class="header-content">
         <p class="eyebrow">Quản lý vùng nuôi</p>
@@ -144,10 +144,10 @@ onMounted(async () => {
     </header>
 
     <!-- Thông báo -->
-    <va-alert v-if="successMessage" color="success" class="mb-4" icon="check_circle" outline closeable>
+    <va-alert v-if="successMessage" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
       {{ successMessage }}
     </va-alert>
-    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable role="alert">
       {{ error }} <va-button preset="secondary" size="small" @click="farmsStore.load()">Thử lại</va-button>
     </va-alert>
 
@@ -268,7 +268,7 @@ onMounted(async () => {
           />
         </div>
 
-        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">
+        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2" role="alert">
           {{ formError }}
         </va-alert>
 
@@ -313,12 +313,12 @@ onMounted(async () => {
   margin: 0 0 0.5rem; 
   font-size: clamp(1.8rem, 4vw, 2.2rem); 
   font-weight: 800;
-  color: #1e293b;
+  color: var(--app-ink);
 }
 .subtitle-badge { 
   display: inline-flex;
   align-items: center;
-  color: #475569; 
+  color: var(--app-muted);
   background: #f1f5f9;
   padding: 0.4rem 0.8rem;
   border-radius: 99px;
@@ -336,7 +336,7 @@ onMounted(async () => {
 
 .farm-card {
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
   transition: all 0.2s ease-in-out;
   display: flex;
@@ -369,12 +369,12 @@ onMounted(async () => {
   margin: 0 0 0.5rem; 
   font-size: 1.25rem; 
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
 }
 .address-text { 
   display: flex;
   align-items: flex-start;
-  color: #64748b; 
+  color: var(--app-muted);
   font-size: 0.9rem;
   min-height: 2.5rem; 
   margin: 0 0 1.5rem 0;
@@ -386,15 +386,15 @@ onMounted(async () => {
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   padding-top: 1rem;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--app-line);
 }
 .stat-item {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
-.stat-label { font-size: 0.8rem; color: #64748b; }
-.stat-value { font-weight: 600; color: #1e293b; }
+.stat-label { font-size: 0.8rem; color: var(--app-muted); }
+.stat-value { font-weight: 600; color: var(--app-ink); }
 .stat-value.highlight { color: var(--va-primary); }
 
 .card-actions-custom { 
@@ -402,7 +402,7 @@ onMounted(async () => {
   align-items: center; 
   gap: 0.5rem; 
   padding: 1rem 1.25rem;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border-top: 1px solid #f1f5f9;
   border-radius: 0 0 16px 16px;
   margin-top: auto;
@@ -413,7 +413,7 @@ onMounted(async () => {
 .empty-state { 
   padding: 5rem 1rem; 
   text-align: center; 
-  background: #f8fafc; 
+  background: var(--app-canvas);
   border: 2px dashed #cbd5e1; 
   border-radius: 20px; 
   display: flex;
@@ -427,11 +427,11 @@ onMounted(async () => {
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 1.5rem;
 }
-.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: #1e293b; }
-.text-secondary { color: #64748b; margin: 0; }
+.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: var(--app-ink); }
+.text-secondary { color: var(--app-muted); margin: 0; }
 
 /* Modal & Form */
-.modal-title { font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 1rem; }
+.modal-title { font-size: 1.4rem; font-weight: 700; color: var(--app-ink); margin-bottom: 1rem; }
 .modern-form { 
   display: grid; 
   grid-template-columns: 1fr 1fr; 
@@ -442,9 +442,9 @@ onMounted(async () => {
 .col-span-2 { grid-column: 1 / -1; }
 .switch-wrapper {
   padding: 0.75rem;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
 }
 .form-actions { 
   display: flex; 

@@ -17,13 +17,13 @@ watch(() => props.src, () => { failed.value = false })
 </template>
 
 <style scoped>
-.trace-image { width: 100%; max-width: 480px; margin: 16px 0 8px; }
-.trace-image a { display: block; overflow: hidden; border: 1px solid #dae6e0; border-radius: 14px; color: #203e3b; background: #f3f8f5; text-decoration: none; }
-.trace-image a:hover { border-color: #176e59; }
-.trace-image a:focus-visible { outline: 3px solid #176e59; outline-offset: 4px; }
+.trace-image { width: 100%; max-width: 560px; margin: 16px 0 8px; }
+.trace-image a { display: block; overflow: hidden; border: 1px solid var(--app-line); border-radius: 20px; color: var(--app-ink); background: #f2f5ec; text-decoration: none; }
+.trace-image a:hover { border-color: var(--app-primary); }
+.trace-image a:focus-visible { outline: 3px solid var(--app-primary); outline-offset: 4px; }
 .trace-image img { display: block; width: 100%; height: auto; max-height: 320px; object-fit: contain; }
-.image-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 10px 14px; font-size: 12px; font-weight: 600; }
-.image-action { color: #176e59; }
+.image-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 14px 16px; font-size: 12px; font-weight: 600; }
+.image-action { color: var(--app-primary); }
 .image-fallback { display: block; padding: 24px 16px; font-size: 13px; }
-figcaption { margin-top: 6px; color: #56746a; font-size: 11px; line-height: 1.6; }
+figcaption { margin-top: 6px; color: var(--app-muted); font-size: 12px; line-height: 1.6; }
 </style>

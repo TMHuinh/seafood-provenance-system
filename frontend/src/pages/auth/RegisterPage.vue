@@ -109,7 +109,7 @@ async function handleSubmit() {
   <div class="auth-layout">
     <div class="auth-hero">
       <div class="hero-content">
-        <div class="brand-badge animate-float">
+        <div class="brand-badge">
           <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 17c3-6 7-9 10-10-3 2-4 5-4 7 2-2 5-3 8-2" />
             <path d="M15 12c-2-4-1-8 2-9-1 4 0 7 4 8" />
@@ -125,7 +125,7 @@ async function handleSubmit() {
             <span class="feature-icon">✓</span> Quản lý lô nuôi, ao trại, thu hoạch đúng chuẩn
           </div>
           <div class="feature-item">
-            <span class="feature-icon">✓</span> Mỗi sự kiện được bảo đảm toàn vẹn trên Blockchain
+            <span class="feature-icon">✓</span> Theo dõi trạng thái ghi nhận và đối soát Blockchain
           </div>
           <div class="feature-item">
             <span class="feature-icon">✓</span> Người tiêu dùng dễ dàng tra cứu bằng mã QR
@@ -137,17 +137,18 @@ async function handleSubmit() {
     </div>
 
     <div class="auth-panel">
-      <div class="auth-form-container animate-fade-in">
+      <div class="auth-form-container">
+        <router-link to="/" class="auth-back">← Thủy sản Xanh</router-link>
         <div class="auth-header">
           <h2>Tạo tài khoản mới</h2>
           <p>Điền thông tin bên dưới để đăng ký thành viên</p>
         </div>
 
         <form novalidate @submit.prevent="handleSubmit" class="auth-form-scroll">
-          <va-alert v-if="successMessage" color="success" class="mb-4 alert-smooth">
+          <va-alert v-if="successMessage" color="success" class="mb-4 alert-smooth" role="status">
             {{ successMessage }}
           </va-alert>
-          <va-alert v-if="errorMessage" color="danger" class="mb-4 alert-smooth">
+          <va-alert v-if="errorMessage" color="danger" class="mb-4 alert-smooth" role="alert">
             {{ errorMessage }}
           </va-alert>
 
@@ -180,6 +181,7 @@ async function handleSubmit() {
                 id="reg-email"
                 v-model="email"
                 type="email"
+              autocomplete="email"
                 placeholder="email@vidu.com"
                 :error="Boolean(fieldErrors.email)"
                 :error-messages="fieldErrors.email"
@@ -346,14 +348,14 @@ async function handleSubmit() {
 .mb-3 { margin-bottom: 1rem; }
 .mb-4 { margin-bottom: 1.25rem; }
 .mt-3 { margin-top: 1rem; }
-.text-optional { color: #94a3b8; font-weight: 400; font-size: 0.8rem; }
+.text-optional { color: var(--app-muted); font-weight: 400; font-size: 0.8rem; }
 
 /* Layout chính */
 .auth-layout {
   display: flex;
   min-height: 100vh;
   width: 100%;
-  background-color: #f8fafc;
+  background-color: var(--app-canvas);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -362,7 +364,7 @@ async function handleSubmit() {
   position: relative;
   flex: 1;
   display: none; /* Ẩn trên mobile */
-  background: linear-gradient(135deg, #17383d 0%, #0f766e 100%);
+  background: linear-gradient(135deg, #17383d 0%, var(--app-primary) 100%);
   color: white;
   padding: 4rem;
   overflow: hidden;
@@ -481,12 +483,12 @@ async function handleSubmit() {
 .auth-header h2 {
   font-size: 1.75rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin-bottom: 0.5rem;
 }
 
 .auth-header p {
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 0.95rem;
 }
 
@@ -513,7 +515,7 @@ async function handleSubmit() {
 .eye-toggle {
   background: none;
   border: none;
-  color: #94a3b8;
+  color: var(--app-muted);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -522,15 +524,15 @@ async function handleSubmit() {
 }
 
 .eye-toggle:hover {
-  color: #0f172a;
+  color: var(--app-ink);
 }
 
 /* Checkbox Doanh nghiệp Custom */
 .org-section {
-  background: #f8fafc;
+  background: var(--app-canvas);
   padding: 1.25rem;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
 }
 
 .checkbox-container {
@@ -567,12 +569,12 @@ async function handleSubmit() {
 }
 
 .checkbox-container:hover .modern-checkbox ~ .checkmark {
-  border-color: #0f766e;
+  border-color: var(--app-primary);
 }
 
 .modern-checkbox:checked ~ .checkmark {
-  background-color: #0f766e;
-  border-color: #0f766e;
+  background-color: var(--app-primary);
+  border-color: var(--app-primary);
 }
 
 .checkmark:after {
@@ -617,12 +619,12 @@ async function handleSubmit() {
 .auth-footer {
   margin-top: 2rem;
   text-align: center;
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 0.95rem;
 }
 
 .auth-link {
-  color: #0f766e;
+  color: var(--app-primary);
   font-weight: 600;
   text-decoration: none;
   margin-left: 0.25rem;
@@ -692,5 +694,22 @@ async function handleSubmit() {
   .row-inputs .col:last-child {
     margin-bottom: 0;
   }
+}
+.auth-back { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 24px; font-size: 14px; font-weight: 650; color: var(--app-primary-dark); }
+.auth-layout { background: var(--app-canvas); }
+.auth-panel { padding: 40px 32px; }
+.auth-form-container { max-width: 520px; width: 100%; padding: 32px; border: 1px solid var(--app-line); border-radius: 20px; background: white; box-shadow: var(--app-shadow); }
+.auth-header h2 { font-size: 28px; font-weight: 650; }
+.auth-header p { font-size: 14px; color: var(--app-muted); line-height: 1.6; }
+.auth-hero { background: linear-gradient(145deg, #0c3f52, #087f83); padding: 48px; }
+.hero-title { font-size: clamp(32px, 3.5vw, 48px); font-weight: 650; }
+.auth-form-scroll { max-height: none; overflow: visible; padding-right: 0; }
+.eye-toggle { min-width: 44px; min-height: 44px; }
+.auth-submit { border-radius: 10px; min-height: 48px; box-shadow: none; }
+@media (max-width: 600px) {
+  .auth-panel { padding: 24px 16px; align-items: flex-start; }
+  .auth-form-container { padding: 24px 20px; }
+  .row-inputs { flex-direction: column; gap: 20px; }
+  .auth-header h2 { font-size: 24px; }
 }
 </style>

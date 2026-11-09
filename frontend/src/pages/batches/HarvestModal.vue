@@ -177,7 +177,7 @@ onMounted(load)
     @update:model-value="(value: boolean) => { if (!value && !saving && !transportSaving) emit('close') }">
     <template #header><h2>Thu hoạch và lô hàng — {{ batch.batch_code }}</h2></template>
     <p>Mỗi lần thu hoạch tạo một lô riêng. Tổng sản lượng: {{ batch.yield_quantity ?? 0 }} kg.</p>
-    <va-alert v-if="error" color="danger" class="message">{{ error }}</va-alert>
+    <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }}</va-alert>
     <va-alert v-if="notice" color="info" class="message">{{ notice }} Không cần gửi lại lần thu hoạch đã lưu.</va-alert>
     <form v-if="['GROWING', 'READY_FOR_HARVEST'].includes(batch.status)" class="harvest-form" @submit.prevent="submit">
       <va-input v-model="form.harvestDate" type="date" label="Ngày thu hoạch *" :min="batch.stocking_date.slice(0, 10)" :max="today" :disabled="saving" />
@@ -199,11 +199,15 @@ onMounted(load)
             <p>{{ SPECIES_LABELS[lot.provenance.batch.species] }} · Giống: {{ lot.provenance.batch.seed_source || 'Chưa ghi nguồn giống' }}</p>
             <p v-if="lot.harvest.note">{{ lot.harvest.note }}</p>
             <va-badge :color="lot.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'">{{ labels[lot.blockchain?.status ?? 'UNKNOWN'] }}</va-badge>
+            <details class="technical-disclosure"><summary>Thông tin xác thực Blockchain</summary>
             <p class="hash">Sự kiện: {{ lot.blockchain_event_id }}</p>
             <p v-if="lot.blockchain" class="hash">Hash dữ liệu: {{ lot.blockchain.data_hash }}</p>
             <p v-if="lot.blockchain?.transaction_hash" class="hash">Giao dịch: {{ lot.blockchain.transaction_hash }}</p>
+            </details>
             <va-button size="small" preset="secondary" icon="local_shipping" @click="openTransport(lot)">Vận chuyển lô</va-button>
+            <details class="technical-disclosure"><summary>QR truy xuất nguồn gốc</summary>
             <LotQrPanel :api-path="`/farms/${farmId}/ponds/${pondId}/batches/${batch.id}/lots/${lot.id}/qr`" :lot-code="lot.lot_code" />
+            </details>
           </va-card-content>
         </va-card>
         <p v-if="!loading && !error && !lots.length">Chưa có lô hàng từ thu hoạch.</p>
@@ -214,12 +218,12 @@ onMounted(load)
       <p>Khối lượng lô: {{ transportLot.quantity }} kg</p>
       <p>Chọn nhà phân phối nhận lô. Người vận chuyển cập nhật tiến độ; nhà phân phối xác nhận đã nhận hàng.</p>
       <va-alert v-if="transportDataLoaded && !recipients.length" color="warning" class="message">Chưa có nhà phân phối liên kết với tài khoản đang hoạt động.</va-alert>
-      <va-alert v-if="transportError" color="danger" class="message">{{ transportError }} <va-button v-if="!transportDataLoaded" preset="secondary" size="small" @click="openTransport(transportLot)">Thử lại</va-button></va-alert>
-      <va-alert v-if="transportNotice" color="success" class="message">{{ transportNotice }}</va-alert>
+      <va-alert v-if="transportError" color="danger" class="message" role="alert">{{ transportError }} <va-button v-if="!transportDataLoaded" preset="secondary" size="small" @click="openTransport(transportLot)">Thử lại</va-button></va-alert>
+      <va-alert v-if="transportNotice" color="success" class="message" role="status">{{ transportNotice }}</va-alert>
       <p v-if="transportLoading" role="status">Đang tải lịch sử để tính khối lượng còn lại…</p>
       <template v-if="transportDataLoaded">
         <p>Khối lượng còn có thể vận chuyển: <strong>{{ remainingTransportQuantity.toLocaleString('vi-VN') }} kg</strong></p>
-        <va-alert v-if="remainingTransportQuantity === 0" color="success" class="message">Lô này đã vận chuyển đủ {{ transportLot.quantity.toLocaleString('vi-VN') }} kg. Không thể tạo thêm chuyến.</va-alert>
+        <va-alert v-if="remainingTransportQuantity === 0" color="success" class="message" role="status">Lô này đã vận chuyển đủ {{ transportLot.quantity.toLocaleString('vi-VN') }} kg. Không thể tạo thêm chuyến.</va-alert>
         <form v-else class="harvest-form" @submit.prevent="saveTransport">
           <p class="generated-code-hint wide">Mã chuyến sẽ được tạo tự động khi lưu.</p>
           <va-input :disabled="transportSaving" v-model="transportForm.transportDate" type="datetime-local" label="Thời gian vận chuyển *" />
@@ -276,12 +280,16 @@ onMounted(load)
 .recipient-assignment { flex-wrap:wrap; display: flex; align-items: end; gap: .75rem; margin: .6rem 0; }
 .trip-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .transport-event-history { margin-top: .8rem; border-top: 1px solid #e8efed; color: #31565a; }
-.transport-event-history summary { padding: .7rem 0 .2rem; color: #16796e; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.transport-event-history summary { padding: .7rem 0 .2rem; color: var(--app-primary); font-size: .8rem; font-weight: 700; cursor: pointer; }
 .transport-event-history ol { display: grid; gap: .6rem; padding-left: 1.2rem; }
 .transport-event-history li { display: grid; gap: .2rem; }
-.transport-event-history small { color: #718588; font-size: .72rem; }
-.transport-event-history code { overflow-wrap: anywhere; color: #587574; font-size: .68rem; white-space: normal; }
+.transport-event-history small { color: var(--app-muted); font-size: .72rem; }
+.transport-event-history code { overflow-wrap: anywhere; color: var(--app-muted); font-size: .68rem; white-space: normal; }
 .legacy-event-note { color: #7c8d8d; font-size: .75rem; }
-.generated-code-hint { padding: .4rem 0; color: #64748b; font-size: .8rem; }
+.generated-code-hint { padding: .4rem 0; color: var(--app-muted); font-size: .8rem; }
 .wide { grid-column: 1 / -1; }
+.technical-disclosure { margin: 16px 0; border-top: 1px solid var(--app-line); }
+.technical-disclosure summary { min-height: 44px; padding: 12px 0; cursor: pointer; color: var(--app-primary-dark); font-size: 13px; font-weight: 600; }
+.lot-list > :deep(.va-card) { border: 1px solid var(--app-line); border-radius: var(--app-radius); }
+.harvest-form { padding: 20px; border: 1px solid var(--app-line); border-radius: var(--app-radius); background: var(--app-canvas); }
 </style>

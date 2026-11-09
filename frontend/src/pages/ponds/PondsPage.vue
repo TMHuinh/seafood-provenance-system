@@ -161,7 +161,7 @@ onUnmounted(() => { ++contextVersion })
 </script>
 
 <template>
-  <main class="ponds-page">
+  <main class="ponds-page" :aria-busy="loading">
     <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn"
       @click="router.push({ name: 'farms' })">
       Quay lại danh sách Cơ sở
@@ -182,10 +182,10 @@ onUnmounted(() => { ++contextVersion })
     </header>
 
     <!-- Thông báo -->
-    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable>
+    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
       {{ success }}
     </va-alert>
-    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable role="alert">
       {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
@@ -271,7 +271,7 @@ onUnmounted(() => { ++contextVersion })
         <va-select v-model="form.status" :options="statuses" value-by="value" text-by="label" label="Trạng thái"
           class="col-span-1" />
 
-        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">
+        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2" role="alert">
           {{ formError }}
         </va-alert>
 
@@ -327,14 +327,14 @@ onUnmounted(() => { ++contextVersion })
   margin: 0;
   font-size: clamp(1.8rem, 4vw, 2.2rem);
   font-weight: 800;
-  color: #1e293b;
+  color: var(--app-ink);
 }
 
 /* Empty State */
 .empty-state {
   padding: 5rem 1rem;
   text-align: center;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border: 2px dashed #cbd5e1;
   border-radius: 20px;
   display: flex;
@@ -356,11 +356,11 @@ onUnmounted(() => { ++contextVersion })
 .empty-state h2 {
   margin: 0 0 0.5rem;
   font-size: 1.5rem;
-  color: #1e293b;
+  color: var(--app-ink);
 }
 
 .text-secondary {
-  color: #64748b;
+  color: var(--app-muted);
   margin: 0;
 }
 
@@ -374,7 +374,7 @@ onUnmounted(() => { ++contextVersion })
 /* Cards */
 .pond-card {
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
   transition: all 0.2s ease;
   display: flex;
@@ -413,7 +413,7 @@ onUnmounted(() => { ++contextVersion })
   margin: 0 0 1.25rem;
   font-size: 1.35rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
 }
 
 /* Card Stats */
@@ -422,7 +422,7 @@ onUnmounted(() => { ++contextVersion })
   flex-wrap: wrap;
   gap: 1rem;
   padding-top: 1rem;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--app-line);
 }
 
 .stat-item {
@@ -437,7 +437,7 @@ onUnmounted(() => { ++contextVersion })
 .stat-label {
   display: block;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--app-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.25rem;
@@ -445,7 +445,7 @@ onUnmounted(() => { ++contextVersion })
 
 .stat-value {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--app-ink);
   font-size: 0.95rem;
 }
 
@@ -461,7 +461,7 @@ onUnmounted(() => { ++contextVersion })
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 1.25rem;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border-top: 1px solid #f1f5f9;
   border-radius: 0 0 16px 16px;
   margin-top: auto;
@@ -475,7 +475,7 @@ onUnmounted(() => { ++contextVersion })
 .modal-title {
   font-size: 1.4rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin-bottom: 1rem;
 }
 
@@ -488,9 +488,9 @@ onUnmounted(() => { ++contextVersion })
 }
 
 .generated-code { display: grid; gap: .25rem; padding: .8rem 1rem; border: 1px solid #dbe7e4; border-radius: 10px; background: #f7faf9; }
-.generated-code > span { color: #64748b; font-size: .75rem; }
+.generated-code > span { color: var(--app-muted); font-size: .75rem; }
 .generated-code > strong { color: #1d5149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.generated-code > small, .generated-code-hint { margin: 0; color: #64748b; font-size: .8rem; }
+.generated-code > small, .generated-code-hint { margin: 0; color: var(--app-muted); font-size: .8rem; }
 
 .col-span-1 {
   grid-column: span 1;

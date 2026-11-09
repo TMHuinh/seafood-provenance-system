@@ -42,12 +42,12 @@ const speciesOptions = Object.entries(SPECIES_LABELS).map(([value, label]) => ({
 
 // Helper màu sắc cho Badge trạng thái
 const statusColors: Record<string, string> = {
-  PLANNING: 'secondary',
-  GROWING: 'info',
+  PREPARING: 'info',
+  GROWING: 'primary',
+  READY_FOR_HARVEST: 'warning',
   HARVESTED: 'success',
   COMPLETED: 'success',
-  CANCELED: 'danger',
-  DISEASED: 'warning'
+  CANCELLED: 'danger',
 }
 
 const canEnterHarvest = computed(() => Boolean(editingId.value) && ['HARVESTED', 'COMPLETED'].includes(form.status))
@@ -144,7 +144,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 </script>
 
 <template>
-  <main class="page-container">
+  <main class="page-container" :aria-busy="loading">
     <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn"
       @click="router.push({ name: 'ponds', params: { farmId } })">
       Quay lại Danh sách Ao
@@ -165,13 +165,13 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
     </header>
 
     <!-- Alerts -->
-    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable>
+    <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
       {{ success }}
     </va-alert>
     <va-alert v-if="warning" color="warning" class="mb-4" icon="warning" outline closeable>
       {{ warning }}
     </va-alert>
-    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable>
+    <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable role="alert">
       {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
@@ -285,7 +285,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
         <va-textarea v-if="editingId" v-model="correctionReason" label="Lý do đính chính *"
           placeholder="Ví dụ: Nhập sai số lượng con giống" minlength="3" maxlength="1000" class="col-span-2" />
 
-        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">
+        <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2" role="alert">
           {{ formError }}
         </va-alert>
 
@@ -379,14 +379,14 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   margin: 0;
   font-size: clamp(1.8rem, 4vw, 2.2rem);
   font-weight: 800;
-  color: #1e293b;
+  color: var(--app-ink);
 }
 
 /* Empty State */
 .empty-state {
   padding: 5rem 1rem;
   text-align: center;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border: 2px dashed #cbd5e1;
   border-radius: 20px;
   display: flex;
@@ -408,11 +408,11 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 .empty-state h2 {
   margin: 0 0 0.5rem;
   font-size: 1.5rem;
-  color: #1e293b;
+  color: var(--app-ink);
 }
 
 .text-secondary {
-  color: #64748b;
+  color: var(--app-muted);
   margin: 0;
 }
 
@@ -426,7 +426,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 /* Cards */
 .batch-card {
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
   transition: all 0.2s ease;
   display: flex;
@@ -467,7 +467,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   margin: 0 0 1.25rem;
   font-size: 1.35rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
 }
 
 /* Card Stats */
@@ -476,7 +476,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   flex-wrap: wrap;
   gap: 1rem;
   padding-top: 1rem;
-  border-top: 1px dashed #e2e8f0;
+  border-top: 1px dashed var(--app-line);
 }
 
 .stat-item {
@@ -491,7 +491,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 .stat-label {
   display: block;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--app-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.25rem;
@@ -499,7 +499,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 
 .stat-value {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--app-ink);
   font-size: 0.95rem;
 }
 
@@ -516,7 +516,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   align-items: center;
   gap: 0.5rem;
   padding: 1rem 1.25rem;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border-top: 1px solid #f1f5f9;
   border-radius: 0 0 16px 16px;
   margin-top: auto;
@@ -530,7 +530,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 .modal-title {
   font-size: 1.4rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin-bottom: 1rem;
 }
 
@@ -543,9 +543,9 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 }
 
 .generated-code { display: grid; gap: .25rem; padding: .8rem 1rem; border: 1px solid #dbe7e4; border-radius: 10px; background: #f7faf9; }
-.generated-code > span { color: #64748b; font-size: .75rem; }
+.generated-code > span { color: var(--app-muted); font-size: .75rem; }
 .generated-code > strong { color: #1d5149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.generated-code > small, .generated-code-hint { margin: 0; color: #64748b; font-size: .8rem; }
+.generated-code > small, .generated-code-hint { margin: 0; color: var(--app-muted); font-size: .8rem; }
 
 .col-span-1 {
   grid-column: span 1;
@@ -556,7 +556,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 }
 
 .harvest-section {
-  background: #f8fafc;
+  background: var(--app-canvas);
   border: 1px dashed #cbd5e1;
   padding: 1.25rem;
   border-radius: 12px;
@@ -566,7 +566,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   margin: 0 0 1rem;
   font-size: 1rem;
   font-weight: 700;
-  color: #0f766e;
+  color: var(--app-primary);
 }
 
 .harvest-grid {
@@ -591,7 +591,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 }
 
 .version-card {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
 }
 
 .version-heading,
@@ -616,7 +616,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 
 .transaction {
   overflow-wrap: anywhere;
-  color: #475569;
+  color: var(--app-muted);
   font-size: 0.85rem;
 }
 

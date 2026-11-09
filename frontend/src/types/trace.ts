@@ -4,9 +4,11 @@ export interface LotQr {
   created_at: string
   revoked_at: string | null
   revocation_reason: string | null
+  issuer_organization_id: string | null
+  issuer: { name: string } | null
 }
 
-export interface LotQrResponse { success: boolean; qr: LotQr | null }
+export interface LotQrResponse { success: boolean; qr: LotQr | null; canIssue: boolean; canRevoke: boolean }
 
 export interface PublicTrace {
   lotCode: string

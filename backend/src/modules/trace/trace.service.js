@@ -15,14 +15,29 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     if (!lot) fail('Không tìm thấy lô hàng', 404)
     return lot
   }
-  async function get(profile, scope) { await owned(profile, scope); return repo.findQrByLot(scope.lotId) }
-  async function issue(profile, scope) { await owned(profile, scope); return repo.issue(scope.lotId) }
+  function ownerResult(qr) {
+    return { qr, canIssue: false, canRevoke: qr?.status === 'ACTIVE' && !qr.issuer_organization_id }
+  }
+  function reason(input) {
+    if (typeof input?.reason !== 'string' || input.reason.trim().length < 3 || input.reason.trim().length > 500) fail('Lý do thu hồi phải có 3–500 ký tự', 400)
+    return input.reason.trim()
+  }
+  async function get(profile, scope) { await owned(profile, scope); return ownerResult(await repo.findQrByLot(scope.lotId)) }
+  async function issue() { fail('Chỉ nhà phân phối đã xác nhận nhận hàng mới được phát hành QR', 403) }
   async function revoke(profile, scope, input) {
     await owned(profile, scope)
-    if (typeof input?.reason !== 'string' || input.reason.trim().length < 3 || input.reason.trim().length > 500) fail('Lý do thu hồi phải có 3–500 ký tự', 400)
-    const qr = await repo.revoke(scope.lotId, input.reason.trim())
+    const value = reason(input)
+    const qr = await repo.findQrByLot(scope.lotId)
     if (!qr) fail('Lô chưa phát hành QR', 404)
-    return qr
+    if (qr.issuer_organization_id) fail('Chỉ tổ chức phát hành mới được thu hồi QR này', 403)
+    return ownerResult(await repo.revokeLegacy(profile.id, scope.lotId, value))
+  }
+  async function receiving(profile, scope, action, input) {
+    if (profile.role !== 'DISTRIBUTOR' || profile.status !== true || !UUID.test(String(profile.organization_id))) {
+      fail('Chỉ nhà phân phối nhận hàng đang hoạt động mới được quản lý QR', 403)
+    }
+    if (!UUID.test(String(scope.transportId))) fail('Không tìm thấy chuyến vận chuyển', 404)
+    return repo.receivingQr(profile.id, scope.transportId, action, action === 'REVOKE' ? reason(input) : null)
   }
   async function proof(lot) {
     const record = await repo.proof(lot.blockchain_event_id)
@@ -81,6 +96,10 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     const last = await repo.findQr(code)
     return last?.status === 'ACTIVE' ? result : { status: 'REVOKED' }
   }
-  return { get, issue, revoke, publicTrace }
+  return { get, issue, revoke, publicTrace,
+    getReceiving: (profile, scope) => receiving(profile, scope, 'GET'),
+    issueReceiving: (profile, scope) => receiving(profile, scope, 'ISSUE'),
+    revokeReceiving: (profile, scope, input) => receiving(profile, scope, 'REVOKE', input),
+  }
 }
 module.exports = { createTraceService }

@@ -43,6 +43,10 @@ async function create(profile, input) {
   return log
 }
 
+async function authorizeImageUpload(profile, batchId) {
+  await requireAccessibleBatch(profile, batchId)
+}
+
 async function update(profile, id, input) {
   validateId(id, 'Mã nhật ký')
 
@@ -235,7 +239,7 @@ async function mutate(id, operation) {
   try { return await operation() } finally { mutatingLogs.delete(id) }
 }
 module.exports = {
-  create, history, listByBatch, verify,
+  create, authorizeImageUpload, history, listByBatch, verify,
   update: (profile, id, input) => mutate(id, () => update(profile, id, input)),
   confirm: (profile, id) => mutate(id, () => confirm(profile, id)),
   correct: (profile, id, input) => mutate(id, () => correct(profile, id, input)),

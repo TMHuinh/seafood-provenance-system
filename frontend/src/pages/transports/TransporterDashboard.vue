@@ -26,6 +26,7 @@ const details = ref<Record<string, {
   vehicle: string; driver: string; temperature: string | number
   cancellationReason: string
   trackingStatus: string; trackingLocation: string; trackingTemperature: string | number; trackingNote: string
+  deliveryProofUrl: string
 }>>({})
 const selectedView = ref<'available' | 'active' | 'history'>('available')
 const search = ref('')
@@ -60,8 +61,27 @@ function formFor(job: TransportJob) {
     vehicle: job.vehicle ?? '', driver: job.driver ?? '', temperature: job.temperature ?? '',
     cancellationReason: '',
     trackingStatus: 'IN_TRANSIT', trackingLocation: '', trackingTemperature: '', trackingNote: '',
+    deliveryProofUrl: typeof job.delivery_report?.proofImageUrl === 'string' ? job.delivery_report.proofImageUrl : '',
   }
   return details.value[job.id]!
+}
+async function uploadDeliveryProof(event: Event, job: TransportJob) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  error.value = ''
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { error.value = 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.'; return }
+  if (file.size > 10 * 1024 * 1024) { error.value = 'Ảnh không được lớn hơn 10 MB.'; return }
+  const payload = new FormData()
+  payload.append('image', file)
+  busyId.value = job.id
+  try {
+    const result = await api.upload<{ imageUrl: string }>(`/transports/${job.id}/delivery-proof`, payload)
+    formFor(job).deliveryProofUrl = result.imageUrl
+    notice.value = 'Đã tải ảnh bằng chứng lên. Ảnh sẽ được lưu cùng báo cáo khi bạn ghi nhận giao hàng thành công.'
+  } catch (e) { error.value = e instanceof Error ? e.message : 'Không tải được ảnh bằng chứng giao hàng.' }
+  finally { busyId.value = null }
 }
 function validText(value: string, label: string, min: number, max: number) {
   const normalized = value.trim()
@@ -118,11 +138,13 @@ async function recordTrackingUpdate(job: TransportJob) {
   if (!validTemperature(form.trackingTemperature)) return
   if (form.trackingNote.trim() && !validText(form.trackingNote, 'Ghi chú cập nhật', 1, 1000)) return
   if (form.trackingStatus === 'OTHER' && !validText(form.trackingNote, 'Ghi chú khi chọn cập nhật khác', 2, 1000)) return
+  if (form.trackingStatus === 'DELIVERED_REPORTED' && !form.deliveryProofUrl) { error.value = 'Vui lòng tải ảnh bằng chứng giao hàng trước khi báo giao thành công.'; return }
   busyId.value = job.id
   try {
     await api.post(`/transports/${job.id}/tracking-updates`, {
       trackingStatus: form.trackingStatus, location: form.trackingLocation,
       temperature: form.trackingTemperature === '' ? null : Number(form.trackingTemperature), note: form.trackingNote,
+      deliveryProofUrl: form.deliveryProofUrl || null,
     })
     notice.value = form.trackingStatus === 'DELIVERED_REPORTED'
       ? `Đã báo giao thành công chuyến ${job.transport_code}. Đang chờ nhà phân phối xác nhận.`
@@ -151,6 +173,12 @@ function eventSummary(event: TransportEvent) {
     return [report.recipientName && `Người nhận: ${String(report.recipientName)}`, report.receiptReference && `Phiếu: ${String(report.receiptReference)}`, report.note && `Ghi chú: ${String(report.note)}`].filter(Boolean).join(' · ')
   }
   return ''
+}
+function deliveryProofForEvent(event: TransportEvent) {
+  const report = event.payload.deliveryReport
+  return report && typeof report === 'object' && typeof (report as Record<string, unknown>).proofImageUrl === 'string'
+    ? String((report as Record<string, unknown>).proofImageUrl)
+    : ''
 }
 function latestTracking(job: TransportJob) {
   return [...(job.events ?? [])].reverse().find((event) => event.event_type === 'TRACKING_UPDATE') ?? null
@@ -238,6 +266,12 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
                 <label>Địa điểm hiện tại<input v-model="formFor(job).trackingLocation" maxlength="500" placeholder="VD: Bưu cục Quận 7, TP. Hồ Chí Minh" /></label>
                 <label>Nhiệt độ (°C)<input v-model="formFor(job).trackingTemperature" type="number" min="-100" max="100" step="0.01" placeholder="Không bắt buộc" /></label>
                 <label>Ghi chú<input v-model="formFor(job).trackingNote" maxlength="1000" placeholder="Thông tin thêm (không bắt buộc)" /></label>
+                <div v-if="formFor(job).trackingStatus === 'DELIVERED_REPORTED'" class="delivery-proof-field">
+                  <label>Ảnh bằng chứng giao hàng *<input type="file" accept="image/jpeg,image/png,image/webp" :disabled="Boolean(busyId)" @change="uploadDeliveryProof($event, job)" /></label>
+                  <small>JPG, PNG hoặc WebP · tối đa 10 MB. Cần tải ảnh trước khi báo giao thành công.</small>
+                  <img v-if="formFor(job).deliveryProofUrl" class="delivery-proof-preview" :src="formFor(job).deliveryProofUrl" alt="Ảnh bằng chứng giao hàng đã tải lên" />
+                  <a v-if="formFor(job).deliveryProofUrl" :href="formFor(job).deliveryProofUrl" target="_blank" rel="noopener noreferrer">Xem ảnh đã tải lên</a>
+                </div>
                 <va-button preset="secondary" :loading="busyId === job.id" :disabled="Boolean(busyId)" @click="recordTrackingUpdate(job)">Lưu cập nhật hành trình</va-button>
               </div>
               <div class="job-actions">
@@ -258,6 +292,8 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
                   <code v-if="event.previous_hash" class="event-hash">Hash mốc trước: {{ event.previous_hash }}</code>
                   <code v-if="event.transaction_hash" class="event-transaction">TX: {{ event.transaction_hash }}</code>
                   <small v-if="event.last_error && event.blockchain_status === 'FAILED'" class="event-error">{{ event.last_error }}</small>
+                  <a v-if="deliveryProofForEvent(event)" class="delivery-proof-link" :href="deliveryProofForEvent(event)" target="_blank" rel="noopener noreferrer">Xem ảnh bằng chứng giao hàng</a>
+                  <img v-if="deliveryProofForEvent(event)" class="delivery-proof-preview" :src="deliveryProofForEvent(event)" alt="Ảnh bằng chứng giao hàng" loading="lazy" />
                 </li>
               </ol>
             </details>
@@ -299,16 +335,35 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
 .board-heading h2 { margin:0; font-size:1.35rem; letter-spacing:-.025em; }.board-description { margin:.38rem 0 0; color:var(--muted); font-size:.84rem; }
 .search-box { display:flex; align-items:center; gap:.55rem; width:min(360px,40%); height:42px; padding:0 .8rem; border:1px solid #dce8e6; border-radius:10px; color:#759092; background:#fbfdfd; }.search-box span { font-size:1.5rem; line-height:1; }.search-box input { width:100%; border:0; outline:0; background:transparent; color:var(--ink); font:inherit; font-size:.8rem; }.search-box:focus-within { border-color:#63aaa1; box-shadow:0 0 0 3px #0f766e14; }
 .board-tabs { display:flex; gap:.3rem; padding:0 1.6rem; border-bottom:1px solid var(--line); }.board-tabs button { position:relative; display:flex; align-items:center; gap:.55rem; padding:.8rem .85rem .9rem; border:0; background:none; color:#718588; font:inherit; font-size:.82rem; font-weight:650; cursor:pointer; }.board-tabs button::after { position:absolute; right:.8rem; bottom:-1px; left:.8rem; height:2px; background:transparent; content:""; }.board-tabs button.selected { color:#0d766b; }.board-tabs button.selected::after { background:#0f8376; }.board-tabs button span { padding:.12rem .42rem; border-radius:99px; color:#73878a; background:#f0f5f4; font-size:.7rem; }.board-tabs button.selected span { color:#0e766b; background:#e3f3ef; }
-.job-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; padding:1.25rem 1.6rem; }.job-card { min-width:0; padding:1.15rem; border:1px solid #e4edeb; border-radius:14px; background:#fff; transition:border-color .18s,box-shadow .18s,transform .18s; }.job-card:hover { border-color:#b8d8d1; box-shadow:0 8px 24px #124d4010; transform:translateY(-1px); }.request-card { border-left:3px solid #daae50; }
+.job-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr)); gap:1rem; padding:1.25rem 1.6rem; }.job-card { min-width:0; padding:1.15rem; border:1px solid #e4edeb; border-radius:14px; background:#fff; transition:border-color .18s,box-shadow .18s,transform .18s; }.job-card:hover { border-color:#b8d8d1; box-shadow:0 8px 24px #124d4010; transform:translateY(-1px); }.request-card { border-left:3px solid #daae50; }
 .job-topline,.job-code,.route-point,.cargo-strip,.job-actions { display:flex; align-items:center; }.job-topline { justify-content:space-between; gap:.75rem; }.job-code { gap:.65rem; }.truck-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; color:#0e766b; background:#e9f5f1; font-size:1.3rem; font-weight:700; }.job-code div { display:grid; gap:.12rem; }.job-code small,.route-point small { color:#8a9c9e; font-size:.61rem; font-weight:800; letter-spacing:.08em; }.job-code strong { color:#193c41; font-size:.98rem; }.status-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.38rem .65rem; border-radius:99px; color:#8a6a23; background:#fff5dd; font-size:.68rem; font-weight:750; white-space:nowrap; }.status-pill i { width:6px; height:6px; border-radius:50%; background:currentColor; }.status-pill.in_transit { color:#3569a9; background:#edf4ff; }.status-pill.delivered { color:#22815a; background:#eaf7ef; }.status-pill.cancelled { color:#a44c4c; background:#fff0ef; }
 .route-line { display:grid; grid-template-columns:minmax(0,1fr) 55px minmax(0,1fr); align-items:center; margin:1.15rem 0 1rem; }.route-point { min-width:0; gap:.55rem; }.route-point div { min-width:0; display:grid; gap:.25rem; }.route-point strong { overflow:hidden; color:#28464b; font-size:.82rem; text-overflow:ellipsis; white-space:nowrap; }.route-dot { flex:none; width:9px; height:9px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 2px #2e9b8c; }.destination-dot { box-shadow:0 0 0 2px #d6a13a; }.route-connector { position:relative; border-top:1px dashed #afc6c1; text-align:center; }.route-connector span { position:relative; top:-.57rem; padding:0 .35rem; color:#5d7778; background:#fff; font-size:.64rem; font-weight:750; white-space:nowrap; }
 .cargo-strip { gap:.65rem; min-width:0; padding:.72rem .75rem; border:1px solid #edf2f1; border-radius:10px; background:#f8fbfa; }.cargo-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:9px; color:#358d7d; background:#e6f2ee; }.cargo-copy { display:grid; min-width:0; flex:1; gap:.2rem; }.cargo-copy strong { overflow:hidden; color:#315055; font-size:.76rem; text-overflow:ellipsis; white-space:nowrap; }.cargo-copy strong span { color:#91aaa4; }.cargo-copy small { overflow:hidden; color:#829695; font-size:.68rem; text-overflow:ellipsis; white-space:nowrap; }.cargo-strip time { color:#718588; font-size:.66rem; white-space:nowrap; }.job-note { margin:.65rem 0 0; color:#718588; font-size:.75rem; }
+.driver-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.7rem; margin-top:.9rem; }
+.driver-form label,.cancel-field,.tracking-panel>label,.delivery-proof-field label { display:grid; min-width:0; gap:.35rem; color:#526d70; font-size:.7rem; font-weight:700; line-height:1.35; }
+.driver-form input,.cancel-field input,.tracking-panel input,.tracking-panel select,.delivery-proof-field input { box-sizing:border-box; width:100%; min-width:0; height:40px; padding:0 .7rem; border:1px solid #d9e5e3; border-radius:8px; outline:none; color:#244449; background:#fff; font:inherit; font-size:.76rem; font-weight:450; }
+.driver-form input::placeholder,.cancel-field input::placeholder,.tracking-panel input::placeholder { color:#9aabaa; }
+.driver-form input:focus,.cancel-field input:focus,.tracking-panel input:focus,.tracking-panel select:focus,.delivery-proof-field input:focus { border-color:#63aaa1; box-shadow:0 0 0 3px #0f766e14; }
+.cancel-field { margin-top:.75rem; }
+.job-actions { gap:.6rem; margin-top:.75rem; }
+.job-actions .primary-action { flex:1 1 auto; width:auto; min-width:0; }
+.cancel-action { flex:none; min-height:40px; padding:0 .85rem; border:1px solid #edcfca; border-radius:9px; color:#a34c45; background:#fff; font:inherit; font-size:.75rem; font-weight:700; cursor:pointer; }
+.cancel-action:hover:not(:disabled) { border-color:#dca9a2; background:#fff6f4; }
+.cancel-action:disabled { opacity:.55; cursor:wait; }
+.tracking-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin-top:.85rem; padding:.9rem; border:1px solid #e3eeeb; border-radius:11px; background:#f8fbfa; }
+.tracking-panel-heading { display:grid; grid-column:1/-1; gap:.2rem; }
+.tracking-panel-heading strong { color:#31575a; font-size:.82rem; }
+.tracking-panel-heading small,.delivery-proof-field small { color:#7c9291; font-size:.68rem; line-height:1.45; }
+.tracking-panel :deep(.va-button) { grid-column:1/-1; justify-self:start; }
+.delivery-proof-field { padding:.75rem; border:1px dashed #bdd6d0; border-radius:9px; background:#fff; }
+.delivery-proof-field input { height:auto; padding:.5rem; }
 .request-hint { display:flex; align-items:center; gap:.55rem; margin:.8rem 0 .65rem; color:#738588; }.request-hint span { display:grid; place-items:center; flex:none; width:18px; height:18px; border:1px solid #b6cbc6; border-radius:50%; font-size:.65rem; font-weight:800; }.request-hint p { margin:0; font-size:.72rem; line-height:1.45; }.primary-action { min-height:40px; display:flex; justify-content:space-between; width:100%; padding:0 .85rem; border:0; border-radius:9px; color:#fff; background:#107c70; font:inherit; font-size:.79rem; font-weight:750; cursor:pointer; }.primary-action:hover { background:#0b695f; }.primary-action:disabled { opacity:.65; cursor:wait; }.delivered-action { background:#16845d; }.delivered-action:hover { background:#116e4d; }
 .journey-progress { display:flex; align-items:center; margin:.9rem 0 .8rem; }.progress-step { display:grid; justify-items:center; gap:.25rem; color:#9aabaa; }.progress-step span { display:grid; place-items:center; width:22px; height:22px; border:1px solid #d7e2e0; border-radius:50%; background:#fff; font-size:.65rem; font-weight:800; }.progress-step small { font-size:.61rem; white-space:nowrap; }.progress-step.done { color:#148373; }.progress-step.done span { border-color:#168779; color:#fff; background:#168779; }.progress-track { flex:1; height:2px; margin:-1rem .35rem 0; background:#dce7e5; }.progress-track.reached { background:#168779; }
-.driver-form { display:grid; grid-template-columns:1.2fr 1fr .75fr; gap:.55rem; margin:.75rem 0; }.driver-form label,.delivery-fields label,.cancel-field,.tracking-panel label { display:grid; gap:.33rem; color:#627a7e; font-size:.67rem; font-weight:700; }.driver-form input,.delivery-fields input,.cancel-field input,.tracking-panel input,.tracking-panel select { width:100%; min-width:0; height:36px; box-sizing:border-box; padding:0 .58rem; border:1px solid #dce7e5; border-radius:7px; outline:0; color:#26454a; background:#fff; font:inherit; font-size:.72rem; }.driver-form input:focus,.delivery-fields input:focus,.cancel-field input:focus,.tracking-panel input:focus,.tracking-panel select:focus { border-color:#66a99f; box-shadow:0 0 0 3px #0f766e12; }.delivery-fields { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; margin:.7rem 0; }.cancel-field { margin:.65rem 0; }.latest-tracking { display:flex; align-items:center; gap:.65rem; margin:.65rem 0; padding:.65rem .75rem; border:1px solid #dcebe7; border-radius:9px; background:#f7fbf9; }.tracking-pulse { flex:none; width:9px; height:9px; border-radius:50%; background:#168779; box-shadow:0 0 0 4px #16877918; }.latest-tracking > div { display:grid; gap:.15rem; }.latest-tracking small { color:#77908d; font-size:.57rem; font-weight:800; letter-spacing:.06em; }.latest-tracking strong { color:#31565a; font-size:.72rem; }.latest-tracking span:not(.tracking-pulse) { color:#627a7e; font-size:.67rem; }.latest-tracking time { margin-left:auto; color:#829394; font-size:.61rem; white-space:nowrap; }.tracking-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:end; gap:.75rem; margin:.8rem 0; padding:1rem; border:1px solid #cfe5df; border-radius:10px; background:#f3faf7; }.tracking-panel-heading { display:grid; grid-column:1/-1; gap:.25rem; }.tracking-panel-heading strong { color:#28665f; font-size:.82rem; }.tracking-panel-heading small { color:#7c9291; font-size:.68rem; line-height:1.4; }.tracking-panel :deep(.va-button) { grid-column:1/-1; justify-self:end; min-height:36px; white-space:nowrap; }.job-actions { gap:.8rem; }.job-actions .primary-action { flex:1; }.cancel-action { padding:.4rem .25rem; border:0; color:#a27676; background:transparent; font:inherit; font-size:.7rem; cursor:pointer; }.cancel-action:hover { color:#a33636; }.cancel-action:disabled { opacity:.5; }
+.delivery-proof-field { display:grid; grid-column:1/-1; gap:.35rem; color:#627a7e; font-size:.67rem; }.delivery-proof-field label { display:grid; gap:.4rem; }.delivery-proof-field input { height:auto; padding:.4rem; }.delivery-proof-field small { color:#7c9291; }.delivery-proof-preview { display:block; width:min(100%,260px); max-height:180px; border:1px solid #dce7e5; border-radius:8px; object-fit:cover; }.delivery-proof-link { display:block; margin-top:.4rem; color:#107c70; font-size:.68rem; }
 .completed-note { display:flex; align-items:center; gap:.55rem; margin-top:.8rem; padding:.65rem .75rem; border-radius:8px; color:#39765d; background:#eff8f2; font-size:.74rem; }.completed-note span { font-weight:900; }
 .event-disclosure { margin-top:.8rem; border-top:1px solid #edf2f1; color:#3c5b5e; }.event-disclosure summary { display:flex; align-items:center; gap:.5rem; padding:.7rem 0 .2rem; color:#39766e; font-size:.72rem; font-weight:750; cursor:pointer; list-style-position:inside; }.event-disclosure summary span { padding:.12rem .45rem; border-radius:99px; color:#607b79; background:#eef5f3; font-size:.63rem; }.event-list { display:grid; gap:.7rem; margin:.5rem 0 0; padding:0 0 0 1.5rem; }.event-row { padding:.15rem 0 .45rem .2rem; color:#849695; font-size:.68rem; }.event-heading { display:flex; justify-content:space-between; gap:.5rem; }.event-heading strong { color:#365b5e; font-size:.7rem; }.event-heading time { color:#839493; font-size:.63rem; white-space:nowrap; }.event-summary { display:block; margin-top:.25rem; color:#536f70; font-size:.63rem; }.proof-line { display:flex; align-items:center; gap:.35rem; margin-top:.3rem; color:#788e8d; font-size:.62rem; overflow-wrap:anywhere; }.proof-dot { flex:none; width:7px; height:7px; border-radius:50%; background:#d9aa45; }.proof-dot.success { background:#278760; }.proof-dot.failed { background:#c65757; }.event-hash,.event-transaction { display:block; margin-top:.3rem; color:#617d7b; font-size:.59rem; overflow-wrap:anywhere; white-space:normal; }.event-error { display:block; margin-top:.3rem; color:#a94e4e; font-size:.63rem; }
 .empty-state { display:grid; justify-items:center; padding:3rem 1rem; text-align:center; }.empty-icon { display:grid; place-items:center; width:54px; height:54px; margin-bottom:.85rem; border-radius:16px; color:#348a7b; background:#eaf5f1; font-size:1.5rem; }.empty-state h3 { margin:0; color:#27464a; font-size:1rem; }.empty-state p { max-width:420px; margin:.4rem 0 0; color:#829395; font-size:.8rem; line-height:1.5; }.board-footer { padding:.75rem 1.6rem; border-top:1px solid #eef3f2; color:#89999a; font-size:.68rem; }
 @media (max-width:900px) { .summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.job-grid { grid-template-columns:1fr; } }
-@media (max-width:600px) { .transport-page { width:calc(100% - 1rem); margin:1rem auto 2rem; }.welcome-panel { align-items:flex-start; flex-direction:column; gap:1rem; padding:1.35rem; border-radius:17px; }.welcome-actions { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .65rem; min-width:0; text-align:left; }.today-label { width:100%; }.today-date { margin:0 auto 0 0; font-size:.8rem; }.welcome-actions :deep(.va-button) { min-height:34px; }.summary-grid { gap:.55rem; margin: .75rem 0 1rem; }.summary-card { padding:.8rem; }.summary-label { max-width:112px; font-size:.7rem; }.summary-card strong { font-size:1.45rem; }.summary-card small { font-size:.63rem; }.summary-icon { width:34px; height:34px; }.board-heading { align-items:stretch; flex-direction:column; padding:1.1rem 1rem .9rem; }.search-box { width:auto; }.board-tabs { gap:0; padding:0 .55rem; }.board-tabs button { gap:.35rem; padding:.75rem .5rem .8rem; font-size:.72rem; }.board-tabs button::after { right:.4rem; left:.4rem; }.job-grid { gap:.7rem; padding:.75rem; }.job-card { padding:.85rem; }.route-line { grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr); }.route-point { gap:.4rem; }.route-point strong { font-size:.73rem; }.route-point small { font-size:.53rem; }.cargo-strip { flex-wrap:wrap; }.cargo-strip time { margin-left:2.55rem; }.driver-form,.delivery-fields,.tracking-panel { grid-template-columns:1fr; }.driver-form label:first-child { grid-column:1/-1; }.tracking-panel-heading,.tracking-panel :deep(.va-button) { grid-column:1; }.board-footer { padding:.7rem 1rem; } }
+@media (max-width:760px) { .driver-form { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:600px) { .transport-page { width:calc(100% - 1rem); margin:1rem auto 2rem; }.welcome-panel { align-items:flex-start; flex-direction:column; gap:1rem; padding:1.35rem; border-radius:17px; }.welcome-actions { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .65rem; min-width:0; text-align:left; }.today-label { width:100%; }.today-date { margin:0 auto 0 0; font-size:.8rem; }.welcome-actions :deep(.va-button) { min-height:34px; }.summary-grid { gap:.55rem; margin: .75rem 0 1rem; }.summary-card { padding:.8rem; }.summary-label { max-width:112px; font-size:.7rem; }.summary-card strong { font-size:1.45rem; }.summary-card small { font-size:.63rem; }.summary-icon { width:34px; height:34px; }.board-heading { align-items:stretch; flex-direction:column; padding:1.1rem 1rem .9rem; }.search-box { width:auto; }.board-tabs { gap:0; padding:0 .55rem; }.board-tabs button { gap:.35rem; padding:.75rem .5rem .8rem; font-size:.72rem; }.board-tabs button::after { right:.4rem; left:.4rem; }.job-grid { gap:.7rem; padding:.75rem; }.job-card { padding:.85rem; }.route-line { grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr); }.route-point { gap:.4rem; }.route-point strong { font-size:.73rem; }.route-point small { font-size:.53rem; }.cargo-strip { flex-wrap:wrap; }.cargo-strip time { margin-left:2.55rem; }.driver-form,.tracking-panel { grid-template-columns:1fr; }.tracking-panel-heading,.tracking-panel :deep(.va-button) { grid-column:1; }.board-footer { padding:.7rem 1rem; } }
 </style>

@@ -17,6 +17,7 @@ const { items, loading, saving, error } = storeToRefs(store)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const pondName = ref('')
 const showForm = ref(false); const editingId = ref<string | null>(null); const formError = ref(''); const success = ref(''); const warning = ref('')
 const correctionReason = ref(''); const expectedVersion = ref(1)
+const editingBatch = computed(() => items.value.find((item) => item.id === editingId.value) ?? null)
 const historyItems = ref<BatchVersion[]>([]); const historyTitle = ref(''); const historyLoading = ref(false)
 const harvestBatchId = ref<string | null>(null)
 const harvestBatch = computed(() => items.value.find((item) => item.id === harvestBatchId.value))
@@ -33,7 +34,7 @@ watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(
 
 let contextVersion = 0; let historyVersion = 0
 
-const form = reactive({ batchCode: '', species: 'SHRIMP' as Species, seedSource: '', seedQuantity: '' as string | number, stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '' as string | number, status: 'GROWING' as BatchStatusCode, note: '' })
+const form = reactive({ species: 'SHRIMP' as Species, seedSource: '', seedQuantity: '' as string | number, stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '' as string | number, status: 'GROWING' as BatchStatusCode, note: '' })
 
 // Chuyển đổi options cho Vuestic Select
 const statusOptions = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value: value as BatchStatusCode, label }))
@@ -54,18 +55,18 @@ const numeric = (value: string | number) => value === '' ? null : Number(value)
 const dateOnly = (value: string | null | undefined) => value
   ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value)) : ''
 
-function reset() { correctionReason.value = ''; expectedVersion.value = 1; editingId.value = null; Object.assign(form, { batchCode: '', species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
+function reset() { correctionReason.value = ''; expectedVersion.value = 1; editingId.value = null; Object.assign(form, { species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
 function openCreate() { if (saving.value || loading.value) return; reset(); showForm.value = true }
-function openEdit(item: BatchItem) { if (saving.value || loading.value) return; correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { batchCode: item.batch_code, species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
+function openEdit(item: BatchItem) { if (saving.value || loading.value) return; correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
 function close() { if (saving.value) return; showForm.value = false; reset() }
 
 async function submit() {
   if (saving.value || loading.value) return
   const version = contextVersion
   formError.value = ''; success.value = ''; warning.value = ''
-  if (!form.batchCode.trim() || !form.stockingDate || numeric(form.seedQuantity) === null) { formError.value = 'Vui lòng nhập đầy đủ mã vụ, số lượng giống và ngày thả giống.'; return }
+  if (!form.stockingDate || numeric(form.seedQuantity) === null) { formError.value = 'Vui lòng nhập số lượng giống và ngày thả giống.'; return }
 
-  const payload: BatchInput = { batchCode: form.batchCode.trim(), species: form.species, seedSource: form.seedSource.trim() || null, seedQuantity: Number(form.seedQuantity), stockingDate: form.stockingDate, expectedHarvestDate: form.expectedHarvestDate || null, status: form.status, note: form.note.trim() || null }
+  const payload: BatchInput = { species: form.species, seedSource: form.seedSource.trim() || null, seedQuantity: Number(form.seedQuantity), stockingDate: form.stockingDate, expectedHarvestDate: form.expectedHarvestDate || null, status: form.status, note: form.note.trim() || null }
 
   if (editingId.value && correctionReason.value.trim().length < 3) {
     formError.value = 'Vui lòng nhập lý do đính chính (ít nhất 3 ký tự).'
@@ -250,7 +251,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
-        <va-input v-model="form.batchCode" label="Mã vụ nuôi *" placeholder="VD: VU-2026-01" class="col-span-1" />
+        <div v-if="editingBatch" class="generated-code col-span-2"><span>Mã vụ nuôi</span><strong>{{ editingBatch.batch_code }}</strong><small>Mã vụ được hệ thống tạo tự động và không thể sửa.</small></div>
+        <p v-else class="generated-code-hint col-span-2">Mã vụ nuôi sẽ được tạo tự động khi lưu.</p>
 
         <va-select v-model="form.species" :options="speciesOptions" value-by="value" text-by="label" label="Loài nuôi *"
           class="col-span-1" />
@@ -539,6 +541,11 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   width: 100%;
   min-width: 500px;
 }
+
+.generated-code { display: grid; gap: .25rem; padding: .8rem 1rem; border: 1px solid #dbe7e4; border-radius: 10px; background: #f7faf9; }
+.generated-code > span { color: #64748b; font-size: .75rem; }
+.generated-code > strong { color: #1d5149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.generated-code > small, .generated-code-hint { margin: 0; color: #64748b; font-size: .8rem; }
 
 .col-span-1 {
   grid-column: span 1;

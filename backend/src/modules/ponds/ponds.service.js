@@ -1,6 +1,7 @@
 const farmsRepository = require('../farms/farms.repository')
 const pondsRepository = require('./ponds.repository')
 const { normalizePondInput } = require('./ponds.validation')
+const { generateBusinessCode } = require('../../shared/utils/business-code')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -19,8 +20,29 @@ function mapDatabaseError(error) {
 }
 
 async function list(profile, farmId) { await requireFarm(profile, farmId); const items = await pondsRepository.findAll(farmId); return { count: items.length, items } }
-async function create(profile, farmId, input) { await requireFarm(profile, farmId); try { return await pondsRepository.create(farmId, normalizePondInput(input)) } catch (e) { mapDatabaseError(e) } }
-async function update(profile, farmId, id, input) { await requireFarm(profile, farmId); validId(id, 'Mã ao nuôi'); try { const pond = await pondsRepository.update(id, farmId, normalizePondInput(input, { partial: true })); if (!pond) throw httpError('Không tìm thấy ao nuôi', 404); return pond } catch (e) { mapDatabaseError(e) } }
+async function create(profile, farmId, input) {
+  await requireFarm(profile, farmId)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const normalized = normalizePondInput({ ...input, pondCode: generateBusinessCode('AO') })
+      return await pondsRepository.create(farmId, normalized)
+    } catch (error) {
+      if (error.code === '23505' && attempt < 2) continue
+      mapDatabaseError(error)
+    }
+  }
+}
+async function update(profile, farmId, id, input) {
+  await requireFarm(profile, farmId)
+  validId(id, 'Mã ao nuôi')
+  const { pondCode, ...changes } = input && typeof input === 'object' ? input : {}
+  void pondCode
+  try {
+    const pond = await pondsRepository.update(id, farmId, normalizePondInput(changes, { partial: true }))
+    if (!pond) throw httpError('Không tìm thấy ao nuôi', 404)
+    return pond
+  } catch (error) { mapDatabaseError(error) }
+}
 async function remove(profile, farmId, id) { await requireFarm(profile, farmId); validId(id, 'Mã ao nuôi'); try { const pond = await pondsRepository.remove(id, farmId); if (!pond) throw httpError('Không tìm thấy ao nuôi', 404) } catch (e) { mapDatabaseError(e) } }
 
 module.exports = { create, list, remove, update }

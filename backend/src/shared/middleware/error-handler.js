@@ -3,6 +3,10 @@ function notFoundHandler(request, response) {
 }
 function errorHandler(error, request, response, next) {
   void request; void next
+  if (error.code === 'LIMIT_FILE_SIZE') {
+    error.status = 413
+    error.message = 'Ảnh không được lớn hơn 10 MB'
+  }
   const known = {
     '23505': [409, 'Dữ liệu đã tồn tại. Vui lòng tải lại trước khi tiếp tục'],
     '23503': [409, 'Dữ liệu liên quan đã thay đổi hoặc đang được sử dụng'],

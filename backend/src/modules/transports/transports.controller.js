@@ -9,5 +9,6 @@ async function recordCheckpoint(req, res, next) { try { res.status(201).json({ s
 async function recordTrackingUpdate(req, res, next) { try { res.status(201).json({ success: true, ...await service.recordTrackingUpdate(req.auth.profile, req.params.transportId, req.body) }) } catch (e) { next(e) } }
 async function receivingDashboard(req, res, next) { try { res.json({ success: true, ...await service.receivingDashboard(req.auth.profile) }) } catch (e) { next(e) } }
 async function confirmDelivery(req, res, next) { try { res.json({ success: true, ...await service.confirmDelivery(req.auth.profile, req.params.transportId, req.body) }) } catch (e) { next(e) } }
+async function uploadDeliveryProof(req, res, next) { try { res.status(201).json({ success: true, imageUrl: await service.uploadDeliveryProof(req.auth.profile, req.params.transportId, req.file) }) } catch (e) { next(e) } }
 async function assignRecipient(req, res, next) { try { res.json({ success: true, ...await service.assignRecipient(req.auth.profile, req.params.transportId, req.body) }) } catch (e) { next(e) } }
-module.exports = { list, listRecipients, create, dashboard, receivingDashboard, claim, updateOwnStatus, recordCheckpoint, recordTrackingUpdate, confirmDelivery, assignRecipient }
+module.exports = { list, listRecipients, create, dashboard, receivingDashboard, claim, updateOwnStatus, recordCheckpoint, recordTrackingUpdate, confirmDelivery, uploadDeliveryProof, assignRecipient }

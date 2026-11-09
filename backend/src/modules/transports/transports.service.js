@@ -4,11 +4,22 @@ const blockchain = require('../blockchain/blockchain.service')
 const batches = require('../batches/batches.repository')
 const { requireOwnedPond } = require('../batches/batches.service')
 const outbox = require('./transports.outbox')
+const cloudinary = require('../../shared/services/cloudinary')
+const { generateRequestCode } = require('../../shared/utils/business-code')
 const { invalid: fail, number, only, optionalNumber, optionalText, record, requiredText, timestamp, uuid } = require('./transports.validation')
 const FIELDS = 'id, batch_id, harvest_lot_id, created_by, recipient_organization_id, handler_id, claimed_at, delivery_reported_at, delivery_reported_by, delivery_report, transport_code, transport_date, vehicle, driver, from_location, to_location, temperature, quantity, status, note, request_id, created_at, updated_at'
 const STATUSES = ['IN_TRANSIT', 'CANCELLED']
 const TRACKING_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'AT_SORTING_FACILITY', 'DEPARTED_FACILITY', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'DELIVERED_REPORTED', 'OTHER']
 const EVENT_FIELDS = 'id, transport_id, batch_id, sequence, event_id, event_type, actor_id, occurred_at, payload, previous_hash, data_hash, blockchain_status, transaction_hash, block_number, contract_address, attempt_count, last_error, recorded_at'
+function cloudinaryImageUrl(value) {
+  const imageUrl = requiredText(value, 'Ảnh bằng chứng giao hàng', { max: 2048 })
+  let parsed
+  try { parsed = new URL(imageUrl) } catch { fail('Ảnh bằng chứng giao hàng không hợp lệ') }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'res.cloudinary.com' || !/^\/[^/]+\/image\/upload\//.test(parsed.pathname)) {
+    fail('Ảnh bằng chứng giao hàng phải được tải lên Cloudinary')
+  }
+  return imageUrl
+}
 function requireTransporter(profile) { if (profile.role !== 'TRANSPORTER') fail('Chỉ tài khoản người vận chuyển mới dùng được chức năng này', 403) }
 async function accessible(profile, farmId, pondId, batchId, lotId) {
   await requireOwnedPond(profile, farmId, pondId)
@@ -67,7 +78,7 @@ async function listRecipients(profile) {
 }
 async function create(profile, farmId, pondId, batchId, lotId, input = {}) {
   if (profile.role !== 'FARMER' && profile.role !== 'ADMIN') fail('Chỉ chủ cơ sở mới được tạo yêu cầu vận chuyển', 403)
-  input = only(record(input), ['requestId', 'recipientOrganizationId', 'quantity', 'transportDate', 'transportCode', 'fromLocation', 'toLocation', 'note'])
+  input = only(record(input), ['requestId', 'recipientOrganizationId', 'quantity', 'transportDate', 'fromLocation', 'toLocation', 'note'])
   const lot = await accessible(profile, farmId, pondId, batchId, lotId)
   const recipientOrganizationId = uuid(input.recipientOrganizationId, 'Nhà phân phối nhận hàng')
   const { data: recipientOrganization, error: recipientError } = await supabase.from('organizations')
@@ -82,7 +93,7 @@ async function create(profile, farmId, pondId, batchId, lotId, input = {}) {
   const quantity = number(input.quantity, 'Khối lượng vận chuyển', { min: 0.01, max: 999999999999.99, decimals: 2 })
   if (quantity > Number(lot.quantity)) fail('Khối lượng vận chuyển không được vượt quá khối lượng lô')
   const transportDate = timestamp(input.transportDate, 'Thời gian vận chuyển')
-  const transportCode = requiredText(input.transportCode, 'Mã chuyến', { max: 100 })
+  const transportCode = generateRequestCode('VC', requestId)
   const fromLocation = requiredText(input.fromLocation, 'Điểm đi', { max: 500 })
   const toLocation = requiredText(input.toLocation, 'Điểm đến', { max: 500 })
   if (fromLocation.localeCompare(toLocation, 'vi', { sensitivity: 'base' }) === 0) fail('Điểm đi và điểm đến phải khác nhau')
@@ -231,16 +242,20 @@ async function recordCheckpoint(profile, transportId, input = {}) {
 async function recordTrackingUpdate(profile, transportId, input = {}) {
   requireTransporter(profile)
   uuid(transportId, 'Mã chuyến vận chuyển')
-  input = only(record(input), ['trackingStatus', 'location', 'temperature', 'note'])
+  input = only(record(input), ['trackingStatus', 'location', 'temperature', 'note', 'deliveryProofUrl'])
   const trackingStatus = requiredText(input.trackingStatus, 'Trạng thái hành trình', { max: 40 })
   if (!TRACKING_STATUSES.includes(trackingStatus)) fail('Trạng thái hành trình không hợp lệ')
   const location = requiredText(input.location, 'Địa điểm cập nhật', { min: 2, max: 500 })
   const temperature = optionalNumber(input.temperature, 'Nhiệt độ', { min: -100, max: 100, decimals: 2 })
   const note = optionalText(input.note, 'Ghi chú cập nhật', 1000)
   if (trackingStatus === 'OTHER' && (!note || note.length < 2)) fail('Nhập ghi chú khi chọn trạng thái khác')
+  const deliveryProofUrl = trackingStatus === 'DELIVERED_REPORTED'
+    ? cloudinaryImageUrl(input.deliveryProofUrl)
+    : null
   const { data, error } = await supabase.rpc('record_lot_transport_tracking_update', {
     p_transport: transportId, p_actor: profile.id, p_tracking_status: trackingStatus,
     p_location: location, p_temperature: temperature, p_note: note,
+    p_proof_image_url: deliveryProofUrl,
   })
   if (error?.code === '42501') fail('Chỉ người vận chuyển nhận chuyến mới được cập nhật hành trình', 403)
   if (error?.code === '40001') fail('Chỉ cập nhật hành trình khi chuyến đang vận chuyển và chưa báo giao', 409)
@@ -255,6 +270,20 @@ async function recordTrackingUpdate(profile, transportId, input = {}) {
   if (error) throw error
   outbox.nudge()
   return { transport: data.transport, event_id: data.event_id }
+}
+
+async function uploadDeliveryProof(profile, transportId, file) {
+  requireTransporter(profile)
+  uuid(transportId, 'Mã chuyến vận chuyển')
+  if (!file) fail('Vui lòng chọn ảnh bằng chứng giao hàng')
+  const { data: trip, error } = await supabase.from('transport_logs')
+    .select('id, handler_id, status, delivery_reported_at')
+    .eq('id', transportId).maybeSingle()
+  if (error) throw error
+  if (!trip) fail('Không tìm thấy chuyến vận chuyển', 404)
+  if (trip.handler_id !== profile.id) fail('Chỉ người vận chuyển nhận chuyến mới được tải ảnh', 403)
+  if (trip.status !== 'IN_TRANSIT' || trip.delivery_reported_at) fail('Chỉ tải ảnh khi chuyến đang vận chuyển và chưa báo giao', 409)
+  return cloudinary.uploadTransportDeliveryImage(file)
 }
 
 async function transporterDashboard(profile) {
@@ -291,4 +320,4 @@ async function claim(profile, transportId) {
   outbox.nudge()
   return { transport: data.transport ?? data, event_id: data.event_id ?? null }
 }
-module.exports = { list, listRecipients, create, updateTransporterStatus, confirmDelivery, assignRecipient, receivingDashboard, recordCheckpoint, recordTrackingUpdate, transporterDashboard, claim }
+module.exports = { list, listRecipients, create, updateTransporterStatus, confirmDelivery, uploadDeliveryProof, assignRecipient, receivingDashboard, recordCheckpoint, recordTrackingUpdate, transporterDashboard, claim }

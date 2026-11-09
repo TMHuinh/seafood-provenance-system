@@ -94,6 +94,13 @@ Tên người nhận và mã biên nhận không còn bắt buộc. Cuối cùng
 giao thành công vào cùng form cập nhật hành trình và bỏ endpoint báo giao riêng.
 Trạng thái này chỉ đánh dấu đang chờ nhà phân phối xác nhận; không tự đóng chuyến.
 
+Sau khi chạy các migration QR `202611070001_lot_trace_codes.sql` và
+`202611080001_distributor_qr.sql` ở mục QR bên dưới, chạy tiếp
+`migrations/202611090001_transport_delivery_proof.sql` để yêu cầu ảnh bằng chứng
+Cloudinary khi người vận chuyển báo giao thành công. URL ảnh được lưu trong
+`delivery_report` và payload sự kiện để nhà phân phối, người vận chuyển và cơ sở
+tạo chuyến có thể xem lại.
+
 Các mốc được neo theo thứ tự, mỗi mốc dùng hash riêng và tham chiếu hash mốc
 trước. Backend tự thử gửi lại khi blockchain lỗi; trạng thái giao diện chỉ là
 `Đã xác nhận trên blockchain` sau khi có xác nhận từ contract. Bản ghi blockchain

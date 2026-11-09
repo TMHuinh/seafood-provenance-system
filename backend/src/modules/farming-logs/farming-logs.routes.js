@@ -2,6 +2,7 @@ const express = require('express')
 
 const { requireAuth } = require('../auth/auth.middleware')
 const farmingLogsController = require('./farming-logs.controller')
+const imageUpload = require('../../shared/middleware/image-upload')
 
 const router = express.Router({ mergeParams: true })
 
@@ -10,6 +11,7 @@ router.use(requireAuth)
 
 // Tạo nhật ký mới
 router.post('/', farmingLogsController.create)
+router.post('/images', farmingLogsController.authorizeImageUpload, imageUpload.single('image'), farmingLogsController.uploadImage)
 
 // Chỉnh sửa nhật ký và ghi lại hash lên blockchain
 router.patch('/:id', farmingLogsController.update)

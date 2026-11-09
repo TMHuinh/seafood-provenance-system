@@ -24,6 +24,7 @@ const showForm = ref(false)
 const editingId = ref<string | null>(null)
 const formError = ref('')
 const success = ref('')
+const editingPond = computed(() => items.value.find((pond) => pond.id === editingId.value) ?? null)
 
 const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 9
 const filteredItems = computed(() => items.value.filter((item) => (!filterStatus.value || item.status === filterStatus.value) && `${item.pond_code} ${item.pond_name ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
@@ -32,7 +33,6 @@ watch([query, filterStatus], () => { listPage.value = 1 })
 watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
 
 const form = reactive({
-  pondCode: '',
   pondName: '',
   area: '' as string | number,
   depth: '' as string | number,
@@ -68,7 +68,6 @@ function numberOrNull(value: string | number) {
 
 function reset() {
   editingId.value = null
-  form.pondCode = ''
   form.pondName = ''
   form.area = ''
   form.depth = ''
@@ -85,7 +84,6 @@ function openCreate() { if (saving.value || loading.value) return;
 function openEdit(pond: Pond) {
   if (saving.value || loading.value) return
   editingId.value = pond.id
-  form.pondCode = pond.pond_code
   form.pondName = pond.pond_name
   form.area = pond.area ?? ''
   form.depth = pond.depth ?? ''
@@ -106,13 +104,12 @@ async function submit() {
   formError.value = ''
   success.value = ''
 
-  if (!form.pondCode.trim() || !form.pondName.trim()) {
-    formError.value = 'Vui lòng nhập đầy đủ mã ao và tên ao'
+  if (!form.pondName.trim()) {
+    formError.value = 'Vui lòng nhập tên ao'
     return
   }
 
   const payload: PondInput = {
-    pondCode: form.pondCode.trim(),
     pondName: form.pondName.trim(),
     area: numberOrNull(form.area),
     depth: numberOrNull(form.depth),
@@ -258,8 +255,8 @@ onUnmounted(() => { ++contextVersion })
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
-        <va-input v-model="form.pondCode" label="Mã ao *" placeholder="VD: AO-01" class="col-span-1"
-          :rules="[(v) => !!v || 'Bắt buộc']" />
+        <div v-if="editingPond" class="generated-code col-span-2"><span>Mã ao</span><strong>{{ editingPond.pond_code }}</strong><small>Mã ao được hệ thống tạo tự động và không thể sửa.</small></div>
+        <p v-else class="generated-code-hint col-span-2">Mã ao sẽ được tạo tự động khi lưu.</p>
         <va-input v-model="form.pondName" label="Tên ao *" placeholder="VD: Ao số 1" class="col-span-1"
           :rules="[(v) => !!v || 'Bắt buộc']" />
 
@@ -489,6 +486,11 @@ onUnmounted(() => { ++contextVersion })
   width: 100%;
   min-width: 500px;
 }
+
+.generated-code { display: grid; gap: .25rem; padding: .8rem 1rem; border: 1px solid #dbe7e4; border-radius: 10px; background: #f7faf9; }
+.generated-code > span { color: #64748b; font-size: .75rem; }
+.generated-code > strong { color: #1d5149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.generated-code > small, .generated-code-hint { margin: 0; color: #64748b; font-size: .8rem; }
 
 .col-span-1 {
   grid-column: span 1;

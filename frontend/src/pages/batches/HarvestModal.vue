@@ -33,7 +33,7 @@ const remainingTransportQuantity = computed(() => {
 })
 const localDateTime = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 const transportRequestId = ref(crypto.randomUUID())
-const transportForm = reactive({ transportCode: '', transportDate: localDateTime(), quantity: '' as string | number, fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
+const transportForm = reactive({ transportDate: localDateTime(), quantity: '' as string | number, fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
 const options = [{ value: false, label: 'Thu hoạch một phần, tiếp tục nuôi' }, { value: true, label: 'Kết thúc thu hoạch vụ này' }]
 const base = `/farms/${props.farmId}/ponds/${props.pondId}/batches/${props.batch.id}/harvests`
 const labels: Record<string, string> = { SUCCESS: 'Đã ghi blockchain', PENDING: 'Chưa gửi blockchain', FAILED: 'Ghi blockchain thất bại', UNKNOWN: 'Chưa xác định kết quả' }
@@ -61,6 +61,12 @@ function transportEventSummary(event: TransportEvent) {
     return [report.recipientName && `Người nhận: ${String(report.recipientName)}`, report.receiptReference && `Phiếu: ${String(report.receiptReference)}`].filter(Boolean).join(' · ')
   }
   return ''
+}
+function transportDeliveryProof(event: TransportEvent) {
+  const report = event.payload.deliveryReport
+  return report && typeof report === 'object' && typeof (report as Record<string, unknown>).proofImageUrl === 'string'
+    ? String((report as Record<string, unknown>).proofImageUrl)
+    : ''
 }
 
 async function load() {
@@ -97,7 +103,7 @@ async function openTransport(lot: HarvestLot) {
   transportLoading.value = true; transportError.value = ''; transportNotice.value = ''
   if (!sameLot) {
     transportRequestId.value = crypto.randomUUID()
-    Object.assign(transportForm, { transportCode: '', transportDate: localDateTime(), quantity: '', fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
+    Object.assign(transportForm, { transportDate: localDateTime(), quantity: '', fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
   }
   transportLot.value = lot; transports.value = []; recipients.value = []; recipientAssignments.value = {}; transportDataLoaded.value = false
   try {
@@ -140,7 +146,6 @@ async function saveTransport() {
   if (!transportLot.value || transportSaving.value || !transportDataLoaded.value || transportLoading.value) return
   transportError.value = ''
   const qty = Number(transportForm.quantity)
-  if (!transportForm.transportCode.trim() || transportForm.transportCode.trim().length > 100) { transportError.value = 'Mã chuyến là bắt buộc và tối đa 100 ký tự.'; return }
   if (!transportForm.transportDate || Number.isNaN(new Date(transportForm.transportDate).getTime())) { transportError.value = 'Thời gian vận chuyển không hợp lệ.'; return }
   if (!transportForm.fromLocation.trim() || transportForm.fromLocation.trim().length > 500) { transportError.value = 'Điểm đi là bắt buộc và tối đa 500 ký tự.'; return }
   if (!transportForm.toLocation.trim() || transportForm.toLocation.trim().length > 500) { transportError.value = 'Điểm đến là bắt buộc và tối đa 500 ký tự.'; return }
@@ -152,7 +157,7 @@ async function saveTransport() {
   try {
     const path = base.replace('/harvests', `/lots/${transportLot.value.id}/transports`)
     const result = await api.post<{ transport: LotTransport; replayed: boolean }>(path, {
-      transportCode: transportForm.transportCode.trim(), transportDate: new Date(transportForm.transportDate).toISOString(),
+      transportDate: new Date(transportForm.transportDate).toISOString(),
       quantity: qty, fromLocation: transportForm.fromLocation.trim(), toLocation: transportForm.toLocation.trim(),
       recipientOrganizationId: transportForm.recipientOrganizationId, note: transportForm.note.trim(), requestId: transportRequestId.value,
     })
@@ -160,7 +165,7 @@ async function saveTransport() {
     transports.value = [result.transport, ...transports.value]
     transportNotice.value = `Đã tạo chuyến ${result.transport.transport_code}.`
     transportRequestId.value = crypto.randomUUID()
-    Object.assign(transportForm, { transportCode: '', transportDate: localDateTime(), quantity: '', fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
+    Object.assign(transportForm, { transportDate: localDateTime(), quantity: '', fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
   } catch (e) { transportError.value = e instanceof Error ? e.message : 'Không lưu được chuyến vận chuyển' }
   finally { transportSaving.value = false }
 }
@@ -216,7 +221,7 @@ onMounted(load)
         <p>Khối lượng còn có thể vận chuyển: <strong>{{ remainingTransportQuantity.toLocaleString('vi-VN') }} kg</strong></p>
         <va-alert v-if="remainingTransportQuantity === 0" color="success" class="message">Lô này đã vận chuyển đủ {{ transportLot.quantity.toLocaleString('vi-VN') }} kg. Không thể tạo thêm chuyến.</va-alert>
         <form v-else class="harvest-form" @submit.prevent="saveTransport">
-          <va-input :disabled="transportSaving" v-model="transportForm.transportCode" label="Mã chuyến *" maxlength="100" />
+          <p class="generated-code-hint wide">Mã chuyến sẽ được tạo tự động khi lưu.</p>
           <va-input :disabled="transportSaving" v-model="transportForm.transportDate" type="datetime-local" label="Thời gian vận chuyển *" />
           <va-input :disabled="transportSaving" v-model="transportForm.quantity" type="number" min="0.01" step="0.01" :max="remainingTransportQuantity" label="Khối lượng vận chuyển (kg) *" />
           <va-input :disabled="transportSaving" v-model="transportForm.fromLocation" label="Điểm đi *" maxlength="500" />
@@ -246,6 +251,7 @@ onMounted(load)
               <strong>{{ transportEventLabels[event.event_type] || event.event_type }}</strong>
               <small>{{ eventTime(event.occurred_at) }} · {{ blockchainStatusLabels[event.blockchain_status] || event.blockchain_status }}</small>
               <small v-if="transportEventSummary(event)">{{ transportEventSummary(event) }}</small>
+              <a v-if="transportDeliveryProof(event)" :href="transportDeliveryProof(event)" target="_blank" rel="noopener noreferrer">Xem ảnh bằng chứng giao hàng</a>
               <code v-if="event.data_hash">Hash dữ liệu: {{ event.data_hash }}</code>
               <code v-if="event.previous_hash">Hash mốc trước: {{ event.previous_hash }}</code>
               <code v-if="event.transaction_hash">Giao dịch: {{ event.transaction_hash }}</code>
@@ -276,5 +282,6 @@ onMounted(load)
 .transport-event-history small { color: #718588; font-size: .72rem; }
 .transport-event-history code { overflow-wrap: anywhere; color: #587574; font-size: .68rem; white-space: normal; }
 .legacy-event-note { color: #7c8d8d; font-size: .75rem; }
+.generated-code-hint { padding: .4rem 0; color: #64748b; font-size: .8rem; }
 .wide { grid-column: 1 / -1; }
 </style>

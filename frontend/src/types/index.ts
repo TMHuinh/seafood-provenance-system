@@ -75,7 +75,6 @@ export interface Pond {
 }
 
 export interface PondInput {
-  pondCode: string
   pondName: string
   area?: number | null
   depth?: number | null
@@ -87,7 +86,6 @@ export interface PondListResponse { success: boolean; count: number; items: Pond
 export interface PondResponse { success: boolean; pond: Pond }
 
 export interface BatchInput {
-  batchCode: string
   species: Species
   seedSource?: string | null
   seedQuantity: number

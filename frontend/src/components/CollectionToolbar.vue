@@ -17,7 +17,7 @@ const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)
   </div>
 </template>
 <style scoped>
-.collection-toolbar { display: grid; gap: 18px; margin: 0 0 24px; padding: 20px; border: 1px solid var(--app-line); border-radius: var(--app-radius); background: var(--app-surface); color: var(--app-muted); }
+.collection-toolbar { display: grid; gap: 18px; margin: 0 0 24px; padding: 20px; border: 1px solid rgb(30 67 58 / 4%); border-radius: var(--app-radius); background: var(--app-surface); box-shadow: var(--app-shadow); color: var(--app-muted); }
 .filters, .collection-navigation, nav { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .filters label { display: grid; gap: 8px; flex: 1; min-width: 150px; font-size: 12px; font-weight: 600; }
 .filters label:first-child { flex: 2; }

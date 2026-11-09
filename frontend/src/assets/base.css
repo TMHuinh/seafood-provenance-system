@@ -15,12 +15,12 @@
   --app-success: #24754f;
   --app-warning: #916117;
   --app-danger: #b64242;
-  --app-canvas: #f5f8fa;
+  --app-canvas: #f5f8f7;
   --app-surface: #fff;
-  --app-line: #dce6eb;
-  --app-radius: 16px;
-  --app-control-radius: 10px;
-  --app-shadow: 0 4px 20px rgb(23 52 58 / 4%);
+  --app-line: #e4ebe8;
+  --app-radius: 22px;
+  --app-control-radius: 12px;
+  --app-shadow: 0 6px 28px rgb(30 67 58 / 5%);
   --app-space-1: 4px;
   --app-space-2: 8px;
   --app-space-3: 12px;

@@ -55,23 +55,25 @@ body,
 
 /* Shared management layout; page-specific content keeps its own semantics. */
 .workspace-content { min-width: 0; flex: 1; }
-.is-workspace > .workspace-content { margin-left: var(--sidebar-width, 240px); }
+.is-workspace > .workspace-content { margin-left: var(--sidebar-width, 240px); transition: margin-left .24s ease; }
 .skip-link { position: fixed; top: 8px; left: 8px; z-index: 10000; padding: 12px 18px; border-radius: 8px; background: var(--app-primary-dark); color: white; transform: translateY(-160%); }
 .skip-link:focus { transform: translateY(0); }
 .app-shell .workspace-content :is(.farms-page, .ponds-page, .page-container, .transport-page, .receipts-page) {
   width: min(100%, 1280px); max-width: 1280px; margin: 0 auto; padding: 32px; background: transparent; border-radius: 0;
 }
-.app-shell .workspace-content :is(.page-header, .page-heading) { align-items: center; margin-bottom: 28px; gap: 24px; }
-.app-shell .workspace-content :is(.page-title, .page-heading h1) { font-family: inherit; font-size: clamp(26px, 2.4vw, 32px); font-weight: 650; letter-spacing: -.035em; line-height: 1.25; }
+.app-shell .workspace-content :is(.page-header, .page-heading) { align-items: center; margin-bottom: 32px; gap: 24px; }
+.app-shell .workspace-content :is(.page-title, .page-heading h1) { font-family: inherit; font-size: clamp(26px, 2.4vw, 32px); font-weight: 600; letter-spacing: -.025em; line-height: 1.25; }
 .app-shell .workspace-content :is(.page-description, .page-heading p:last-child) { color: var(--app-muted); font-size: 14px; line-height: 1.65; }
-.app-shell .workspace-content :is(.eyebrow, .overview-kicker, .table-kicker) { color: var(--app-primary-dark); font-size: 11px; letter-spacing: .1em; }
-.app-shell .workspace-content :is(.farm-grid, .pond-grid, .batch-grid, .log-grid) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 20px; align-items: stretch; }
-.app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card) { min-width: 0; border: 1px solid var(--app-line); border-radius: var(--app-radius); box-shadow: var(--app-shadow) !important; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+.app-shell .workspace-content :is(.eyebrow, .overview-kicker, .table-kicker) { color: var(--app-primary-dark); font-size: 12px; letter-spacing: .055em; }
+.app-shell .workspace-content :is(.farm-grid, .pond-grid, .batch-grid, .log-grid) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 24px; align-items: stretch; }
+.app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card) { min-width: 0; border: 1px solid rgb(30 67 58 / 5%); border-radius: var(--app-radius); box-shadow: var(--app-shadow) !important; display: flex; flex-direction: column; overflow-wrap: anywhere; }
 .app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card):hover { transform: none; border-color: #a5cdd1; }
 .app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card) > .va-card__content { flex: 1; padding: 24px; }
 .app-shell .workspace-content :is(.farm-title, .pond-name, .species-title) { font-size: 18px; font-weight: 650; line-height: 1.5; }
-.app-shell .workspace-content :is(.card-actions-custom, .card-actions) { margin-top: auto; padding: 16px 20px; gap: 8px; background: #fbfdfe; border-top: 1px solid var(--app-line); flex-wrap: wrap; }
-.app-shell .workspace-content :is(.stats-grid, .log-details) { background: var(--app-canvas); border-radius: 12px; padding: 16px; gap: 16px; }
+.app-shell .workspace-content :is(.card-actions-custom, .card-actions) { margin-top: auto; padding: 16px 24px 24px; gap: 8px; background: transparent; border-top: 0; flex-wrap: wrap; }
+.app-shell .workspace-content :is(.card-actions-custom, .card-actions) .va-button { flex-shrink: 0; white-space: nowrap; }
+.app-shell .workspace-content :is(.card-actions-custom, .card-actions) .flex-1 { flex: 1 0 auto; }
+.app-shell .workspace-content :is(.stats-grid, .log-details) { background: #f5f9f7; border-radius: 16px; padding: 18px; gap: 16px; }
 .app-shell .workspace-content :is(.stat-label, .detail-label, .address-text, .log-date) { color: var(--app-muted); font-size: 13px; }
 .app-shell .workspace-content :is(.stat-value, .detail-value) { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .app-shell .workspace-content :is(.card-top, .card-header, .card-topline) { flex-wrap: wrap; gap: 12px; }
@@ -79,12 +81,12 @@ body,
 .app-shell .workspace-content :is(.empty-state, .empty-state-promax) { border: 1px dashed var(--app-line); border-radius: var(--app-radius); background: var(--app-surface); padding: 48px 24px; text-align: center; }
 .app-shell .workspace-content :is(.empty-state h2, .empty-state h3) { font-size: 18px; margin: 16px 0 8px; }
 .app-shell .workspace-content :is(.empty-state p, .empty-state-promax p) { color: var(--app-muted); max-width: 520px; margin-inline: auto; line-height: 1.7; }
-.va-button { --va-button-border-radius: 10px; --va-button-size: 44px; font-weight: 600; }
+.va-button { --va-button-border-radius: 12px; --va-button-size: 44px; font-weight: 600; }
 .va-button--normal { min-height: 44px; }
 .va-button--small { min-height: 36px; }
 .va-button__background { background-image: none !important; }
-.va-input-wrapper { --va-input-wrapper-border-radius: 10px; --va-input-wrapper-min-height: 44px; }
-.va-input-wrapper__field { border-radius: 10px; min-height: 44px; }
+.va-input-wrapper { --va-input-wrapper-border-radius: 12px; --va-input-wrapper-min-height: 44px; }
+.va-input-wrapper__field { border-radius: 12px; min-height: 44px; }
 .va-badge { --va-badge-border-radius: 6px; font-size: 12px; }
 .va-alert { border-radius: 12px; line-height: 1.6; }
 .va-modal__inner { max-width: calc(100vw - 32px); }
@@ -102,30 +104,30 @@ body,
 .app-shell .workspace-content .table-promax td { padding: 18px 16px; border-top: 1px solid var(--app-line); font-size: 14px; }
 .app-shell .workspace-content .table-promax tbody tr:hover { background: #f6fbfc; }
 .app-shell .workspace-content .dashboard-wrapper { width: 100%; max-width: 1280px; padding: 32px; margin: 0 auto; }
-.app-shell .workspace-content .workspace-hero { min-height: 0; padding: 28px; border-radius: var(--app-radius); background: linear-gradient(110deg, #e8f5f5, #f1f7fc); border: 1px solid #cfe5e8; box-shadow: none; gap: 24px; }
-.app-shell .workspace-content .workspace-copy h1 { color: var(--app-ink); font-size: clamp(24px, 2.2vw, 30px); font-weight: 650; max-width: 680px; }
+.app-shell .workspace-content .workspace-hero { min-height: 0; padding: 36px; border-radius: 28px; background: linear-gradient(115deg, #e6f3ed, #edf6f7 58%, #f5f8fc); border: 1px solid rgb(30 67 58 / 4%); box-shadow: none; gap: 24px; }
+.app-shell .workspace-content .workspace-copy h1 { color: var(--app-ink); font-size: clamp(26px, 2.2vw, 32px); font-weight: 600; max-width: 680px; }
 .app-shell .workspace-content :is(.workspace-description, .workspace-greeting, .workspace-date, .workspace-eyebrow) { color: var(--app-muted); font-size: 13px; }
 .app-shell .workspace-content .workspace-description { max-width: 620px; line-height: 1.7; }
 .app-shell .workspace-content .workspace-decoration { display: none; }
-.app-shell .workspace-content .home-stats { margin: 24px 0; gap: 16px; }
-.app-shell .workspace-content .home-stat-card { padding: 22px; gap: 16px; border-radius: var(--app-radius); border: 1px solid var(--app-line); box-shadow: var(--app-shadow); align-items: flex-start; }
+.app-shell .workspace-content .home-stats { margin: 28px 0; gap: 20px; }
+.app-shell .workspace-content .home-stat-card { padding: 24px; gap: 16px; border-radius: var(--app-radius); border: 1px solid rgb(30 67 58 / 4%); box-shadow: var(--app-shadow); align-items: flex-start; }
 .app-shell .workspace-content .home-stat-card p { font-size: 13px; color: var(--app-muted); }
 .app-shell .workspace-content .home-stat-card strong { font-size: 30px; font-weight: 650; line-height: 1.4; }
 .app-shell .workspace-content .home-stat-card small { font-size: 12px; color: var(--app-muted); line-height: 1.5; }
-.app-shell .workspace-content :is(.table-card-promax, .transport-overview-card) { border: 1px solid var(--app-line); border-radius: var(--app-radius); padding: 24px; box-shadow: var(--app-shadow); }
+.app-shell .workspace-content :is(.table-card-promax, .transport-overview-card) { border: 1px solid rgb(30 67 58 / 5%); border-radius: var(--app-radius); padding: 28px; box-shadow: var(--app-shadow); }
 .app-shell .workspace-content .hero-promax { background: linear-gradient(130deg, #e8f5f5, #f2f7fc); padding: 80px 24px; }
 .app-shell .workspace-content .hero-title { font-size: clamp(40px, 6vw, 72px); font-weight: 650; }
 .app-shell .workspace-content :is(.hero-glow-1, .hero-glow-2) { display: none; }
 .app-shell .workspace-content .step-card { border: 1px solid var(--app-line); border-radius: var(--app-radius); padding: 24px; background: white; }
 .app-shell .workspace-content .transport-page .job-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); align-items: start; }
-.app-shell .workspace-content .transport-page :is(.summary-card, .dispatch-board, .job-card) { border-radius: var(--app-radius); box-shadow: var(--app-shadow); border: 1px solid var(--app-line); }
+.app-shell .workspace-content .transport-page :is(.summary-card, .dispatch-board, .job-card) { border-radius: var(--app-radius); box-shadow: var(--app-shadow); border: 1px solid rgb(30 67 58 / 5%); }
 .app-shell .workspace-content .transport-page .driver-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .app-shell .workspace-content .transport-page :is(input, select) { min-height: 44px; border-radius: var(--app-control-radius); font-size: 14px; }
 @media (max-width: 1200px) {
   .app-shell .workspace-content .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-shell .workspace-content .workspace-hero { flex-wrap: wrap; }
 }
-@media (max-width: 1023px) { .is-workspace > .workspace-content { margin-left: 0; } }
+@media (max-width: 1023px) { .is-workspace > .workspace-content { margin-left: 0; transition: none; } }
 @media (max-width: 600px) {
   .app-shell .workspace-content :is(.farms-page, .ponds-page, .page-container, .transport-page, .receipts-page, .dashboard-wrapper) { padding: 24px 16px; }
   .app-shell .workspace-content :is(.page-header, .page-heading) { align-items: flex-start; flex-direction: column; gap: 16px; }
@@ -143,3 +145,12 @@ body,
 .app-shell .workspace-content .home-stat-card small { white-space: normal; }
 .va-badge__text-wrapper { font-size: 12px; line-height: 1.4; padding: 5px 8px; border-radius: 6px; letter-spacing: 0; text-transform: none; }
 .va-modal__dialog .harvest-form > .va-button { grid-column: 1 / -1; justify-self: end; }
+
+.app-shell .workspace-content .table-card-promax .collection-toolbar { padding: 20px 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.app-shell .workspace-content .production-overview { border-color: transparent; border-radius: var(--app-radius); background: #eef5f2; }
+.app-shell .workspace-content .receipts-page .trip-card { border-color: rgb(30 67 58 / 5%); border-radius: var(--app-radius); box-shadow: var(--app-shadow); }
+.app-shell .workspace-content .home-stat-icon { border-radius: 15px; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .home-stat-card) { transition: transform .2s ease, border-color .2s ease; }
+  .app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .home-stat-card):hover { transform: translateY(-2px); }
+}

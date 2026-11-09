@@ -257,14 +257,14 @@ async function handleHome() {
   }
 }
 .nav-link { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-.workspace-topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 76px; padding: 16px 32px; margin-left: var(--sidebar-width, 240px); border-bottom: 1px solid var(--app-line); background: var(--app-surface); }
+.workspace-topbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 76px; padding: 16px 32px; transition: margin-left .24s ease; margin-left: var(--sidebar-width, 240px); border-bottom: 1px solid var(--app-line); background: rgb(255 255 255 / 75%); }
 .workspace-topbar > div { display: grid; gap: 4px; }
-.topbar-caption { font-size: 10px; letter-spacing: .12em; color: var(--app-muted); }
+.topbar-caption { font-size: 10px; letter-spacing: .075em; color: var(--app-muted); }
 .workspace-topbar strong { font-size: 15px; font-weight: 650; }
 .topbar-org { color: var(--app-muted); font-size: 13px; overflow-wrap: anywhere; }
 .workspace-topbar .topbar-leading { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .topbar-title { display: grid; gap: 4px; }
-.sidebar-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid var(--app-line); border-radius: 10px; background: var(--app-surface); color: var(--app-primary-dark); cursor: pointer; }
+.sidebar-toggle { display: none; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border: 1px solid var(--app-line); border-radius: 14px; background: var(--app-surface); color: var(--app-primary-dark); cursor: pointer; transition: background .15s ease; }
 .sidebar-toggle:hover { background: var(--app-primary-soft); }
 .logout-button :deep(.va-button__content) { gap: 8px; }
 @media (min-width: 1024px) {
@@ -279,13 +279,13 @@ async function handleHome() {
   .workspace-sidebar.is-collapsed .navbar-actions { padding-inline: 0; align-items: center; }
   .workspace-sidebar.is-collapsed .logout-button { width: 44px; min-height: 44px; padding: 0; }
 
-  .workspace-sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width, 240px); border-right: 1px solid var(--app-line); border-bottom: 0; box-shadow: none; background: #fff; backdrop-filter: none; }
-  .workspace-sidebar .navbar-inner { flex-direction: column; align-items: stretch; padding: 28px 16px 20px; height: 100%; gap: 36px; }
+  .workspace-sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar-width, 240px); border-right: 1px solid var(--app-line); border-bottom: 0; box-shadow: none; background: #fcfdfb; backdrop-filter: none; transition: width .24s ease; }
+  .workspace-sidebar .navbar-inner { flex-direction: column; align-items: stretch; padding: 28px 16px 20px; height: 100%; gap: 40px; }
   .workspace-sidebar .brand { padding: 0 8px; }
   .workspace-sidebar .brand-badge { width: 38px; height: 38px; border-radius: 12px; box-shadow: none; background: var(--app-primary); }
   .workspace-sidebar .navbar-links { flex-direction: column; margin: 0; gap: 6px; }
-  .workspace-sidebar .nav-link { padding: 12px 16px; font-size: 14px; text-align: left; border-radius: 10px; }
-  .workspace-sidebar .nav-link.active { color: var(--app-primary-dark); background: var(--app-primary-soft); }
+  .workspace-sidebar .nav-link { padding: 12px 16px; font-size: 14px; font-weight: 550; text-align: left; border-radius: 14px; }
+  .workspace-sidebar .nav-link.active { color: var(--app-primary-dark); background: #e6f2ed; box-shadow: inset 0 0 0 1px rgb(8 127 131 / 4%); }
   .workspace-sidebar .navbar-actions { margin: auto 0 0; align-items: stretch; flex-direction: column; gap: 16px; padding: 20px 8px 0; border-top: 1px solid var(--app-line); }
   .workspace-sidebar .user-chip { border: 0; background: none; padding: 0; border-radius: 0; }
   .workspace-sidebar .user-name { font-size: 13px; overflow-wrap: anywhere; }
@@ -293,7 +293,7 @@ async function handleHome() {
   .workspace-sidebar .user-meta small { font-size: 12px; color: var(--app-muted); }
 }
 @media (max-width: 1023px) {
-  .workspace-topbar { margin-left: 0; padding: 16px 24px; min-height: 64px; }
+  .workspace-topbar { margin-left: 0; padding: 16px 24px; min-height: 64px; transition: none; }
   .navbar-inner { flex-wrap: wrap; padding: 12px 20px; gap: 12px; }
   .navbar-links { order: 3; width: 100%; margin: 0; flex-wrap: wrap; }
 }

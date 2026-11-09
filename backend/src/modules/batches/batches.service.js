@@ -3,6 +3,7 @@ const batchesRepository = require('./batches.repository')
 const farmsRepository = require('../farms/farms.repository')
 const pondsRepository = require('../ponds/ponds.repository')
 const { normalizeBatchInput } = require('./batches.validation')
+const { generateBusinessCode } = require('../../shared/utils/business-code')
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function httpError(message, status) { const error = new Error(message); error.status = status; return error }
@@ -79,12 +80,16 @@ async function detail(profile, id) {
 async function listByPond(profile, farmId, pondId) { await requireOwnedPond(profile, farmId, pondId); const items = await batchesRepository.findAllByPond(pondId); return { count: items.length, items } }
 async function createForPond(profile, farmId, pondId, input) {
   await requireOwnedPond(profile, farmId, pondId)
-  const normalized = normalizeBatchInput(input)
   let batch
-  try {
-    batch = await batchesRepository.create(pondId, normalized)
-  } catch (error) {
-    mapWriteError(error)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const normalized = normalizeBatchInput({ ...input, batchCode: generateBusinessCode('VU') })
+      batch = await batchesRepository.create(pondId, normalized)
+      break
+    } catch (error) {
+      if (error.code === '23505' && attempt < 2) continue
+      mapWriteError(error)
+    }
   }
 
   // Anchor the initial snapshot. Later edits must not overwrite this event.
@@ -128,8 +133,10 @@ async function updateForPond(profile, farmId, pondId, id, input) {
   if (!Number.isInteger(input?.expectedVersion) || input.expectedVersion !== existing.current_version) {
     throw httpError('Vụ nuôi đã thay đổi hoặc thiếu phiên bản. Vui lòng tải lại danh sách trước khi đính chính', 409)
   }
+  const { batchCode, ...requestedChanges } = input && typeof input === 'object' ? input : {}
+  void batchCode
   const changes = normalizeBatchInput({
-    ...input, currentStockingDate: existing.stocking_date, currentStatus: existing.status,
+    ...requestedChanges, currentStockingDate: existing.stocking_date, currentStatus: existing.status,
   }, { partial: true })
   let batch
   try {

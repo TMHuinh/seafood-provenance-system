@@ -6,7 +6,7 @@ import { VaAlert, VaButton, VaTextarea } from 'vuestic-ui'
 import { api } from '../api/client'
 import type { LotQr, LotQrResponse } from '../types/trace'
 
-const props = defineProps<{ farmId: string; pondId: string; batchId: string; lotId: string; lotCode: string }>()
+const props = defineProps<{ apiPath: string; lotCode: string }>()
 const router = useRouter()
 const qr = ref<LotQr | null>(null)
 const loading = ref(false)
@@ -16,9 +16,11 @@ const error = ref('')
 const imageError = ref('')
 const reason = ref('')
 const imageUrl = ref('')
+const canIssue = ref(false)
+const canRevoke = ref(false)
 let requestVersion = 0
 let imageVersion = 0
-const path = computed(() => `/farms/${props.farmId}/ponds/${props.pondId}/batches/${props.batchId}/lots/${props.lotId}/qr`)
+const path = computed(() => props.apiPath)
 const publicUrl = computed(() => qr.value ? new URL(router.resolve({ name: 'trace', params: { traceCode: qr.value.trace_code } }).href, window.location.origin).href : '')
 const localHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
 
@@ -40,21 +42,27 @@ watch([publicUrl, () => qr.value?.status], generateImage)
 async function load() {
   const version = ++requestVersion
   loading.value = true; loaded.value = false; error.value = ''; qr.value = null; reason.value = ''
+  canIssue.value = false; canRevoke.value = false
   try {
     const result = await api.get<LotQrResponse>(path.value)
-    if (version === requestVersion) { qr.value = result.qr; loaded.value = true }
+    if (version === requestVersion) { applyResult(result); loaded.value = true }
   } catch (e) { if (version === requestVersion) error.value = e instanceof Error ? e.message : 'Không tải được QR.' }
   finally { if (version === requestVersion) loading.value = false }
 }
 async function update(revoke = false) {
-  if (saving.value || !loaded.value || (revoke && (reason.value.trim().length < 3 || reason.value.trim().length > 500))) return
+  if (saving.value || !loaded.value || (revoke ? !canRevoke.value : !canIssue.value) || (revoke && (reason.value.trim().length < 3 || reason.value.trim().length > 500))) return
   saving.value = true; error.value = ''
   const version = requestVersion
   try {
     const result = await api.post<LotQrResponse>(`${path.value}${revoke ? '/revoke' : ''}`, revoke ? { reason: reason.value.trim() } : undefined)
-    if (version === requestVersion) { qr.value = result.qr; reason.value = '' }
+    if (version === requestVersion) { applyResult(result); reason.value = '' }
   } catch (e) { if (version === requestVersion) error.value = e instanceof Error ? e.message : 'Không cập nhật được QR.' }
   finally { saving.value = false }
+}
+function applyResult(result: LotQrResponse) {
+  qr.value = result.qr
+  canIssue.value = result.canIssue === true
+  canRevoke.value = result.canRevoke === true
 }
 watch(path, load, { immediate: true })
 onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
@@ -63,13 +71,15 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
 <template>
   <section class="qr-panel" aria-label="QR công khai của lô" :aria-busy="loading || saving">
     <h4>QR truy xuất công khai</h4>
+    <p>Một QR dùng chung cho các sản phẩm thuộc lô thu hoạch. QR giúp tra cứu nguồn gốc, không phải chứng nhận chất lượng hoặc mã chống sao chép.</p>
     <p v-if="loading" role="status">Đang tải trạng thái QR…</p>
     <va-alert v-if="error" color="danger" role="alert">{{ error }}</va-alert>
     <va-button v-if="!loading && !loaded" size="small" @click="load">Thử lại</va-button>
     <template v-if="loaded">
       <template v-if="!qr">
         <p>Lô chưa được công khai. Phát hành QR sẽ cho phép bất kỳ ai có đường dẫn xem hồ sơ truy xuất của lô.</p>
-        <va-button size="small" :loading="saving" :disabled="saving" @click="update()">Phát hành QR công khai</va-button>
+        <va-button v-if="canIssue" size="small" :loading="saving" :disabled="saving" @click="update()">Phát hành QR công khai</va-button>
+        <p v-else>Nhà phân phối phát hành QR sau khi xác nhận nhận hàng. Chủ cơ sở có thể xem và tải mã đã phát hành tại đây.</p>
       </template>
       <template v-else-if="qr.status === 'REVOKED'">
         <va-alert color="warning">QR đã thu hồi. Không thể phát hành lại QR cho lô này.</va-alert>
@@ -77,6 +87,8 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
       </template>
       <template v-else>
         <p>QR đang công khai. Đường dẫn giữ nguyên khi hành trình được cập nhật.</p>
+        <p v-if="qr.issuer">Tổ chức phát hành: {{ qr.issuer.name }}</p>
+        <p v-else>QR cũ do cơ sở nuôi phát hành.</p>
         <va-alert v-if="localHost" color="warning">Đây là địa chỉ localhost, thiết bị khác không thể mở. Chỉ in QR khi ứng dụng được mở tại địa chỉ công khai ổn định.</va-alert>
         <p>Trước khi in, kiểm tra địa chỉ hosting công khai và khả năng mở trực tiếp đường dẫn truy xuất.</p>
         <img v-if="imageUrl" :src="imageUrl" :alt="`QR truy xuất lô ${lotCode}`" width="240" height="240" />
@@ -84,8 +96,9 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
         <va-button v-if="imageError" size="small" @click="generateImage">Tạo lại ảnh QR</va-button>
         <a class="trace-url" :href="publicUrl" target="_blank" rel="noopener noreferrer">Xem hồ sơ công khai: {{ publicUrl }}</a>
         <a v-if="imageUrl" class="download" :href="imageUrl" :download="`lot-${qr.trace_code}.svg`">Tải QR SVG</a>
-        <form class="revoke-form" @submit.prevent="update(true)">
-          <p>Thu hồi sẽ ngừng công khai hồ sơ ngay và không thể hoàn tác.</p>
+        <form v-if="canRevoke" class="revoke-form" @submit.prevent="update(true)">
+          <p>Thu hồi sẽ ngừng công khai hồ sơ của toàn bộ lô, ảnh hưởng mọi sản phẩm và nhà phân phối dùng chung QR, và không thể hoàn tác.</p>
+          <p v-if="!qr.issuer_organization_id">Chủ cơ sở chỉ có quyền thu hồi đối với QR cũ chưa có tổ chức phát hành.</p>
           <va-textarea v-model="reason" label="Lý do thu hồi (3–500 ký tự)" :disabled="saving" maxlength="500" />
           <va-button type="submit" size="small" color="danger" :loading="saving" :disabled="saving || reason.trim().length < 3 || reason.trim().length > 500">Thu hồi QR</va-button>
         </form>

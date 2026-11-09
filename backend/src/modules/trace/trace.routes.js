@@ -3,6 +3,7 @@ const env = require('../../config/env')
 const { createPublicRouter } = require('./trace.public-routes')
 const { createTraceService } = require('./trace.service')
 const { createTraceRepository } = require('./trace.repository')
+const { createTraceHandlers } = require('./trace.handlers')
 const blockchain = require('../blockchain/blockchain.service')
 const db = require('../../config/supabase')
 const service = createTraceService(createTraceRepository(db), {
@@ -18,10 +19,4 @@ const service = createTraceService(createTraceRepository(db), {
     } finally { provider.destroy() }
   },
 })
-function owner(action) {
-  return async (req,res,next) => {
-    try { res.set('Cache-Control','no-store').json({success:true,qr:await service[action](req.auth.profile,req.params,req.body)}) }
-    catch(error) { next(error) }
-  }
-}
-module.exports = { get:owner('get'), issue:owner('issue'), revoke:owner('revoke'), publicRouter:createPublicRouter(service) }
+module.exports = { ...createTraceHandlers(service), publicRouter:createPublicRouter(service) }

@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { VaAlert, VaBadge, VaButton, VaCard, VaCardContent, VaInnerLoading } from 'vuestic-ui'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
+import LotQrPanel from '../../components/LotQrPanel.vue'
 import { api } from '../../api/client'
 import type { LotTransport, TransportEvent } from '../../types'
 
@@ -25,6 +26,10 @@ const pendingCount = computed(() => trips.value.filter((trip) => trip.status ===
 
 function reportFor(trip: ReceivingTrip) {
   return trip.delivery_report && typeof trip.delivery_report === 'object' ? trip.delivery_report : {}
+}
+function deliveryProofUrl(trip: ReceivingTrip) {
+  const value = reportFor(trip).proofImageUrl
+  return typeof value === 'string' ? value : ''
 }
 function reportText(trip: ReceivingTrip) {
   const report = reportFor(trip)
@@ -103,8 +108,14 @@ onUnmounted(() => { active = false; ++loadVersion; if (refreshTimer) window.clea
           <div v-if="trip.delivery_reported_at" class="delivery-report">
             <strong>Người vận chuyển đã báo giao</strong>
             <p>{{ reportText(trip) || 'Vui lòng kiểm tra hàng thực tế rồi xác nhận đã nhận.' }}</p>
+            <a v-if="deliveryProofUrl(trip)" class="delivery-proof-link" :href="deliveryProofUrl(trip)" target="_blank" rel="noopener noreferrer">
+              <img class="delivery-proof-image" :src="deliveryProofUrl(trip)" alt="Ảnh bằng chứng giao hàng do người vận chuyển cung cấp" loading="lazy" />
+              Xem ảnh bằng chứng giao hàng
+            </a>
           </div>
           <va-button v-if="trip.status === 'IN_TRANSIT' && trip.delivery_reported_at" color="primary" :loading="busyId === trip.id" :disabled="Boolean(busyId)" @click="confirmReceipt(trip)">Xác nhận đã nhận hàng</va-button>
+          <LotQrPanel v-if="trip.status === 'DELIVERED' && trip.lot" :api-path="`/transports/${trip.id}/qr`" :lot-code="trip.lot.lot_code" />
+          <p v-else-if="trip.status !== 'CANCELLED'" class="meta">Bạn có thể phát hành QR cho lô sau khi xác nhận đã nhận hàng.</p>
           <ol v-if="trip.events?.length" class="event-list">
             <li v-for="event in trip.events" :key="event.id"><strong>{{ eventLabel(event) }}</strong><small>{{ eventTime(event.occurred_at) }} · {{ event.blockchain_status === 'SUCCESS' ? 'Đã xác nhận blockchain' : event.blockchain_status === 'FAILED' ? 'Sẽ thử lại blockchain' : 'Đang chờ blockchain' }}</small><small v-if="eventSummary(event)">{{ eventSummary(event) }}</small></li>
           </ol>
@@ -130,6 +141,8 @@ h1 { margin: .25rem 0; font-size: 1.8rem; }
 .meta, .delivery-report p { color: #688582; font-size: .9rem; }
 .delivery-report { background: #eff8f3; border-radius: 10px; padding: .85rem; margin: 1rem 0; }
 .delivery-report p { margin: .4rem 0 0; }
+.delivery-proof-link { display: grid; justify-items: start; gap: .4rem; margin-top: .75rem; color: #236c58; font-size: .85rem; font-weight: 700; }
+.delivery-proof-image { width: min(100%, 300px); max-height: 200px; border: 1px solid #d3e4dc; border-radius: 8px; object-fit: cover; }
 .event-list { padding-left: 1.2rem; margin: 1rem 0 0; }
 .event-list li { padding: .35rem 0; }
 .event-list small { display: block; color: #688582; margin-top: .2rem; }

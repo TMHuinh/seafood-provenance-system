@@ -1,4 +1,24 @@
 const farmingLogsService = require('./farming-logs.service')
+const cloudinary = require('../../shared/services/cloudinary')
+
+async function authorizeImageUpload(request, response, next) {
+  try {
+    await farmingLogsService.authorizeImageUpload(request.auth.profile, request.params.batchId)
+    next()
+  } catch (error) {
+    next(error)
+  }
+}
+
+async function uploadImage(request, response, next) {
+  try {
+    if (!request.file) throw Object.assign(new Error('Vui lòng chọn ảnh để tải lên'), { status: 400 })
+    const imageUrl = await cloudinary.uploadFarmingLogImage(request.file)
+    response.status(201).json({ success: true, imageUrl })
+  } catch (error) {
+    next(error)
+  }
+}
 
 async function create(request, response, next) {
   try {
@@ -41,4 +61,4 @@ async function verifyBatch(request, response, next) {
   }
 }
 
-module.exports = { create, update, confirm, correct, revoke, history, listByBatch, verifyBatch }
+module.exports = { create, authorizeImageUpload, uploadImage, update, confirm, correct, revoke, history, listByBatch, verifyBatch }

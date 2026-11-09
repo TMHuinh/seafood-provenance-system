@@ -3,6 +3,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 function fail(message, status) { throw Object.assign(new Error(message), { status }) }
 function text(value) { return typeof value === 'string' ? value.slice(0, 500) : null }
 function scalar(value) { return typeof value === 'number' && Number.isFinite(value) ? value : text(value) }
+function imageUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'res.cloudinary.com' &&
+      !url.username && !url.password && !url.port && /^\/[^/]+\/image\/upload\/.+/.test(url.pathname)
+      ? url.href : null
+  } catch { return null }
+}
 const DETAIL_KEYS = {
   FEEDING: ['feedType', 'feedAmount'], MEDICINE: ['medicineName', 'dose'],
   WATER_QUALITY: ['temperature', 'salinity', 'ph', 'dissolvedOxygen'],
@@ -15,14 +24,29 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     if (!lot) fail('Không tìm thấy lô hàng', 404)
     return lot
   }
-  async function get(profile, scope) { await owned(profile, scope); return repo.findQrByLot(scope.lotId) }
-  async function issue(profile, scope) { await owned(profile, scope); return repo.issue(scope.lotId) }
+  function ownerResult(qr) {
+    return { qr, canIssue: false, canRevoke: qr?.status === 'ACTIVE' && !qr.issuer_organization_id }
+  }
+  function reason(input) {
+    if (typeof input?.reason !== 'string' || input.reason.trim().length < 3 || input.reason.trim().length > 500) fail('Lý do thu hồi phải có 3–500 ký tự', 400)
+    return input.reason.trim()
+  }
+  async function get(profile, scope) { await owned(profile, scope); return ownerResult(await repo.findQrByLot(scope.lotId)) }
+  async function issue() { fail('Chỉ nhà phân phối đã xác nhận nhận hàng mới được phát hành QR', 403) }
   async function revoke(profile, scope, input) {
     await owned(profile, scope)
-    if (typeof input?.reason !== 'string' || input.reason.trim().length < 3 || input.reason.trim().length > 500) fail('Lý do thu hồi phải có 3–500 ký tự', 400)
-    const qr = await repo.revoke(scope.lotId, input.reason.trim())
+    const value = reason(input)
+    const qr = await repo.findQrByLot(scope.lotId)
     if (!qr) fail('Lô chưa phát hành QR', 404)
-    return qr
+    if (qr.issuer_organization_id) fail('Chỉ tổ chức phát hành mới được thu hồi QR này', 403)
+    return ownerResult(await repo.revokeLegacy(profile.id, scope.lotId, value))
+  }
+  async function receiving(profile, scope, action, input) {
+    if (profile.role !== 'DISTRIBUTOR' || profile.status !== true || !UUID.test(String(profile.organization_id))) {
+      fail('Chỉ nhà phân phối nhận hàng đang hoạt động mới được quản lý QR', 403)
+    }
+    if (!UUID.test(String(scope.transportId))) fail('Không tìm thấy chuyến vận chuyển', 404)
+    return repo.receivingQr(profile.id, scope.transportId, action, action === 'REVOKE' ? reason(input) : null)
   }
   async function proof(lot) {
     const record = await repo.proof(lot.blockchain_event_id)
@@ -61,12 +85,13 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
           const value = scalar(version.details?.[key])
           if (value !== null) details[key] = value
         }
-        return { type: text(version.log_type), date: text(version.log_date), details, blockchainStatus: ['SUCCESS', 'PENDING', 'FAILED'].includes(log.recordedStatus) ? log.recordedStatus : null }
+        return { type: text(version.log_type), date: text(version.log_date), imageUrl: imageUrl(version.image_url), details, blockchainStatus: ['SUCCESS', 'PENDING', 'FAILED'].includes(log.recordedStatus) ? log.recordedStatus : null }
       })
     const publicTransports = transports.filter(trip => trip.harvest_lot_id === lot.id).map(trip => ({
       code: text(trip.transport_code), date: text(trip.transport_date), status: text(trip.status), quantity: scalar(trip.quantity),
       recipientName: text(trip.recipient?.name),
       events: (trip.events ?? []).map(event => ({ type: text(event.event_type), date: text(event.occurred_at),
+        imageUrl: imageUrl(event.payload?.deliveryReport?.proofImageUrl),
         temperature: scalar(event.payload?.temperature), trackingStatus: text(event.payload?.trackingStatus), blockchainStatus: text(event.blockchain_status) })),
     }))
     // Re-read publication after assembling data: do not serve a cached active dossier after revocation.
@@ -81,6 +106,10 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     const last = await repo.findQr(code)
     return last?.status === 'ACTIVE' ? result : { status: 'REVOKED' }
   }
-  return { get, issue, revoke, publicTrace }
+  return { get, issue, revoke, publicTrace,
+    getReceiving: (profile, scope) => receiving(profile, scope, 'GET'),
+    issueReceiving: (profile, scope) => receiving(profile, scope, 'ISSUE'),
+    revokeReceiving: (profile, scope, input) => receiving(profile, scope, 'REVOKE', input),
+  }
 }
 module.exports = { createTraceService }

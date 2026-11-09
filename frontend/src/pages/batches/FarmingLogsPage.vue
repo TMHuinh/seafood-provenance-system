@@ -10,6 +10,7 @@ import {
 import { usePondsStore } from '../../stores/ponds.store'
 import { usePondBatchesStore } from '../../stores/pond-batches.store'
 import { useFarmingLogsStore } from '../../stores/farming-logs.store'
+import { api, ApiError } from '../../api/client'
 import { FARMING_LOG_TYPE_LABELS, SPECIES_LABELS, type BatchItem, type FarmingLog, type FarmingLogHistoryResponse, type FarmingLogInput, type FarmingLogType, type FarmingLogVerifyResponse } from '../../types'
 
 const route = useRoute(); const router = useRouter(); const logStore = useFarmingLogsStore(); const pondsStore = usePondsStore(); const batchesStore = usePondBatchesStore()
@@ -18,6 +19,7 @@ const farmId = computed(() => String(route.params.farmId)); const pondId = compu
 const pondName = ref(''); const batchInfo = ref<BatchItem | null>(null); const error = ref('')
 let contextVersion = 0; let historyVersion = 0; let verifyVersion = 0
 const showForm = ref(false); const formError = ref(''); const success = ref('')
+const imageUploading = ref(false); const imageError = ref('')
 const editingId = ref<string | null>(null)
 const editingMode = ref<'DRAFT' | 'CORRECTION'>('DRAFT'); const historyResult = ref<FarmingLogHistoryResponse | null>(null)
 const verifyResults = ref<FarmingLogVerifyResponse | null>(null); const verifyError = ref(''); const verifiedStatus = ref<Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'>>({})
@@ -96,7 +98,36 @@ function toDatetimeLocal(value: string | Date | null | undefined) {
 
 function shortHash(value: string) { return value.length <= 18 ? value : `${value.slice(0, 10)}…${value.slice(-6)}` }
 function detailsRows(log: FarmingLog) { return Object.entries(log.details ?? {}).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: String(v) })) }
-function reset() { Object.assign(form, { logType: 'FEEDING', logDate: '', feedType: '', feedAmount: '', temperature: '', salinity: '', ph: '', dissolvedOxygen: '', medicineName: '', dose: '', mortalityCount: '', cause: '', description: '', imageUrl: '', correctionReason: '' }); formError.value = '' }
+function reset() { Object.assign(form, { logType: 'FEEDING', logDate: '', feedType: '', feedAmount: '', temperature: '', salinity: '', ph: '', dissolvedOxygen: '', medicineName: '', dose: '', mortalityCount: '', cause: '', description: '', imageUrl: '', correctionReason: '' }); formError.value = ''; imageError.value = ''; imageUploading.value = false }
+
+async function uploadImage(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  imageError.value = ''
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    imageError.value = 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP'
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    imageError.value = 'Ảnh không được lớn hơn 10 MB'
+    return
+  }
+
+  const context = contextVersion
+  const payload = new FormData()
+  payload.append('image', file)
+  imageUploading.value = true
+  try {
+    const result = await api.upload<{ success: boolean; imageUrl: string }>('/farming-logs/images', payload)
+    if (context === contextVersion) form.imageUrl = result.imageUrl
+  } catch (error) {
+    if (context === contextVersion) imageError.value = error instanceof ApiError ? error.message : 'Không thể tải ảnh lên. Vui lòng thử lại.'
+  } finally {
+    if (context === contextVersion) imageUploading.value = false
+  }
+}
 
 function openCreate() { if (saving.value || loading.value || !batchInfo.value) return; editingId.value = null; reset(); showForm.value = true }
 function openEdit(log: FarmingLog) {
@@ -145,7 +176,7 @@ function validate(): string {
 }
 
 async function submit() {
-  if (saving.value || loading.value) return
+  if (saving.value || loading.value || imageUploading.value) return
   const version = contextVersion
   formError.value = ''; success.value = ''
   if (!form.logDate) { formError.value = 'Vui lòng chọn thời gian ghi nhật ký'; return }
@@ -316,6 +347,10 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
                     <span class="detail-value">{{ row.value }}</span>
                   </div>
                 </div>
+                <a v-if="log.image_url" class="log-image-link" :href="log.image_url" target="_blank" rel="noopener noreferrer">
+                  <img class="log-image" :src="log.image_url" alt="Ảnh minh họa nhật ký nuôi" loading="lazy" />
+                  <span>Xem ảnh nhật ký</span>
+                </a>
 
                 <div v-if="log.data_hash" class="hash-block">
                   <div class="hash-line"><span>DATA:</span> {{ shortHash(log.data_hash) }}</div>
@@ -348,7 +383,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     </va-inner-loading>
 
     <!-- Modal: Ghi Nhật Ký -->
-    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions size="large" overlay-opacity="0.5">
+    <va-modal v-model="showForm" :no-dismiss="saving || imageUploading" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header>
         <h2 class="modal-title">{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2>
       </template>
@@ -384,14 +419,24 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
           <va-textarea v-model="form.description" label="Ghi chú" class="col-span-2" />
         </template>
 
-        <va-input v-model="form.imageUrl" label="Hình ảnh (URL)" placeholder="https://..." class="col-span-2" />
+        <div class="image-upload-field col-span-2">
+          <label for="farming-log-image">Hình ảnh (tải từ máy)</label>
+          <input id="farming-log-image" type="file" accept="image/jpeg,image/png,image/webp" :disabled="imageUploading || saving" @change="uploadImage" />
+          <p class="image-upload-hint">JPG, PNG hoặc WebP; tối đa 10 MB. Ảnh được lưu trên Cloudinary.</p>
+          <p v-if="imageUploading" class="image-upload-hint" role="status">Đang tải ảnh lên Cloudinary…</p>
+          <va-alert v-if="imageError" color="danger" outline size="small">{{ imageError }}</va-alert>
+          <div v-if="form.imageUrl" class="image-preview-wrap">
+            <img class="image-preview" :src="form.imageUrl" alt="Ảnh đã tải lên cho nhật ký" />
+            <va-button preset="secondary" size="small" type="button" :disabled="imageUploading || saving" @click="form.imageUrl = ''; imageError = ''">Gỡ ảnh</va-button>
+          </div>
+        </div>
         <va-textarea v-if="editingId && editingMode === 'CORRECTION'" v-model="form.correctionReason" label="Lý do đính chính *" placeholder="Ví dụ: Nhập nhầm số lượng thức ăn" class="col-span-2" required />
 
         <va-alert v-if="formError" color="danger" outline size="small" class="col-span-2 mt-2">{{ formError }}</va-alert>
 
         <div class="form-actions col-span-2">
-          <va-button preset="secondary" type="button" color="secondary" @click="close">Hủy bỏ</va-button>
-          <va-button type="submit" :loading="saving" color="primary">{{ editingId ? 'Lưu thay đổi' : 'Hoàn tất ghi' }}</va-button>
+          <va-button preset="secondary" type="button" color="secondary" :disabled="imageUploading" @click="close">Hủy bỏ</va-button>
+          <va-button type="submit" :loading="saving" :disabled="imageUploading" color="primary">{{ editingId ? 'Lưu thay đổi' : 'Hoàn tất ghi' }}</va-button>
         </div>
       </form>
     </va-modal>
@@ -552,6 +597,14 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 
 .issues-list { list-style: none; padding: 0; margin: 0.5rem 0; color: var(--va-danger); font-size: 0.85rem; }
 .issues-list li { display: flex; align-items: flex-start; margin-bottom: 0.25rem; }
+.image-upload-field { display: grid; gap: 0.5rem; }
+.image-upload-field > label { color: #475569; font-size: 0.9rem; font-weight: 600; }
+.image-upload-field input[type="file"] { max-width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 8px; }
+.image-upload-hint { margin: 0; color: #64748b; font-size: 0.82rem; }
+.image-preview-wrap { display: flex; align-items: flex-start; gap: 0.75rem; }
+.image-preview { width: 132px; height: 96px; border-radius: 8px; object-fit: cover; border: 1px solid #e2e8f0; }
+.log-image-link { display: inline-flex; flex-direction: column; gap: 0.35rem; margin: 0.25rem 0 1rem; color: var(--va-primary); font-size: 0.82rem; }
+.log-image { width: 100%; max-width: 280px; max-height: 180px; border-radius: 8px; object-fit: cover; }
 .text-warning { color: var(--va-warning) !important; }
 
 .border-success { border-color: var(--va-success) !important; }

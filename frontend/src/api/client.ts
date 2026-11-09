@@ -53,8 +53,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const sessionCurrent = captureSession()
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
   }
+  const multipart = typeof FormData !== 'undefined' && body instanceof FormData
+  if (!multipart) headers['Content-Type'] = 'application/json'
 
   if (auth) {
     const token = getToken()
@@ -70,7 +71,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     response = await fetch(`${BASE_API_URL}/api${urlPath}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : multipart ? body as FormData : JSON.stringify(body),
     })
   } catch {
     if (auth && !sessionCurrent()) throw new StaleRequestError()
@@ -98,6 +99,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export const api = {
   get: <T>(path: string, auth = true) => request<T>(path, { method: 'GET', auth }),
   post: <T>(path: string, body?: unknown, auth = true) =>
+    request<T>(path, { method: 'POST', body, auth }),
+  upload: <T>(path: string, body: FormData, auth = true) =>
     request<T>(path, { method: 'POST', body, auth }),
   patch: <T>(path: string, body?: unknown, auth = true) =>
     request<T>(path, { method: 'PATCH', body, auth }),

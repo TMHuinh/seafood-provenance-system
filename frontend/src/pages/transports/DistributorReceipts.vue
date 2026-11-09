@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { VaAlert, VaBadge, VaButton, VaCard, VaCardContent, VaInnerLoading } from 'vuestic-ui'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
+import LotQrPanel from '../../components/LotQrPanel.vue'
 import { api } from '../../api/client'
 import type { LotTransport, TransportEvent } from '../../types'
 
@@ -105,6 +106,8 @@ onUnmounted(() => { active = false; ++loadVersion; if (refreshTimer) window.clea
             <p>{{ reportText(trip) || 'Vui lòng kiểm tra hàng thực tế rồi xác nhận đã nhận.' }}</p>
           </div>
           <va-button v-if="trip.status === 'IN_TRANSIT' && trip.delivery_reported_at" color="primary" :loading="busyId === trip.id" :disabled="Boolean(busyId)" @click="confirmReceipt(trip)">Xác nhận đã nhận hàng</va-button>
+          <LotQrPanel v-if="trip.status === 'DELIVERED' && trip.lot" :api-path="`/transports/${trip.id}/qr`" :lot-code="trip.lot.lot_code" />
+          <p v-else-if="trip.status !== 'CANCELLED'" class="meta">Bạn có thể phát hành QR cho lô sau khi xác nhận đã nhận hàng.</p>
           <ol v-if="trip.events?.length" class="event-list">
             <li v-for="event in trip.events" :key="event.id"><strong>{{ eventLabel(event) }}</strong><small>{{ eventTime(event.occurred_at) }} · {{ event.blockchain_status === 'SUCCESS' ? 'Đã xác nhận blockchain' : event.blockchain_status === 'FAILED' ? 'Sẽ thử lại blockchain' : 'Đang chờ blockchain' }}</small><small v-if="eventSummary(event)">{{ eventSummary(event) }}</small></li>
           </ol>

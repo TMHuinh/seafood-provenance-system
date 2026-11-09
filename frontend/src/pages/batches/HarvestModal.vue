@@ -198,7 +198,7 @@ onMounted(load)
             <p v-if="lot.blockchain" class="hash">Hash dữ liệu: {{ lot.blockchain.data_hash }}</p>
             <p v-if="lot.blockchain?.transaction_hash" class="hash">Giao dịch: {{ lot.blockchain.transaction_hash }}</p>
             <va-button size="small" preset="secondary" icon="local_shipping" @click="openTransport(lot)">Vận chuyển lô</va-button>
-            <LotQrPanel :farm-id="farmId" :pond-id="pondId" :batch-id="batch.id" :lot-id="lot.id" :lot-code="lot.lot_code" />
+            <LotQrPanel :api-path="`/farms/${farmId}/ponds/${pondId}/batches/${batch.id}/lots/${lot.id}/qr`" :lot-code="lot.lot_code" />
           </va-card-content>
         </va-card>
         <p v-if="!loading && !error && !lots.length">Chưa có lô hàng từ thu hoạch.</p>

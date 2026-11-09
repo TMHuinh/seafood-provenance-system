@@ -132,3 +132,54 @@ UP sẽ bắt đầu lại từ phiên bản 1, khiến các mã sự kiện c�
 có thể trùng với mã đã ghi. Cần phục hồi lịch sử và số phiên bản phù hợp trước
 khi bật lại chức năng đính chính. Phần DOWN không thay đổi lịch sử migration
 của Supabase CLI.
+
+## QR do nhà phân phối phát hành
+
+Sau migration `202611070001_lot_trace_codes.sql`, áp dụng
+`202611080001_distributor_qr.sql` trước khi đưa backend/frontend mới vào sử dụng.
+Chỉ chạy trên database thật sau khi được phê duyệt riêng. Migration bổ sung
+người/tổ chức/chuyến phát hành và hai RPC chỉ dành cho `service_role`:
+`manage_received_lot_qr` và `revoke_legacy_lot_qr`. Quyền ghi trực tiếp bảng
+`lot_trace_codes` của `service_role` bị thu hồi để backend cũ không phát hành
+QR theo quyền chủ cơ sở.
+
+Nhà phân phối chỉ xem/phát hành QR khi đúng tổ chức nhận, tài khoản và tổ chức
+đang hoạt động, chuyến đã DELIVERED và có sự kiện xác nhận của bên nhận khớp
+tổ chức. Báo giao của người vận chuyển hoặc trạng thái DELIVERED từ luồng cũ
+không đủ điều kiện. Không tự gán hay tạo lại bằng chứng xác nhận cho dữ liệu cũ.
+
+Mỗi lô có một mã dùng chung; tổ chức đầu tiên phát hành được lưu cố định.
+Các tổ chức khác đã xác nhận nhận cùng lô có thể tải mã, nhưng chỉ tổ chức
+phát hành được thu hồi. Thu hồi ảnh hưởng toàn bộ lô và không thể phát hành lại.
+QR cũ giữ nguyên mã/trạng thái và không tự gán tổ chức phát hành; chủ cơ sở
+nguồn vẫn được thu hồi những mã cũ này. Chủ cơ sở không phát hành được mã mới.
+Trang nhận hàng hiển thị chức năng QR sau khi xác nhận; trang thu hoạch giữ
+quyền xem/tải của chủ cơ sở.
+
+Kiểm thử RPC trong một database PostgreSQL **rỗng, dành riêng để hủy sau test**,
+có tên `qr_disposable_<tên_duy_nhất>` và các role test `anon`, `authenticated`,
+`service_role` đã được cấp trước:
+
+```sh
+psql -X --dbname=qr_disposable_<tên_duy_nhất> -f supabase/tests/distributor_qr.sql
+```
+
+Script từ chối database khác tên hoặc có sẵn bảng public, tạo fixture tối thiểu
+và chạy hai migration QR thật. Script không kiểm chứng toàn bộ chuỗi migration
+của ứng dụng. Không chạy trên database dùng chung, staging hay production.
+Sau khi script SQL thành công, chạy kiểm thử hai kết nối đồng thời trên cùng
+database fixture:
+
+```sh
+bash supabase/tests/distributor_qr-concurrency.sh qr_disposable_<tên_duy_nhất>
+```
+
+Harness yêu cầu marker của fixture và vùng UUID test chưa được sử dụng; kiểm
+tra hai bên phát hành cùng lô, rồi thu hồi song song với yêu cầu phát hành lại.
+Harness để lại fixture và log trong `/tmp` để kiểm tra; không xóa/reset dữ liệu.
+Kết quả test tuần tự không thay thế kiểm thử concurrency. Nếu chưa có môi trường
+test phù hợp, ghi rõ các kiểm tra SQL/concurrency chưa chạy.
+
+Khi quay lui ứng dụng, giữ các cột và mã hiện có, tắt thao tác phát hành trước.
+Không cấp lại quyền ghi trực tiếp hoặc đưa luồng chủ cơ sở phát hành trở lại
+như cách hoàn tác tự động. Không xóa bảng/cột, đổi mã hay thu hồi hàng loạt QR.

@@ -38,7 +38,7 @@ function createTraceRepository(db) {
   })
   async function logs(batchId, before) {
     const logs = await bounded(db.from('farming_logs')
-      .select('batch_id,lifecycle_status,current_version_id,version:farming_log_versions!farming_logs_current_version_id_fkey(id,status,log_type,log_date,details,blockchain_event_id)')
+      .select('batch_id,lifecycle_status,current_version_id,version:farming_log_versions!farming_logs_current_version_id_fkey(id,status,log_type,log_date,details,image_url,blockchain_event_id)')
       .eq('batch_id',batchId).eq('lifecycle_status','CONFIRMED').lt('log_date',before).order('log_date'),500)
     const ids = logs.map(log => log.version?.blockchain_event_id).filter(Boolean)
     if (!ids.length) return logs

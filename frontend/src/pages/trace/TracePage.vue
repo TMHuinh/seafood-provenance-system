@@ -5,6 +5,7 @@ import { VaAlert, VaButton } from 'vuestic-ui'
 import { api, ApiError } from '../../api/client'
 import { FARMING_LOG_TYPE_LABELS, SPECIES_LABELS } from '../../types'
 import type { PublicTraceResponse } from '../../types/trace'
+import TraceImage from './TraceImage.vue'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { summarizeLogs, filterLogs } from './trace-logs'
 
@@ -364,6 +365,7 @@ onBeforeUnmount(() => {
                 <dd>{{ detail.value }}</dd>
               </div>
             </dl>
+            <TraceImage v-if="log.imageUrl" :src="log.imageUrl" :alt="`Ảnh nhật ký ${labels[log.type] || log.type} ngày ${date(log.date)}`" caption="Ảnh nhật ký nuôi" />
             <p v-if="!technicalDetails(log.details).length" class="muted">
               Chưa có chỉ số kỹ thuật công khai.
             </p>
@@ -429,6 +431,7 @@ onBeforeUnmount(() => {
               <p v-if="event.trackingStatus">
                 {{ labels[event.trackingStatus] || event.trackingStatus }}
               </p>
+              <TraceImage v-if="event.imageUrl" :src="event.imageUrl" :alt="`Ảnh bằng chứng giao hàng của chuyến ${trip.code}`" caption="Ảnh bằng chứng giao hàng" />
               <p v-if="event.temperature != null">Nhiệt độ: {{ event.temperature }} °C</p>
               <p class="muted">
                 Blockchain:

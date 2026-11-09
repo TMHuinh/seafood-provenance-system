@@ -3,6 +3,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 function fail(message, status) { throw Object.assign(new Error(message), { status }) }
 function text(value) { return typeof value === 'string' ? value.slice(0, 500) : null }
 function scalar(value) { return typeof value === 'number' && Number.isFinite(value) ? value : text(value) }
+function imageUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'res.cloudinary.com' &&
+      !url.username && !url.password && !url.port && /^\/[^/]+\/image\/upload\/.+/.test(url.pathname)
+      ? url.href : null
+  } catch { return null }
+}
 const DETAIL_KEYS = {
   FEEDING: ['feedType', 'feedAmount'], MEDICINE: ['medicineName', 'dose'],
   WATER_QUALITY: ['temperature', 'salinity', 'ph', 'dissolvedOxygen'],
@@ -76,12 +85,13 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
           const value = scalar(version.details?.[key])
           if (value !== null) details[key] = value
         }
-        return { type: text(version.log_type), date: text(version.log_date), details, blockchainStatus: ['SUCCESS', 'PENDING', 'FAILED'].includes(log.recordedStatus) ? log.recordedStatus : null }
+        return { type: text(version.log_type), date: text(version.log_date), imageUrl: imageUrl(version.image_url), details, blockchainStatus: ['SUCCESS', 'PENDING', 'FAILED'].includes(log.recordedStatus) ? log.recordedStatus : null }
       })
     const publicTransports = transports.filter(trip => trip.harvest_lot_id === lot.id).map(trip => ({
       code: text(trip.transport_code), date: text(trip.transport_date), status: text(trip.status), quantity: scalar(trip.quantity),
       recipientName: text(trip.recipient?.name),
       events: (trip.events ?? []).map(event => ({ type: text(event.event_type), date: text(event.occurred_at),
+        imageUrl: imageUrl(event.payload?.deliveryReport?.proofImageUrl),
         temperature: scalar(event.payload?.temperature), trackingStatus: text(event.payload?.trackingStatus), blockchainStatus: text(event.blockchain_status) })),
     }))
     // Re-read publication after assembling data: do not serve a cached active dossier after revocation.

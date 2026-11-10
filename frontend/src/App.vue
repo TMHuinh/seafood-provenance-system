@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { AUTH_UNAUTHORIZED_EVENT, TOKEN_KEY } from './api/client'
@@ -9,6 +9,12 @@ import { useAuthStore } from './stores/auth.store'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const sidebarCollapsed = ref(false)
+try { sidebarCollapsed.value = localStorage.getItem('seafood_sidebar_collapsed') === 'true' } catch { /* Storage may be unavailable in private browsing. */ }
+watch(sidebarCollapsed, (collapsed) => {
+  try { localStorage.setItem('seafood_sidebar_collapsed', String(collapsed)) } catch { /* Keep the toggle usable without persistent storage. */ }
+})
+const workspace = computed(() => authStore.isAuthenticated && !['trace', 'login', 'register'].includes(String(route.name)))
 
 function handleUnauthorized() {
   const redirect = route.fullPath
@@ -40,9 +46,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
-    <AppNavbar v-if="route.name !== 'trace'" />
-    <RouterView :key="authStore.token ?? 'guest'" />
+  <div class="app-shell" :class="{ 'is-workspace': workspace }" :style="{ '--sidebar-width': sidebarCollapsed ? '80px' : '240px' }">
+    <a class="skip-link" href="#main-content">Đến nội dung chính</a>
+    <AppNavbar v-if="route.name !== 'trace'" :collapsed="sidebarCollapsed" @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
+    <div id="main-content" class="workspace-content" tabindex="-1">
+      <RouterView :key="authStore.token ?? 'guest'" />
+    </div>
   </div>
 </template>
 

@@ -44,9 +44,9 @@ const roleLabel = computed(() => {
 
 const role = computed(() => authStore.user?.role ?? 'FARMER')
 const roleCopy = computed(() => ({
-  FARMER: { eyebrow: 'KHÔNG GIAN NGƯỜI NUÔI', title: 'Quản lý vùng nuôi, theo dõi từng vụ mùa', description: 'Từ cơ sở, ao nuôi đến thu hoạch và vận chuyển — mọi thông tin quan trọng được tập trung tại đây.', action: 'Mở cơ sở nuôi', actionIcon: 'domain', tableTitle: 'Vụ nuôi gần đây', tableDescription: 'Theo dõi trạng thái và hồ sơ nguồn gốc của các vụ nuôi.' },
-  TRANSPORTER: { eyebrow: 'KHÔNG GIAN NGƯỜI VẬN CHUYỂN', title: 'Điều phối những chuyến hàng của bạn', description: 'Nhận yêu cầu vận chuyển, cập nhật thông tin phương tiện và theo dõi lô hàng đến điểm giao.', action: 'Mở điều phối', actionIcon: 'local_shipping', tableTitle: 'Tổng quan vận chuyển', tableDescription: 'Các yêu cầu chờ nhận và chuyến đang thực hiện.' },
-  DISTRIBUTOR: { eyebrow: 'KHÔNG GIAN ĐỐI TÁC PHÂN PHỐI', title: 'Tra cứu hồ sơ nguồn gốc thủy sản', description: 'Xem thông tin lô hàng được chia sẻ với tổ chức của bạn và đối chiếu lịch sử truy xuất.', action: 'Xem vụ nuôi', actionIcon: 'inventory_2', tableTitle: 'Vụ nuôi có thể tra cứu', tableDescription: 'Thông tin truy xuất hiện có trong phạm vi tổ chức.' },
+  FARMER: { eyebrow: 'KHÔNG GIAN NGƯỜI NUÔI', title: 'Tổng quan vùng nuôi', description: 'Từ cơ sở, ao nuôi đến thu hoạch và vận chuyển — mọi thông tin quan trọng được tập trung tại đây.', action: 'Mở cơ sở nuôi', actionIcon: 'domain', tableTitle: 'Vụ nuôi gần đây', tableDescription: 'Theo dõi trạng thái và hồ sơ nguồn gốc của các vụ nuôi.' },
+  TRANSPORTER: { eyebrow: 'KHÔNG GIAN NGƯỜI VẬN CHUYỂN', title: 'Tổng quan vận chuyển', description: 'Nhận yêu cầu vận chuyển, cập nhật thông tin phương tiện và theo dõi lô hàng đến điểm giao.', action: 'Mở điều phối', actionIcon: 'local_shipping', tableTitle: 'Tổng quan vận chuyển', tableDescription: 'Các yêu cầu chờ nhận và chuyến đang thực hiện.' },
+  DISTRIBUTOR: { eyebrow: 'KHÔNG GIAN ĐỐI TÁC PHÂN PHỐI', title: 'Hồ sơ nguồn gốc', description: 'Xem thông tin lô hàng được chia sẻ với tổ chức của bạn và đối chiếu lịch sử truy xuất.', action: 'Xem vụ nuôi', actionIcon: 'inventory_2', tableTitle: 'Vụ nuôi có thể tra cứu', tableDescription: 'Thông tin truy xuất hiện có trong phạm vi tổ chức.' },
   ADMIN: { eyebrow: 'TRUNG TÂM QUẢN TRỊ', title: 'Tổng quan hoạt động hệ thống', description: 'Theo dõi vụ nuôi, trạng thái sản xuất và hoạt động truy xuất trên toàn nền tảng.', action: 'Xem vụ nuôi', actionIcon: 'admin_panel_settings', tableTitle: 'Vụ nuôi mới nhất', tableDescription: 'Tình hình các vụ nuôi được ghi nhận trên nền tảng.' },
 }[role.value]))
 
@@ -294,10 +294,10 @@ onMounted(async () => {
           <div class="workspace-decoration" aria-hidden="true"></div>
         </header>
 
-        <section class="home-stats" aria-label="Chỉ số tổng quan">
+        <section class="home-stats" aria-label="Chỉ số tổng quan" :aria-busy="role === 'TRANSPORTER' ? loadingTransportOverview : loadingBatches">
           <article v-for="stat in homeStats" :key="stat.label" class="home-stat-card">
             <span class="home-stat-icon" :class="`tone-${stat.tone}`"><va-icon :name="stat.icon" /></span>
-            <div><p>{{ stat.label }}</p><strong>{{ stat.value }}</strong><small>{{ stat.hint }}</small></div>
+            <div><p>{{ stat.label }}</p><strong>{{ (role === 'TRANSPORTER' ? loadingTransportOverview || transportOverviewError : loadingBatches || batchesError) ? '—' : stat.value }}</strong><small>{{ stat.hint }}</small></div>
           </article>
         </section>
 
@@ -306,7 +306,7 @@ onMounted(async () => {
             <div><p class="overview-kicker">ĐIỀU PHỐI</p><h2>{{ roleCopy.tableTitle }}</h2><p>{{ roleCopy.tableDescription }}</p></div>
             <va-button preset="secondary" @click="router.push({ name: 'transports' })">Mở bảng điều phối<va-icon name="arrow_forward" size="small" class="ml-1" /></va-button>
           </div>
-          <va-alert v-if="transportOverviewError" color="danger" class="mb-4">{{ transportOverviewError }}</va-alert>
+          <va-alert v-if="transportOverviewError" color="danger" class="mb-4" role="alert">{{ transportOverviewError }}</va-alert>
           <va-inner-loading :loading="loadingTransportOverview">
             <div class="transport-preview-grid">
               <div class="transport-preview-column">
@@ -327,8 +327,17 @@ onMounted(async () => {
           </va-inner-loading>
         </section>
 
+        <section v-if="role !== 'TRANSPORTER' && summary && summary.total > 0 && !loadingBatches && !batchesError" class="production-overview" aria-labelledby="production-title">
+          <div><p class="overview-kicker">TIẾN ĐỘ SẢN XUẤT</p><h2 id="production-title">Phân bố trạng thái vụ nuôi</h2><p>{{ search || status ? 'Theo bộ lọc hiện tại' : 'Trong phạm vi dữ liệu bạn được xem' }}</p></div>
+          <dl class="production-bars">
+            <div v-for="(value, key) in summary.byStatus" :key="key">
+              <dt>{{ STATUS_LABELS[key as keyof typeof STATUS_LABELS] || key }}</dt>
+              <dd><meter :value="value" :max="summary.total" :aria-label="`${STATUS_LABELS[key as keyof typeof STATUS_LABELS] || key}: ${value} trên ${summary.total} vụ nuôi`">{{ value }} / {{ summary.total }}</meter><span>{{ formatNumber(value) }}</span></dd>
+            </div>
+          </dl>
+        </section>
         <!-- Hồ sơ lô phù hợp theo quyền của vai trò -->
-        <div v-else id="lot-directory" class="table-card-promax">
+        <div v-if="role !== 'TRANSPORTER'" id="lot-directory" class="table-card-promax">
           <div class="table-header-promax">
             <div>
               <p class="table-kicker">{{ roleCopy.eyebrow }}</p>
@@ -347,7 +356,7 @@ onMounted(async () => {
           </div>
 
           <CollectionToolbar :query="search" :status="status" :statuses="Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))" :total="count" :page="page" :page-size="pageSize" :loading="loadingBatches" label="vụ nuôi" @update:query="applyFilters($event, status)" @update:status="applyFilters(search, $event)" @update:page="setPage" />
-          <va-alert v-if="batchesError" color="danger" class="mb-4">
+          <va-alert v-if="batchesError" color="danger" class="mb-4" role="alert">
             {{ batchesError }}
           </va-alert>
 
@@ -447,7 +456,7 @@ onMounted(async () => {
             <p>Đang truy xuất mạng lưới chuỗi khối...</p>
           </div>
 
-          <va-alert v-else-if="detailError" color="danger">{{ detailError }} <va-button v-if="selectedBatch" preset="secondary" @click="openDetail(selectedBatch)">Thử lại</va-button></va-alert>
+          <va-alert v-else-if="detailError" color="danger" role="alert">{{ detailError }} <va-button v-if="selectedBatch" preset="secondary" @click="openDetail(selectedBatch)">Thử lại</va-button></va-alert>
           <div v-else-if="detail" class="detail-grid-promax">
             <!-- Cột trái: Thông tin -->
             <div class="col-info">
@@ -574,7 +583,7 @@ onMounted(async () => {
 .text-right { text-align: right !important; }
 .fw-600 { font-weight: 600 !important; }
 .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; }
-.text-primary { color: #0e7490; }
+.text-primary { color: var(--app-primary); }
 
 /* Colors */
 .bg-success { background-color: #10b981; }
@@ -649,7 +658,7 @@ onMounted(async () => {
 .hero-title {
   font-size: 4rem;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--app-surface);
   line-height: 1.15;
   margin-bottom: 1.5rem;
   letter-spacing: -0.03em;
@@ -664,7 +673,7 @@ onMounted(async () => {
 
 .hero-desc {
   font-size: 1.15rem;
-  color: #94a3b8;
+  color: var(--app-muted);
   line-height: 1.6;
   max-width: 680px;
   margin: 0 auto 3rem;
@@ -678,8 +687,8 @@ onMounted(async () => {
 }
 
 .btn-promax-primary {
-  --va-button-color: #0e7490 !important;
-  background: linear-gradient(135deg, #0e7490, #0891b2) !important;
+  --va-button-color: var(--app-primary) !important;
+  background: linear-gradient(135deg, var(--app-primary), #0891b2) !important;
   border-radius: 12px !important;
   font-weight: 600 !important;
   box-shadow: 0 8px 24px rgba(14, 116, 144, 0.3) !important;
@@ -727,17 +736,17 @@ onMounted(async () => {
 .section-title {
   font-size: 2.25rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--app-ink);
   letter-spacing: -0.02em;
   margin-bottom: 0.75rem;
 }
 
 .text-highlight {
-  color: #0e7490;
+  color: var(--app-primary);
 }
 
 .section-subtitle {
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 1.1rem;
 }
 
@@ -774,13 +783,13 @@ onMounted(async () => {
 .step-card h3 {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin-bottom: 0.75rem;
 }
 
 .step-card p {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--app-muted);
   line-height: 1.6;
 }
 
@@ -817,7 +826,7 @@ onMounted(async () => {
   max-width: 1240px;
   margin: 2rem auto;
   padding: 0 2rem;
-  background: #f8fafc;
+  background: var(--app-canvas);
   min-height: 100vh;
 }
 
@@ -843,7 +852,7 @@ onMounted(async () => {
   width: 56px;
   height: 56px;
   border-radius: 18px;
-  background: linear-gradient(135deg, #0f172a, #334155);
+  background: linear-gradient(135deg, var(--app-ink), #334155);
   color: white;
   display: flex;
   align-items: center;
@@ -855,7 +864,7 @@ onMounted(async () => {
 
 .greeting-text {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--app-muted);
   margin: 0;
   font-weight: 500;
 }
@@ -863,7 +872,7 @@ onMounted(async () => {
 .user-name {
   font-size: 1.5rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--app-ink);
   margin: 0.1rem 0 0.3rem;
   letter-spacing: -0.01em;
 }
@@ -876,25 +885,25 @@ onMounted(async () => {
 
 .role-badge-promax {
   background: #f1f5f9;
-  color: #475569;
+  color: var(--app-muted);
   padding: 3px 10px;
   border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
 }
 
 .org-name-promax {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #0e7490;
+  color: var(--app-primary);
   font-size: 0.85rem;
   font-weight: 600;
 }
 
 .btn-create-batch {
-  --va-button-color: #0f172a !important;
+  --va-button-color: var(--app-ink) !important;
   border-radius: 12px !important;
   font-weight: 600 !important;
 }
@@ -936,7 +945,7 @@ onMounted(async () => {
 
 .bg-slate {
   background: #f1f5f9;
-  color: #475569;
+  color: var(--app-muted);
 }
 
 .bg-blue {
@@ -946,7 +955,7 @@ onMounted(async () => {
 
 .bg-teal {
   background: #f0fdfa;
-  color: #14b8a6;
+  color: var(--app-primary);
 }
 
 .bg-amber {
@@ -956,7 +965,7 @@ onMounted(async () => {
 
 .stat-title {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--app-muted);
   margin: 0 0 0.25rem;
   font-weight: 500;
 }
@@ -964,7 +973,7 @@ onMounted(async () => {
 .stat-number {
   font-size: 1.75rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--app-ink);
   margin: 0;
   line-height: 1.2;
 }
@@ -990,13 +999,13 @@ onMounted(async () => {
 .th-title {
   font-size: 1.25rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--app-ink);
   margin: 0 0 0.25rem;
 }
 
 .th-subtitle {
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--app-muted);
   margin: 0;
 }
 
@@ -1022,11 +1031,11 @@ onMounted(async () => {
   padding: 1.2rem 1.25rem;
   font-size: 0.75rem;
   font-weight: 700;
-  color: #64748b;
+  color: var(--app-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--app-line);
+  background: var(--app-canvas);
 }
 
 .table-promax td {
@@ -1040,7 +1049,7 @@ onMounted(async () => {
 }
 
 .table-promax tbody tr:hover {
-  background: #f8fafc;
+  background: var(--app-canvas);
 }
 
 .badge-code {
@@ -1051,24 +1060,24 @@ onMounted(async () => {
   border-radius: 8px;
   font-size: 0.85rem;
   font-weight: 500;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
 }
 
 .cell-title {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--app-ink);
   font-size: 0.95rem;
 }
 
 .cell-sub {
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--app-muted);
   margin-top: 2px;
 }
 
 .badge-species {
   background: #f0fdfa;
-  color: #0f766e;
+  color: var(--app-primary);
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 0.85rem;
@@ -1091,8 +1100,8 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   background: white;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
+  border: 1px solid var(--app-line);
+  color: var(--app-ink);
   padding: 8px 14px;
   border-radius: 10px;
   font-size: 0.85rem;
@@ -1103,7 +1112,7 @@ onMounted(async () => {
 }
 
 .btn-action-promax:hover {
-  background: #f8fafc;
+  background: var(--app-canvas);
   border-color: #cbd5e1;
 }
 
@@ -1122,12 +1131,12 @@ onMounted(async () => {
 .empty-state-promax h4 {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin-bottom: 0.5rem;
 }
 
 .empty-state-promax p {
-  color: #64748b;
+  color: var(--app-muted);
 }
 
 /* ==========================================================
@@ -1152,18 +1161,18 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: flex-start;
   padding: 1.5rem 2rem;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--app-line);
+  background: var(--app-canvas);
   flex-shrink: 0; /* Không bao giờ bị co lại khi nội dung dài */
   z-index: 10;
 }
 
 .mh-left { display: flex; gap: 1rem; align-items: center; }
-.mh-icon { width: 48px; height: 48px; background: white; border: 1px solid #e2e8f0; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #0e7490; }
-.mh-title { font-size: 1.25rem; font-weight: 800; color: #0f172a; margin: 0 0 0.25rem; }
-.mh-subtitle { font-size: 0.9rem; color: #64748b; margin: 0; }
-.btn-close-modal { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 4px; border-radius: 8px; transition: background 0.2s; }
-.btn-close-modal:hover { background: #e2e8f0; color: #0f172a; }
+.mh-icon { width: 48px; height: 48px; background: white; border: 1px solid var(--app-line); border-radius: 14px; display: flex; align-items: center; justify-content: center; color: var(--app-primary); }
+.mh-title { font-size: 1.25rem; font-weight: 800; color: var(--app-ink); margin: 0 0 0.25rem; }
+.mh-subtitle { font-size: 0.9rem; color: var(--app-muted); margin: 0; }
+.btn-close-modal { background: none; border: none; color: var(--app-muted); cursor: pointer; padding: 4px; border-radius: 8px; transition: background 0.2s; }
+.btn-close-modal:hover { background: var(--app-line); color: var(--app-ink); }
 
 /* 3. Body: Tự động lấp đầy phần trống và tự tạo thanh cuộn */
 .custom-modal-body {
@@ -1185,7 +1194,7 @@ onMounted(async () => {
 }
 
 .card-info-promax {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
   border-radius: 16px;
   padding: 1.5rem;
   background: white;
@@ -1195,7 +1204,7 @@ onMounted(async () => {
 .card-title-promax {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
   margin: 0 0 1.25rem;
 }
 
@@ -1209,7 +1218,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px dashed #e2e8f0;
+  border-bottom: 1px dashed var(--app-line);
   padding-bottom: 0.75rem;
 }
 
@@ -1219,12 +1228,12 @@ onMounted(async () => {
 }
 
 .ir-label {
-  color: #64748b;
+  color: var(--app-muted);
   font-size: 0.9rem;
 }
 
 .ir-val {
-  color: #0f172a;
+  color: var(--app-ink);
   font-size: 0.95rem;
   font-weight: 500;
   text-align: right;
@@ -1237,7 +1246,7 @@ onMounted(async () => {
 
 .sm-box {
   flex: 1;
-  background: #f8fafc;
+  background: var(--app-canvas);
   border: 1px solid #f1f5f9;
   padding: 1rem;
   border-radius: 12px;
@@ -1256,7 +1265,7 @@ onMounted(async () => {
 }
 
 .text-teal {
-  color: #0f766e;
+  color: var(--app-primary);
 }
 
 .text-blue {
@@ -1265,14 +1274,14 @@ onMounted(async () => {
 
 .sm-label {
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--app-muted);
   font-weight: 500;
 }
 
 /* Timeline Terminal Style Pro */
 .col-blockchain {
   background: white;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--app-line);
   border-radius: 16px;
   padding: 1.5rem;
 }
@@ -1317,7 +1326,7 @@ onMounted(async () => {
   top: 32px;
   bottom: 0;
   width: 2px;
-  background: #e2e8f0;
+  background: var(--app-line);
   z-index: 1;
 }
 
@@ -1334,7 +1343,7 @@ onMounted(async () => {
   z-index: 2;
   background: white;
   box-shadow: 0 0 0 4px white;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--app-line);
 }
 
 .marker-success {
@@ -1356,8 +1365,8 @@ onMounted(async () => {
 }
 
 .tl-content-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--app-canvas);
+  border: 1px solid var(--app-line);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
@@ -1374,7 +1383,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 0.8rem 1.2rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--app-line);
   background: white;
 }
 
@@ -1382,18 +1391,18 @@ onMounted(async () => {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--app-ink);
 }
 
 .tl-card-header .time {
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--app-muted);
   font-weight: 500;
 }
 
 /* Terminal Effect Sạch Hơn */
 .terminal-style {
-  background: #0f172a;
+  background: var(--app-ink);
   padding: 1.2rem;
   color: #a5b4fc;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -1409,7 +1418,7 @@ onMounted(async () => {
 }
 
 .h-label {
-  color: #64748b;
+  color: var(--app-muted);
   font-weight: 600;
   flex-shrink: 0;
   user-select: none;
@@ -1438,7 +1447,7 @@ onMounted(async () => {
 }
 
 .status-text {
-  color: #f8fafc;
+  color: var(--app-canvas);
   font-weight: 600;
   font-family: 'Inter', sans-serif;
 }
@@ -1457,7 +1466,7 @@ onMounted(async () => {
 .footer-promax {
   text-align: center;
   padding: 2rem;
-  color: #94a3b8;
+  color: var(--app-muted);
   font-size: 0.9rem;
   margin-top: auto;
 }
@@ -1577,23 +1586,23 @@ onMounted(async () => {
 .home-stat-card { display: flex; align-items: flex-start; gap: .85rem; min-width: 0; padding: 1.1rem 1.15rem; border: 1px solid #e4edeb; border-radius: 15px; background: #fff; box-shadow: 0 5px 17px rgb(24 56 53 / 4%); transition: transform .18s, box-shadow .18s; }
 .home-stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgb(24 56 53 / 8%); }
 .home-stat-card > div { min-width: 0; }
-.home-stat-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 12px; color: #14796d; background: #eaf5f1; }
+.home-stat-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 12px; color: #14796d; background: var(--app-primary-soft); }
 .home-stat-icon .va-icon { font-size: 1.25rem; }
 .tone-blue { color: #4774ba; background: #eef3fc; }.tone-green { color: #23845e; background: #eaf6ef; }.tone-amber { color: #ad7d25; background: #fff6e2; }
 .home-stat-card p { overflow: hidden; margin: .05rem 0 .15rem; color: #73888a; font-size: .72rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .home-stat-card strong { display: block; color: #1c3d42; font-size: 1.65rem; font-weight: 750; line-height: 1.3; letter-spacing: -.04em; }
 .home-stat-card small { display: block; overflow: hidden; margin-top: .12rem; color: #98a7a7; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
 
-.table-card-promax,.transport-overview-card { padding: 1.45rem; border: 1px solid #e2ecea; border-radius: 18px; background: #fff; box-shadow: 0 8px 26px rgb(26 63 57 / 5%); scroll-margin-top: 100px; }
+.table-card-promax,.transport-overview-card { padding: 1.45rem; border: 1px solid var(--app-line); border-radius: 18px; background: #fff; box-shadow: 0 8px 26px rgb(26 63 57 / 5%); scroll-margin-top: 100px; }
 .table-header-promax { align-items: center; margin-bottom: 1rem; padding: 0; }
 .table-kicker,.overview-kicker { margin: 0 0 .28rem; color: #0c8174; font-size: .65rem; font-weight: 800; letter-spacing: .11em; }
 .th-title,.overview-card-heading h2 { margin: 0; color: #1c3d42; font-size: 1.22rem; font-weight: 750; letter-spacing: -.035em; }
 .th-subtitle,.overview-card-heading p:not(.overview-kicker) { margin: .3rem 0 0; color: #788d8e; font-size: .78rem; }
 .table-promax th { padding: .85rem .95rem; border-bottom-color: #e7efed; color: #809293; background: #f7faf9; font-size: .65rem; letter-spacing: .08em; }
 .table-promax td { padding: .9rem .95rem; border-bottom-color: #edf2f1; }
-.table-promax tbody tr:hover { background: #f8fbfa; }
+.table-promax tbody tr:hover { background: var(--app-canvas); }
 .badge-code { color: #245d56; background: #edf6f2; border-color: #e2eee8; font-weight: 700; }
-.btn-action-promax { border-color: #dce9e5; border-radius: 8px; color: #0e766b; box-shadow: none; }
+.btn-action-promax { border-color: var(--app-line); border-radius: 8px; color: #0e766b; box-shadow: none; }
 .empty-state-promax { padding: 3.5rem 1rem; }
 .empty-state-promax h4 { color: #24464a; }
 .empty-state-promax p { color: #7b8f91; }
@@ -1605,12 +1614,12 @@ onMounted(async () => {
 .transport-preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; padding-top: 1.1rem; }
 .transport-preview-column { min-width: 0; }
 .preview-column-title { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; color: #38595d; font-size: .76rem; }
-.preview-column-title > span:last-child { margin-left: auto; display: grid; place-items: center; min-width: 24px; height: 22px; padding: 0 .35rem; border-radius: 99px; color: #34746c; background: #eaf5f1; font-size: .68rem; }
+.preview-column-title > span:last-child { margin-left: auto; display: grid; place-items: center; min-width: 24px; height: 22px; padding: 0 .35rem; border-radius: 99px; color: #34746c; background: var(--app-primary-soft); font-size: .68rem; }
 .preview-indicator { width: 7px; height: 7px; border-radius: 50%; background: #d2a545; }.preview-indicator.moving { background: #4b89c4; }
 .transport-preview-row { display: grid; grid-template-columns: 1fr auto; gap: .25rem .5rem; padding: .72rem .8rem; border: 1px solid #edf2f1; border-radius: 10px; margin-top: .48rem; background: #fbfdfc; }
 .preview-code { color: #275c55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .7rem; font-weight: 750; }.transport-preview-row > span:nth-child(2) { grid-column: 1 / -1; overflow: hidden; color: #577174; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }.transport-preview-row small { color: #8b9b9b; font-size: .66rem; }
 .preview-code em { margin-left: .3rem; padding: .15rem .38rem; border-radius: 99px; color: #3871aa; background: #eef4fc; font-family: inherit; font-size: .6rem; font-style: normal; font-weight: 650; }.preview-status-delivered { color: #26835c !important; background: #eaf6ef !important; }.preview-status-cancelled { color: #a24c4c !important; background: #fff0ef !important; }.preview-status-planning { color: #9a772c !important; background: #fff6e2 !important; }
-.preview-empty { padding: 1.35rem .8rem; border: 1px dashed #dce9e5; border-radius: 10px; color: #8b9b9b; font-size: .73rem; text-align: center; }
+.preview-empty { padding: 1.35rem .8rem; border: 1px dashed var(--app-line); border-radius: 10px; color: #8b9b9b; font-size: .73rem; text-align: center; }
 .footer-promax { color: #98a8a7; font-size: .72rem; }
 
 .hero-promax { margin: 1rem auto 3rem; max-width: 1440px; border-radius: 0 0 28px 28px; background: linear-gradient(120deg,#123d42,#0e7168 65%,#188374); }
@@ -1643,4 +1652,16 @@ onMounted(async () => {
   .table-header-promax { align-items: flex-start; }
   .transport-preview-grid { gap: .7rem; }
 }
+.production-overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 32px; margin: 0 0 24px; padding: 24px; border: 1px solid var(--app-line); border-radius: var(--app-radius); background: white; }
+.production-overview h2 { font-size: 18px; margin: 8px 0; }
+.production-overview p { font-size: 13px; color: var(--app-muted); line-height: 1.6; }
+.production-bars { display: grid; gap: 14px; margin: 0; }
+.production-bars > div { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 16px; align-items: center; }
+.production-bars dt { font-size: 13px; color: var(--app-muted); }
+.production-bars dd { display: flex; align-items: center; gap: 16px; margin: 0; font-size: 13px; font-weight: 650; }
+.production-bars meter { width: 100%; height: 12px; accent-color: var(--app-primary); }
+.production-bars meter::-webkit-meter-bar { background: var(--app-primary-soft); border: 0; border-radius: 8px; }
+.production-bars meter::-webkit-meter-optimum-value { background: var(--app-primary); border-radius: 8px; }
+.home-stat-card small { white-space: normal; }
+@media (max-width: 700px) { .production-overview { grid-template-columns: minmax(0, 1fr); padding: 20px; gap: 20px; } }
 </style>

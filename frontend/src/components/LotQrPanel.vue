@@ -92,7 +92,7 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
         <va-alert v-if="localHost" color="warning">Đây là địa chỉ localhost, thiết bị khác không thể mở. Chỉ in QR khi ứng dụng được mở tại địa chỉ công khai ổn định.</va-alert>
         <p>Trước khi in, kiểm tra địa chỉ hosting công khai và khả năng mở trực tiếp đường dẫn truy xuất.</p>
         <img v-if="imageUrl" :src="imageUrl" :alt="`QR truy xuất lô ${lotCode}`" width="240" height="240" />
-        <va-alert v-if="imageError" color="danger">{{ imageError }}</va-alert>
+        <va-alert v-if="imageError" color="danger" role="alert">{{ imageError }}</va-alert>
         <va-button v-if="imageError" size="small" @click="generateImage">Tạo lại ảnh QR</va-button>
         <a class="trace-url" :href="publicUrl" target="_blank" rel="noopener noreferrer">Xem hồ sơ công khai: {{ publicUrl }}</a>
         <a v-if="imageUrl" class="download" :href="imageUrl" :download="`lot-${qr.trace_code}.svg`">Tải QR SVG</a>
@@ -108,10 +108,16 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
 </template>
 
 <style scoped>
-.qr-panel { display: grid; gap: .75rem; border-top: 1px solid #e5eeec; margin-top: 1rem; padding-top: 1rem; }
+.qr-panel { display: grid; gap: .75rem; border-top: 1px solid var(--app-line); margin-top: 1rem; padding-top: 1rem; }
 .qr-panel h4 { font-weight: 700; }
 .qr-panel img { max-width: 100%; height: auto; background: white; }
-.trace-url { overflow-wrap: anywhere; color: #0d6d64; }
-.download { color: #0d6d64; font-weight: 700; text-decoration: underline; }
+.trace-url { overflow-wrap: anywhere; color: var(--app-primary); }
+.download { color: var(--app-primary); font-weight: 700; text-decoration: underline; }
 .revoke-form { display: grid; gap: .65rem; margin-top: .5rem; }
+.qr-panel { padding: 24px; border: 1px solid var(--app-line); border-radius: var(--app-radius); background: var(--app-canvas); gap: 16px; }
+.qr-panel h4 { font-size: 16px; }
+.qr-panel p { font-size: 13px; line-height: 1.7; color: var(--app-muted); }
+.qr-panel img { width: 240px; border: 1px solid var(--app-line); border-radius: 12px; padding: 8px; }
+.download { display: inline-flex; align-items: center; min-height: 44px; }
+.revoke-form { border-top: 1px solid var(--app-line); padding-top: 20px; }
 </style>

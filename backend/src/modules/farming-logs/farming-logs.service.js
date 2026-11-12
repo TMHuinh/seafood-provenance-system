@@ -187,16 +187,18 @@ async function verify(profile, batchId) {
       : await blockchainService.getDataHashFromContract(eventId, record?.contract_address)
 
     const issues = []
-    if (log.lifecycle_status !== 'DRAFT' && !log.data_hash) issues.push('Chưa có data_hash trên nhật ký')
-    else if (!storedMatches) issues.push('Văn bản dữ liệu hiện tại không khớp data_hash đã lưu')
-    if (!record) issues.push('Không có bản ghi trên blockchain_records')
-    else if (record.status === 'FAILED') issues.push('Giao dịch trên blockchain đã thất bại')
-    else if (record.status === 'PENDING') issues.push('Giao dịch chưa được xác nhận trên blockchain')
-    else if (!validPayloadHashes.has(record.data_hash)) issues.push('data_hash của blockchain_records không khớp')
-    if (log.lifecycle_status !== 'DRAFT' && !onChainDataHash) issues.push('Không có bằng chứng trên Smart Contract')
-    else if (!validPayloadHashes.has(onChainDataHash)) issues.push('data_hash trên Smart Contract không khớp dữ liệu hiện tại')
-    if (onChainDataHash && log.data_hash && onChainDataHash !== log.data_hash) issues.push('data_hash trong nhật ký không khớp Smart Contract')
-    if (onChainDataHash && record && onChainDataHash !== record.data_hash) issues.push('blockchain_records không khớp Smart Contract')
+    if (log.lifecycle_status !== 'DRAFT') {
+      if (!log.data_hash) issues.push('Chưa có data_hash trên nhật ký')
+      else if (!storedMatches) issues.push('Văn bản dữ liệu hiện tại không khớp data_hash đã lưu')
+      if (!record) issues.push('Không có bản ghi trên blockchain_records')
+      else if (record.status === 'FAILED') issues.push('Giao dịch trên blockchain đã thất bại')
+      else if (record.status === 'PENDING') issues.push('Giao dịch chưa được xác nhận trên blockchain')
+      else if (!validPayloadHashes.has(record.data_hash)) issues.push('data_hash của blockchain_records không khớp')
+      if (!onChainDataHash) issues.push('Không có bằng chứng trên Smart Contract')
+      else if (!validPayloadHashes.has(onChainDataHash)) issues.push('data_hash trên Smart Contract không khớp dữ liệu hiện tại')
+      if (onChainDataHash && log.data_hash && onChainDataHash !== log.data_hash) issues.push('data_hash trong nhật ký không khớp Smart Contract')
+      if (onChainDataHash && record && onChainDataHash !== record.data_hash) issues.push('blockchain_records không khớp Smart Contract')
+    }
 
     return {
       id: log.id,

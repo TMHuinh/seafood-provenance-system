@@ -11,7 +11,7 @@ router.use(requireAuth)
 
 // Tạo nhật ký mới
 router.post('/', farmingLogsController.create)
-router.post('/images', farmingLogsController.authorizeImageUpload, imageUpload.single('image'), farmingLogsController.uploadImage)
+router.post('/batch/:batchId/images', farmingLogsController.authorizeImageUpload, imageUpload.single('image'), farmingLogsController.uploadImage)
 
 // Chỉnh sửa nhật ký và ghi lại hash lên blockchain
 router.patch('/:id', farmingLogsController.update)

@@ -120,7 +120,7 @@ async function uploadImage(event: Event) {
   payload.append('image', file)
   imageUploading.value = true
   try {
-    const result = await api.upload<{ success: boolean; imageUrl: string }>('/farming-logs/images', payload)
+    const result = await api.upload<{ success: boolean; imageUrl: string }>(`/farming-logs/batch/${batchId.value}/images`, payload)
     if (context === contextVersion) form.imageUrl = result.imageUrl
   } catch (error) {
     if (context === contextVersion) imageError.value = error instanceof ApiError ? error.message : 'Không thể tải ảnh lên. Vui lòng thử lại.'
@@ -241,7 +241,7 @@ async function checkSync() {
     if (context !== contextVersion || version !== verifyVersion) return
     verifyResults.value = result
     const map: Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'> = {}
-    for (const item of result.details) map[item.id] = item.record?.status === 'PENDING' ? 'PENDING' : item.status
+    for (const item of result.details) map[item.id] = getVerifyStatus(item)
     verifiedStatus.value = map
   } catch { if (context === contextVersion && version === verifyVersion) verifyError.value = logStore.error }
 }
@@ -283,6 +283,7 @@ const verifyColors: Record<string, string> = { SYNCED: 'success', DESYNCED: 'dan
 const verifyLabels: Record<string, string> = { SYNCED: '✓ Đồng bộ', DESYNCED: '✗ Lệch dữ liệu', PENDING: '⏳ Đang chờ xác nhận', DRAFT: 'Chưa chứng thực' }
 
 // Fix lỗi số 1 và số 2 (Undefined Index Type)
+function getVerifyStatus(item: FarmingLogVerifyResponse['details'][number]) { return item.status === 'DRAFT' ? 'DRAFT' : item.record?.status === 'PENDING' ? 'PENDING' : item.status }
 function getVerifyColor(status?: string) { return status ? verifyColors[status] : 'secondary'; }
 function getVerifyLabel(status?: string) { return status ? verifyLabels[status] : ''; }
 onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
@@ -479,6 +480,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
           <div class="stat-box"><strong>{{ verifyResults.summary.total }}</strong><span>Tổng cộng</span></div>
           <div class="stat-box ok"><strong>{{ verifyResults.summary.verified }}</strong><span>Khớp dữ liệu</span></div>
           <div class="stat-box err"><strong>{{ verifyResults.summary.desynced }}</strong><span>Bị lệch</span></div>
+          <div class="stat-box"><strong>{{ verifyResults.summary.drafts }}</strong><span>Chưa chứng thực</span></div>
         </div>
 
         <div class="history-list">
@@ -486,12 +488,12 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
             <h4 class="date-header-small">Ngày {{ group.date }}</h4>
             
             <va-card v-for="item in group.items" :key="item.id" outlined class="mb-3"
-              :class="item.record?.status === 'PENDING' ? 'border-warning' : (item.status === 'SYNCED' ? 'border-success' : 'border-danger')">
+              :class="{ 'border-warning': getVerifyStatus(item) === 'PENDING', 'border-success': item.status === 'SYNCED', 'border-danger': getVerifyStatus(item) === 'DESYNCED' }">
               <va-card-content>
                 <div class="v-top">
                   <strong>{{ FARMING_LOG_TYPE_LABELS[item.logType] }}</strong>
-                  <va-badge :color="item.record?.status === 'PENDING' ? 'warning' : (item.status === 'SYNCED' ? 'success' : 'danger')">
-                    {{ item.record?.status === 'PENDING' ? '⏳ Đang chờ' : (item.status === 'SYNCED' ? '✓ Đồng bộ' : '✗ Lệch dữ liệu') }}
+                  <va-badge :color="getVerifyColor(getVerifyStatus(item))">
+                    {{ getVerifyLabel(getVerifyStatus(item)) }}
                   </va-badge>
                 </div>
                 <p class="log-date"><va-icon name="schedule" size="small" class="mr-1" />{{ formatDateTime(item.logDate) }}</p>
@@ -588,7 +590,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 .v-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .correction-reason { font-size: 0.9rem; color: #334155; margin-bottom: 0.5rem; background: #f1f5f9; padding: 0.5rem; border-radius: 6px; }
 
-.summary-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.summary-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
 .stat-box { text-align: center; background: var(--app-canvas); border: 1px solid var(--app-line); border-radius: 12px; padding: 1rem; }
 .stat-box strong { display: block; font-size: 1.5rem; margin-bottom: 0.25rem; color: var(--app-ink); }
 .stat-box span { font-size: 0.8rem; color: var(--app-muted); text-transform: uppercase; font-weight: 600; }

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import LoadingState from '../../components/LoadingState.vue'
+import DecimalField from '../../components/DecimalField.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
@@ -23,7 +27,14 @@ const formError = ref('')
 const successMessage = ref('')
 
 const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 9
-const filteredItems = computed(() => items.value.filter((item) => `${item.farm_name} ${item.address ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const statuses = [{ value: 'active', label: 'Hoạt động' }, { value: 'inactive', label: 'Tạm ngưng' }]
+const filteredItems = computed(() => {
+  const term = query.value.trim().toLocaleLowerCase('vi')
+  return items.value.filter((farm) => {
+    const matchesStatus = !filterStatus.value || filterStatus.value === (farm.status ? 'active' : 'inactive')
+    return matchesStatus && `${farm.farm_name} ${farm.address ?? ''}`.toLocaleLowerCase('vi').includes(term)
+  })
+})
 const visibleItems = computed(() => filteredItems.value.slice((listPage.value - 1) * listPageSize, listPage.value * listPageSize))
 watch([query, filterStatus], () => { listPage.value = 1 })
 watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
@@ -128,20 +139,11 @@ onMounted(async () => {
 
 <template>
   <main class="farms-page" :aria-busy="loading">
-    <header class="page-header">
-      <div class="header-content">
-        <p class="eyebrow">Quản lý vùng nuôi</p>
-        <h1 class="page-title">Cơ sở nuôi của tôi</h1>
-        <div class="subtitle-badge">
-          <va-icon name="domain" size="small" class="mr-1" />
-          <template v-if="authStore.organizationName">{{ authStore.organizationName }}</template>
-          <template v-else>Hộ nuôi độc lập</template>
-        </div>
-      </div>
-      <va-button icon="add" gradient class="shadow-md" @click="openCreate">
-        Thêm cơ sở mới
-      </va-button>
-    </header>
+    <PageHeader title="Cơ sở nuôi của tôi" :context="authStore.organizationName || 'Hộ nuôi độc lập'" description="Quản lý cơ sở và truy cập các ao nuôi.">
+      <template #actions>
+        <va-button icon="add" @click="openCreate">Thêm cơ sở mới</va-button>
+      </template>
+    </PageHeader>
 
     <!-- Thông báo -->
     <va-alert v-if="successMessage" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
@@ -152,18 +154,14 @@ onMounted(async () => {
     </va-alert>
 
     <section class="farms-panel">
-      <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
-    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
-    <va-inner-loading :loading="loading">
+      <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" search-placeholder="Tên cơ sở hoặc địa chỉ…" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="cơ sở trong danh sách đã tải" />
+    <LoadingState v-if="loading" />
+    <va-inner-loading v-else :loading="false">
         <!-- Empty State -->
-        <div v-if="!loading && !error && items.length === 0" class="empty-state">
-          <div class="empty-icon-wrapper">
-            <va-icon name="water" size="3rem" color="primary" />
-          </div>
-          <h2>Bạn chưa có cơ sở nuôi nào</h2>
-          <p class="text-secondary">Hãy tạo cơ sở đầu tiên để bắt đầu quản lý ao và theo dõi vụ nuôi.</p>
-          <va-button icon="add" class="mt-4" @click="openCreate">Tạo cơ sở ngay</va-button>
-        </div>
+        <EmptyState v-if="!loading && !error && !items.length" title="Bạn chưa có cơ sở nuôi nào" description="Hãy tạo cơ sở đầu tiên để quản lý ao và theo dõi vụ nuôi." icon="water">
+          <va-button icon="add" @click="openCreate">Tạo cơ sở mới</va-button>
+        </EmptyState>
+        <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có cơ sở phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
         <!-- Farm Grid -->
         <div v-else class="farm-grid">
@@ -181,7 +179,7 @@ onMounted(async () => {
               </div>
 
               <div class="card-body">
-                <h3 class="farm-title">{{ farm.farm_name }}</h3>
+                <h2 class="farm-title">{{ farm.farm_name }}</h2>
                 <p class="address-text">
                   <va-icon name="place" size="small" color="secondary" class="mr-1" />
                   {{ farm.address || 'Chưa cập nhật địa chỉ' }}
@@ -208,7 +206,7 @@ onMounted(async () => {
                 class="flex-1"
                 @click="router.push({ name: 'ponds', params: { farmId: farm.id } })"
               >
-                Quản lý Ao
+                Quản lý ao
               </va-button>
               <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(farm)" />
               <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="removeFarm(farm)" />
@@ -219,12 +217,13 @@ onMounted(async () => {
     </section>
 
     <!-- Vuestic Modal Form -->
-    <va-modal v-model="showForm" hide-default-actions overlay-opacity="0.5">
+    <va-modal title="farm-form-title" v-model="showForm" hide-default-actions overlay-opacity="0.5">
       <template #header>
-        <h2 class="modal-title">{{ formTitle }}</h2>
+        <h2 id="farm-form-title" class="modal-title">{{ formTitle }}</h2>
       </template>
       
       <form @submit.prevent="submit" class="modern-form">
+        <h3 class="form-section-heading">Thông tin cơ sở</h3>
         <va-input 
           v-model="form.farmName" 
           label="Tên cơ sở nuôi *" 
@@ -244,14 +243,8 @@ onMounted(async () => {
           </template>
         </va-input>
         
-        <va-input 
-          v-model="form.area" 
-          label="Diện tích (ha)" 
-          type="number" 
-          placeholder="VD: 12.5"
-          :min="0.01"
-          :step="0.01"
-        />
+        <h3 class="form-section-heading">Quy mô và chứng nhận</h3>
+        <DecimalField v-model="form.area" label="Diện tích (ha)" placeholder="VD: 12.5" />
         
         <va-input 
           v-model="form.certification" 
@@ -290,41 +283,10 @@ onMounted(async () => {
   width: min(1180px, calc(100% - 2rem)); 
   margin: 0 auto; 
   padding: 2.5rem 0 4rem; 
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: inherit;
 }
 
 /* Header Styles */
-.page-header { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: flex-end; 
-  gap: 1rem; 
-  margin-bottom: 2rem; 
-}
-.eyebrow { 
-  margin: 0 0 0.5rem; 
-  color: var(--va-primary); 
-  font-size: 0.8rem; 
-  font-weight: 700; 
-  letter-spacing: 0.1em; 
-  text-transform: uppercase; 
-}
-.page-title { 
-  margin: 0 0 0.5rem; 
-  font-size: clamp(1.8rem, 4vw, 2.2rem); 
-  font-weight: 800;
-  color: var(--app-ink);
-}
-.subtitle-badge { 
-  display: inline-flex;
-  align-items: center;
-  color: var(--app-muted);
-  background: #f1f5f9;
-  padding: 0.4rem 0.8rem;
-  border-radius: 99px;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
 
 /* Grid & Cards */
 .farms-panel { min-height: 300px; } 
@@ -337,14 +299,14 @@ onMounted(async () => {
 .farm-card {
   border-radius: 16px;
   border: 1px solid var(--app-line);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
-  transition: all 0.2s ease-in-out;
+  box-shadow: none;
+  transition: border-color var(--app-motion);
   display: flex;
   flex-direction: column;
 }
 .farm-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+  transform: none;
+  box-shadow: none;
   border-color: var(--va-primary);
 }
 
@@ -410,25 +372,6 @@ onMounted(async () => {
 .flex-1 { flex: 1; }
 
 /* Empty State */
-.empty-state { 
-  padding: 5rem 1rem; 
-  text-align: center; 
-  background: var(--app-canvas);
-  border: 2px dashed #cbd5e1; 
-  border-radius: 20px; 
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.empty-icon-wrapper {
-  width: 80px; height: 80px;
-  background: #e0f2fe;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 1.5rem;
-}
-.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: var(--app-ink); }
-.text-secondary { color: var(--app-muted); margin: 0; }
 
 /* Modal & Form */
 .modal-title { font-size: 1.4rem; font-weight: 700; color: var(--app-ink); margin-bottom: 1rem; }
@@ -463,7 +406,7 @@ onMounted(async () => {
 
 /* Responsive */
 @media (max-width: 768px) { 
-  .page-header { flex-direction: column; align-items: flex-start; } 
+
   .farm-grid { grid-template-columns: 1fr; } 
   .modern-form { grid-template-columns: 1fr; min-width: 100%; }
   .col-span-2 { grid-column: auto; }

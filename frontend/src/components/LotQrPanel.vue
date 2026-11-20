@@ -21,7 +21,14 @@ const canRevoke = ref(false)
 let requestVersion = 0
 let imageVersion = 0
 const path = computed(() => props.apiPath)
-const publicUrl = computed(() => qr.value ? new URL(router.resolve({ name: 'trace', params: { traceCode: qr.value.trace_code } }).href, window.location.origin).href : '')
+const publicUrl = computed(() =>
+  qr.value
+    ? new URL(
+        router.resolve({ name: 'trace', params: { traceCode: qr.value.trace_code } }).href,
+        window.location.origin,
+      ).href
+    : '',
+)
 const localHost = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
 
 function clearImage() {
@@ -34,30 +41,67 @@ async function generateImage() {
   imageError.value = ''
   if (!publicUrl.value || qr.value?.status !== 'ACTIVE') return
   try {
-    const svg = await QRCode.toString(publicUrl.value, { type: 'svg', margin: 4, errorCorrectionLevel: 'M', width: 320 })
-    if (version === imageVersion) imageUrl.value = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
-  } catch { if (version === imageVersion) imageError.value = 'Không tạo được ảnh QR. Vui lòng thử lại.' }
+    const svg = await QRCode.toString(publicUrl.value, {
+      type: 'svg',
+      margin: 4,
+      errorCorrectionLevel: 'M',
+      width: 320,
+    })
+    if (version === imageVersion)
+      imageUrl.value = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
+  } catch {
+    if (version === imageVersion) imageError.value = 'Không tạo được ảnh QR. Vui lòng thử lại.'
+  }
 }
 watch([publicUrl, () => qr.value?.status], generateImage)
 async function load() {
   const version = ++requestVersion
-  loading.value = true; loaded.value = false; error.value = ''; qr.value = null; reason.value = ''
-  canIssue.value = false; canRevoke.value = false
+  loading.value = true
+  loaded.value = false
+  error.value = ''
+  qr.value = null
+  reason.value = ''
+  canIssue.value = false
+  canRevoke.value = false
   try {
     const result = await api.get<LotQrResponse>(path.value)
-    if (version === requestVersion) { applyResult(result); loaded.value = true }
-  } catch (e) { if (version === requestVersion) error.value = e instanceof Error ? e.message : 'Không tải được QR.' }
-  finally { if (version === requestVersion) loading.value = false }
+    if (version === requestVersion) {
+      applyResult(result)
+      loaded.value = true
+    }
+  } catch (e) {
+    if (version === requestVersion)
+      error.value = e instanceof Error ? e.message : 'Không tải được QR.'
+  } finally {
+    if (version === requestVersion) loading.value = false
+  }
 }
 async function update(revoke = false) {
-  if (saving.value || !loaded.value || (revoke ? !canRevoke.value : !canIssue.value) || (revoke && (reason.value.trim().length < 3 || reason.value.trim().length > 500))) return
-  saving.value = true; error.value = ''
+  if (
+    saving.value ||
+    !loaded.value ||
+    (revoke ? !canRevoke.value : !canIssue.value) ||
+    (revoke && (reason.value.trim().length < 3 || reason.value.trim().length > 500))
+  )
+    return
+  saving.value = true
+  error.value = ''
   const version = requestVersion
   try {
-    const result = await api.post<LotQrResponse>(`${path.value}${revoke ? '/revoke' : ''}`, revoke ? { reason: reason.value.trim() } : undefined)
-    if (version === requestVersion) { applyResult(result); reason.value = '' }
-  } catch (e) { if (version === requestVersion) error.value = e instanceof Error ? e.message : 'Không cập nhật được QR.' }
-  finally { saving.value = false }
+    const result = await api.post<LotQrResponse>(
+      `${path.value}${revoke ? '/revoke' : ''}`,
+      revoke ? { reason: reason.value.trim() } : undefined,
+    )
+    if (version === requestVersion) {
+      applyResult(result)
+      reason.value = ''
+    }
+  } catch (e) {
+    if (version === requestVersion)
+      error.value = e instanceof Error ? e.message : 'Không cập nhật được QR.'
+  } finally {
+    saving.value = false
+  }
 }
 function applyResult(result: LotQrResponse) {
   qr.value = result.qr
@@ -65,21 +109,41 @@ function applyResult(result: LotQrResponse) {
   canRevoke.value = result.canRevoke === true
 }
 watch(path, load, { immediate: true })
-onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
+onBeforeUnmount(() => {
+  requestVersion++
+  imageVersion++
+  clearImage()
+})
 </script>
 
 <template>
   <section class="qr-panel" aria-label="QR công khai của lô" :aria-busy="loading || saving">
     <h4>QR truy xuất công khai</h4>
-    <p>Một QR dùng chung cho các sản phẩm thuộc lô thu hoạch. QR giúp tra cứu nguồn gốc, không phải chứng nhận chất lượng hoặc mã chống sao chép.</p>
+    <p>
+      Một QR dùng chung cho các sản phẩm thuộc lô thu hoạch. QR giúp tra cứu nguồn gốc, không phải
+      chứng nhận chất lượng hoặc mã chống sao chép.
+    </p>
     <p v-if="loading" role="status">Đang tải trạng thái QR…</p>
     <va-alert v-if="error" color="danger" role="alert">{{ error }}</va-alert>
     <va-button v-if="!loading && !loaded" size="small" @click="load">Thử lại</va-button>
     <template v-if="loaded">
       <template v-if="!qr">
-        <p>Lô chưa được công khai. Phát hành QR sẽ cho phép bất kỳ ai có đường dẫn xem hồ sơ truy xuất của lô.</p>
-        <va-button v-if="canIssue" size="small" :loading="saving" :disabled="saving" @click="update()">Phát hành QR công khai</va-button>
-        <p v-else>Nhà phân phối phát hành QR sau khi xác nhận nhận hàng. Chủ cơ sở có thể xem và tải mã đã phát hành tại đây.</p>
+        <p>
+          Lô chưa được công khai. Phát hành QR sẽ cho phép bất kỳ ai có đường dẫn xem hồ sơ truy
+          xuất của lô.
+        </p>
+        <va-button
+          v-if="canIssue"
+          size="small"
+          :loading="saving"
+          :disabled="saving"
+          @click="update()"
+          >Phát hành QR công khai</va-button
+        >
+        <p v-else>
+          Nhà phân phối phát hành QR sau khi xác nhận nhận hàng. Chủ cơ sở có thể xem và tải mã đã
+          phát hành tại đây.
+        </p>
       </template>
       <template v-else-if="qr.status === 'REVOKED'">
         <va-alert color="warning">QR đã thu hồi. Không thể phát hành lại QR cho lô này.</va-alert>
@@ -89,18 +153,58 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
         <p>QR đang công khai. Đường dẫn giữ nguyên khi hành trình được cập nhật.</p>
         <p v-if="qr.issuer">Tổ chức phát hành: {{ qr.issuer.name }}</p>
         <p v-else>QR cũ do cơ sở nuôi phát hành.</p>
-        <va-alert v-if="localHost" color="warning">Đây là địa chỉ localhost, thiết bị khác không thể mở. Chỉ in QR khi ứng dụng được mở tại địa chỉ công khai ổn định.</va-alert>
-        <p>Trước khi in, kiểm tra địa chỉ hosting công khai và khả năng mở trực tiếp đường dẫn truy xuất.</p>
-        <img v-if="imageUrl" :src="imageUrl" :alt="`QR truy xuất lô ${lotCode}`" width="240" height="240" />
-        <va-alert v-if="imageError" color="danger" role="alert">{{ imageError }}</va-alert>
-        <va-button v-if="imageError" size="small" @click="generateImage">Tạo lại ảnh QR</va-button>
-        <a class="trace-url" :href="publicUrl" target="_blank" rel="noopener noreferrer">Xem hồ sơ công khai: {{ publicUrl }}</a>
-        <a v-if="imageUrl" class="download" :href="imageUrl" :download="`lot-${qr.trace_code}.svg`">Tải QR SVG</a>
+        <va-alert v-if="localHost" color="warning"
+          >Đây là địa chỉ localhost, thiết bị khác không thể mở. Chỉ in QR khi ứng dụng được mở tại
+          địa chỉ công khai ổn định.</va-alert
+        >
+        <p>Trước khi in, mở đường dẫn trên một thiết bị khác để kiểm tra hồ sơ truy xuất.</p>
+        <div class="qr-preview">
+          <img
+            v-if="imageUrl"
+            :src="imageUrl"
+            :alt="`QR truy xuất lô ${lotCode}`"
+            width="240"
+            height="240"
+          />
+          <div class="qr-actions">
+            <va-alert v-if="imageError" color="danger" role="alert">{{ imageError }}</va-alert>
+            <va-button v-if="imageError" size="small" @click="generateImage"
+              >Tạo lại ảnh QR</va-button
+            >
+            <a class="trace-url" :href="publicUrl" target="_blank" rel="noopener noreferrer"
+              >Xem hồ sơ công khai: {{ publicUrl }}</a
+            >
+            <a
+              v-if="imageUrl"
+              class="download"
+              :href="imageUrl"
+              :download="`lot-${qr.trace_code}.svg`"
+              >Tải QR SVG</a
+            >
+          </div>
+        </div>
         <form v-if="canRevoke" class="revoke-form" @submit.prevent="update(true)">
-          <p>Thu hồi sẽ ngừng công khai hồ sơ của toàn bộ lô, ảnh hưởng mọi sản phẩm và nhà phân phối dùng chung QR, và không thể hoàn tác.</p>
-          <p v-if="!qr.issuer_organization_id">Chủ cơ sở chỉ có quyền thu hồi đối với QR cũ chưa có tổ chức phát hành.</p>
-          <va-textarea v-model="reason" label="Lý do thu hồi (3–500 ký tự)" :disabled="saving" maxlength="500" />
-          <va-button type="submit" size="small" color="danger" :loading="saving" :disabled="saving || reason.trim().length < 3 || reason.trim().length > 500">Thu hồi QR</va-button>
+          <p>
+            Thu hồi sẽ ngừng công khai hồ sơ của toàn bộ lô, ảnh hưởng mọi sản phẩm và nhà phân phối
+            dùng chung QR, và không thể hoàn tác.
+          </p>
+          <p v-if="!qr.issuer_organization_id">
+            Chủ cơ sở chỉ có quyền thu hồi đối với QR cũ chưa có tổ chức phát hành.
+          </p>
+          <va-textarea
+            v-model="reason"
+            label="Lý do thu hồi (3–500 ký tự)"
+            :disabled="saving"
+            maxlength="500"
+          />
+          <va-button
+            type="submit"
+            size="small"
+            color="danger"
+            :loading="saving"
+            :disabled="saving || reason.trim().length < 3 || reason.trim().length > 500"
+            >Thu hồi QR</va-button
+          >
         </form>
       </template>
     </template>
@@ -108,16 +212,79 @@ onBeforeUnmount(() => { requestVersion++; imageVersion++; clearImage() })
 </template>
 
 <style scoped>
-.qr-panel { display: grid; gap: .75rem; border-top: 1px solid var(--app-line); margin-top: 1rem; padding-top: 1rem; }
-.qr-panel h4 { font-weight: 700; }
-.qr-panel img { max-width: 100%; height: auto; background: white; }
-.trace-url { overflow-wrap: anywhere; color: var(--app-primary); }
-.download { color: var(--app-primary); font-weight: 700; text-decoration: underline; }
-.revoke-form { display: grid; gap: .65rem; margin-top: .5rem; }
-.qr-panel { padding: 24px; border: 1px solid var(--app-line); border-radius: var(--app-radius); background: var(--app-canvas); gap: 16px; }
-.qr-panel h4 { font-size: 16px; }
-.qr-panel p { font-size: 13px; line-height: 1.7; color: var(--app-muted); }
-.qr-panel img { width: 240px; border: 1px solid var(--app-line); border-radius: 12px; padding: 8px; }
-.download { display: inline-flex; align-items: center; min-height: 44px; }
-.revoke-form { border-top: 1px solid var(--app-line); padding-top: 20px; }
+.qr-panel {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+}
+.qr-panel h4 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.qr-panel p {
+  color: var(--app-muted);
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 0;
+}
+.qr-preview {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-block: 8px;
+}
+.qr-preview img {
+  width: 200px;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--app-line);
+  border-radius: 8px;
+  background: white;
+}
+.qr-actions {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 16px;
+  min-width: 0;
+  justify-items: start;
+}
+.trace-url {
+  color: var(--app-primary-dark);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.download {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--app-primary);
+  border-radius: 8px;
+  color: var(--app-primary-dark);
+  font-weight: 600;
+}
+.download:hover {
+  background: var(--app-primary-soft);
+}
+.revoke-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--app-line);
+}
+.revoke-form > :deep(.va-button) {
+  justify-self: start;
+}
+@media (max-width: 600px) {
+  .qr-panel {
+    padding: 20px;
+  }
+}
 </style>

@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import LoadingState from '../../components/LoadingState.vue'
+import DecimalField from '../../components/DecimalField.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, reactive, ref, watch, onUnmounted } from 'vue'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import {
   VaButton, VaInnerLoading, VaModal, VaInput, VaSelect,
   VaAlert, VaCard, VaCardContent, VaBadge, VaIcon, VaTextarea
@@ -13,7 +17,7 @@ import { useFarmingLogsStore } from '../../stores/farming-logs.store'
 import { api, ApiError } from '../../api/client'
 import { FARMING_LOG_TYPE_LABELS, SPECIES_LABELS, type BatchItem, type FarmingLog, type FarmingLogHistoryResponse, type FarmingLogInput, type FarmingLogType, type FarmingLogVerifyResponse } from '../../types'
 
-const route = useRoute(); const router = useRouter(); const logStore = useFarmingLogsStore(); const pondsStore = usePondsStore(); const batchesStore = usePondBatchesStore()
+const route = useRoute(); const logStore = useFarmingLogsStore(); const pondsStore = usePondsStore(); const batchesStore = usePondBatchesStore()
 const { items, loading, saving, verifying } = storeToRefs(logStore)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const batchId = computed(() => String(route.params.batchId))
 const pondName = ref(''); const batchInfo = ref<BatchItem | null>(null); const error = ref('')
@@ -278,9 +282,9 @@ watch(() => `${farmId.value}/${pondId.value}/${batchId.value}`, loadContext, { i
 
 // Helpers màu sắc
 const lifecycleColors: Record<string, string> = { DRAFT: 'secondary', CONFIRMED: 'success', REVOKED: 'danger' }
-const lifecycleLabels: Record<string, string> = { DRAFT: 'Bản nháp', CONFIRMED: '✓ Đã chứng thực', REVOKED: 'Đã thu hồi' }
+const lifecycleLabels: Record<string, string> = { DRAFT: 'Bản nháp', CONFIRMED: 'Đã chứng thực', REVOKED: 'Đã thu hồi' }
 const verifyColors: Record<string, string> = { SYNCED: 'success', DESYNCED: 'danger', PENDING: 'warning', DRAFT: 'secondary' }
-const verifyLabels: Record<string, string> = { SYNCED: '✓ Đồng bộ', DESYNCED: '✗ Lệch dữ liệu', PENDING: '⏳ Đang chờ xác nhận', DRAFT: 'Chưa chứng thực' }
+const verifyLabels: Record<string, string> = { SYNCED: 'Đồng bộ', DESYNCED: 'Lệch dữ liệu', PENDING: 'Đang chờ xác nhận', DRAFT: 'Chưa chứng thực' }
 
 // Fix lỗi số 1 và số 2 (Undefined Index Type)
 function getVerifyStatus(item: FarmingLogVerifyResponse['details'][number]) { return item.status === 'DRAFT' ? 'DRAFT' : item.record?.status === 'PENDING' ? 'PENDING' : item.status }
@@ -291,47 +295,34 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 
 <template>
   <main class="page-container" :aria-busy="loading">
-    <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn" @click="router.push({ name: 'pond-batches', params: { farmId, pondId } })">
-      Quay lại Các vụ nuôi
-    </va-button>
 
-    <header class="page-header">
-      <div class="header-info">
-        <p class="eyebrow">
-          <va-icon name="water" size="small" class="mr-1" />
-          {{ batchInfo ? `${batchInfo.batch_code} · ${SPECIES_LABELS[batchInfo.species]}` : 'Vụ nuôi' }} · {{ pondName }}
-        </p>
-        <h1 class="page-title">Nhật ký nuôi</h1>
-        <p class="page-description">Ghi hoạt động chăm sóc và theo dõi lịch sử chứng thực theo từng ngày.</p>
-      </div>
-      <div class="header-actions">
+    <PageHeader :context="batchInfo ? `${batchInfo.batch_code} · ${SPECIES_LABELS[batchInfo.species]}` : pondName" title="Nhật ký nuôi" description="Ghi hoạt động chăm sóc và theo dõi lịch sử chứng thực theo từng ngày.">
+      <template #actions>
         <va-button preset="secondary" icon="sync" :loading="verifying" :disabled="loading || !batchInfo" @click="checkSync">Kiểm tra Blockchain</va-button>
-        <va-button icon="add" :disabled="loading || saving || !batchInfo" gradient @click="openCreate">Ghi nhật ký</va-button>
-      </div>
-    </header>
+        <va-button icon="add" :disabled="loading || saving || !batchInfo" @click="openCreate">Ghi nhật ký</va-button>
+      </template>
+    </PageHeader>
 
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">{{ success }}</va-alert>
     <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable role="alert">{{ error }} <va-button size="small" preset="secondary" @click="loadContext">Thử lại</va-button></va-alert>
 
-    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="filterOptions" :total="filteredLogs.length" :page-size="listPageSize" :loading="loading" label="nhật ký trong danh sách đã tải" />
-    <p v-if="!loading && !error && items.length && !filteredLogs.length" role="status">Không có nhật ký phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
-    <va-inner-loading :loading="loading">
-      <div v-if="!loading && !error && !items.length" class="empty-state">
-        <div class="empty-icon-wrapper"><va-icon name="edit_document" size="3rem" color="info" /></div>
-        <h2>Chưa có nhật ký nuôi</h2>
-        <p class="text-secondary">Hãy ghi lại hoạt động đầu tiên cho vụ nuôi này.</p>
-        <va-button icon="add" class="mt-4" @click="openCreate">Ghi nhật ký</va-button>
-      </div>
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="filterOptions" search-placeholder="Loại nhật ký hoặc nội dung…" :total="filteredLogs.length" :page-size="listPageSize" :loading="loading" label="nhật ký trong danh sách đã tải" />
+    <LoadingState v-if="loading" />
+    <va-inner-loading v-else :loading="false">
+      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có nhật ký nuôi" description="Hãy ghi lại hoạt động đầu tiên cho vụ nuôi này." icon="edit_document">
+        <va-button icon="add" @click="openCreate">Ghi nhật ký</va-button>
+      </EmptyState>
+      <EmptyState v-else-if="!loading && !error && !filteredLogs.length" title="Không có nhật ký phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
       <!-- Log Groups (Gom nhóm và sắp xếp theo ngày) -->
       <div v-else class="logs-container">
         <div v-for="group in groupedLogs" :key="group.date" class="date-group">
           
           <!-- Header của Ngày -->
-          <h3 class="date-header">
+          <h2 class="date-header">
             <va-icon name="calendar_today" size="small" class="mr-2" color="primary" /> 
             Ngày {{ group.date }}
-          </h3>
+          </h2>
 
           <div class="log-grid">
             <va-card v-for="log in group.items" :key="log.id" class="log-card">
@@ -359,9 +350,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
                 </details>
 
                 <div v-if="verifiedStatus[log.id]" class="mt-2">
-                  <va-badge :color="getVerifyColor(verifiedStatus[log.id])" outline>
-                    {{ getVerifyLabel(verifiedStatus[log.id]) }}
-                  </va-badge>
+                  <va-badge :color="getVerifyColor(verifiedStatus[log.id])" outline :text="getVerifyLabel(verifiedStatus[log.id])" />
                 </div>
               </va-card-content>
 
@@ -384,25 +373,27 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     </va-inner-loading>
 
     <!-- Modal: Ghi Nhật Ký -->
-    <va-modal v-model="showForm" :no-dismiss="saving || imageUploading" hide-default-actions size="large" overlay-opacity="0.5">
+    <va-modal title="log-form-title" v-model="showForm" :no-dismiss="saving || imageUploading" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header>
-        <h2 class="modal-title">{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2>
+        <h2 id="log-form-title" class="modal-title">{{ editingId ? (editingMode === 'CORRECTION' ? 'Đính chính nhật ký' : 'Chỉnh sửa bản nháp') : 'Ghi nhật ký nuôi' }}</h2>
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
+        <h3 class="form-section-heading">Hoạt động và thời gian</h3>
         <va-select v-model="form.logType" :options="logTypes" value-by="value" text-by="label" label="Loại nhật ký *" class="col-span-1" />
         
         <va-input v-model="form.logDate" type="datetime-local" label="Thời gian ghi (Ngày & Giờ) *" :max="toDatetimeLocal(new Date())" class="col-span-1" />
 
+        <h3 class="form-section-heading">Nội dung nhật ký</h3>
         <template v-if="form.logType === 'FEEDING'">
           <va-input v-model="form.feedType" label="Loại thức ăn *" placeholder="VD: Thức ăn viên 40%" class="col-span-1" />
-          <va-input v-model="form.feedAmount" type="number" label="Số lượng (kg)" min="0" step="0.01" class="col-span-1" />
+          <DecimalField v-model="form.feedAmount" label="Số lượng (kg)" class="col-span-1" />
         </template>
         <template v-else-if="form.logType === 'WATER_QUALITY'">
-          <va-input v-model="form.temperature" type="number" label="Nhiệt độ (°C)" step="0.1" class="col-span-1" />
-          <va-input v-model="form.salinity" type="number" label="Độ mặn (‰)" step="0.1" class="col-span-1" />
-          <va-input v-model="form.ph" type="number" label="pH" min="0" max="14" step="0.1" class="col-span-1" />
-          <va-input v-model="form.dissolvedOxygen" type="number" label="Oxy hòa tan (mg/L)" step="0.1" class="col-span-1" />
+          <DecimalField v-model="form.temperature" label="Nhiệt độ (°C)" class="col-span-1" />
+          <DecimalField v-model="form.salinity" label="Độ mặn (‰)" class="col-span-1" />
+          <DecimalField v-model="form.ph" label="pH" class="col-span-1" />
+          <DecimalField v-model="form.dissolvedOxygen" label="Oxy hòa tan (mg/L)" class="col-span-1" />
         </template>
         <template v-else-if="form.logType === 'MEDICINE'">
           <va-input v-model="form.medicineName" label="Tên thuốc / hoá chất *" class="col-span-1" />
@@ -420,11 +411,12 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
           <va-textarea v-model="form.description" label="Ghi chú" class="col-span-2" />
         </template>
 
+        <h3 class="form-section-heading">Hình ảnh và thông tin bổ sung</h3>
         <div class="image-upload-field col-span-2">
           <label for="farming-log-image">Hình ảnh (tải từ máy)</label>
           <input id="farming-log-image" type="file" accept="image/jpeg,image/png,image/webp" :disabled="imageUploading || saving" @change="uploadImage" />
-          <p class="image-upload-hint">JPG, PNG hoặc WebP; tối đa 10 MB. Ảnh được lưu trên Cloudinary.</p>
-          <p v-if="imageUploading" class="image-upload-hint" role="status">Đang tải ảnh lên Cloudinary…</p>
+          <p class="image-upload-hint">JPG, PNG hoặc WebP; tối đa 10 MB.</p>
+          <p v-if="imageUploading" class="image-upload-hint" role="status">Đang tải ảnh lên…</p>
           <va-alert v-if="imageError" color="danger" outline size="small" role="alert">{{ imageError }}</va-alert>
           <div v-if="form.imageUrl" class="image-preview-wrap">
             <img class="image-preview" :src="form.imageUrl" alt="Ảnh đã tải lên cho nhật ký" />
@@ -443,8 +435,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     </va-modal>
 
     <!-- Modal: Lịch sử phiên bản (Có gom nhóm theo ngày) -->
-    <va-modal v-model="showHistoryModal" hide-default-actions size="large" overlay-opacity="0.5">
-      <template #header><h2 class="modal-title">Lịch sử phiên bản</h2></template>
+    <va-modal title="log-history-title" v-model="showHistoryModal" close-button aria-close-label="Đóng lịch sử" hide-default-actions size="large" overlay-opacity="0.5">
+      <template #header><h2 id="log-history-title" class="modal-title">Lịch sử phiên bản</h2></template>
       <div v-if="historyResult" class="history-list">
         <div v-for="group in groupedHistoryItems" :key="group.date" class="date-group-small mb-4">
           <h4 class="date-header-small">Ngày {{ group.date }}</h4>
@@ -455,7 +447,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
                 <strong>Phiên bản {{ version.version_number }}</strong>
                 
                 <!-- Fix lỗi số 3 (Đổi 'VALID' thành 'ACTIVE') -->
-                <va-badge :color="version.status === 'ACTIVE' ? 'success' : 'secondary'">{{ version.status }}</va-badge>
+                <va-badge :color="version.status === 'ACTIVE' ? 'success' : 'secondary'" :text="version.status" />
               </div>
               <p v-if="version.correction_reason" class="correction-reason"><strong>Lý do:</strong> {{ version.correction_reason }}</p>
               <p class="log-date"><va-icon name="schedule" size="small" class="mr-1" />{{ formatDateTime(version.created_at) }}</p>
@@ -471,8 +463,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     </va-modal>
 
     <!-- Modal: Kết quả Verify (Có gom nhóm theo ngày) -->
-    <va-modal v-model="showVerifyModal" hide-default-actions size="large" overlay-opacity="0.5">
-      <template #header><h2 class="modal-title">Kết quả đồng bộ Blockchain</h2></template>
+    <va-modal title="log-verification-title" v-model="showVerifyModal" close-button aria-close-label="Đóng kết quả đối soát" hide-default-actions size="large" overlay-opacity="0.5">
+      <template #header><h2 id="log-verification-title" class="modal-title">Kết quả đồng bộ Blockchain</h2></template>
       <div v-if="verifyResults">
         <va-alert v-if="verifyError" color="danger" outline class="mb-4" role="alert">{{ verifyError }}</va-alert>
 
@@ -492,9 +484,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
               <va-card-content>
                 <div class="v-top">
                   <strong>{{ FARMING_LOG_TYPE_LABELS[item.logType] }}</strong>
-                  <va-badge :color="getVerifyColor(getVerifyStatus(item))">
-                    {{ getVerifyLabel(getVerifyStatus(item)) }}
-                  </va-badge>
+                  <va-badge :color="getVerifyColor(getVerifyStatus(item))" :text="getVerifyLabel(getVerifyStatus(item))" />
                 </div>
                 <p class="log-date"><va-icon name="schedule" size="small" class="mr-1" />{{ formatDateTime(item.logDate) }}</p>
 
@@ -516,22 +506,13 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 </template>
 
 <style scoped>
-.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
 
-.page-container { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 1.5rem 0 4rem; font-family: 'Inter', sans-serif; }
+.page-container { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 1.5rem 0 4rem; font-family: inherit; }
 .back-btn { margin-bottom: 1rem; margin-left: -0.5rem; }
 
 /* Header */
-.page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
-.eyebrow { display: flex; align-items: center; margin: 0 0 0.5rem; color: var(--va-primary); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
-.page-title { margin: 0; font-size: clamp(1.8rem, 4vw, 2.2rem); font-weight: 800; color: var(--app-ink); }
-.header-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 
 /* Empty State */
-.empty-state { padding: 5rem 1rem; text-align: center; background: var(--app-canvas); border: 2px dashed #cbd5e1; border-radius: 20px; display: flex; flex-direction: column; align-items: center; }
-.empty-icon-wrapper { width: 80px; height: 80px; background: #e0f2fe; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; }
-.empty-state h2 { margin: 0 0 0.5rem; font-size: 1.5rem; color: var(--app-ink); }
-.text-secondary { color: var(--app-muted); margin: 0; }
 
 /* Gom Nhóm Ngày */
 .date-group { margin-bottom: 2.5rem; }
@@ -543,7 +524,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
   color: var(--app-ink);
   margin-bottom: 1.2rem; 
   padding-bottom: 0.5rem; 
-  border-bottom: 2px solid var(--app-line);
+  border-bottom: 1px solid var(--app-line);
 }
 .date-group-small { margin-bottom: 1.5rem; }
 .date-header-small {
@@ -559,19 +540,19 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 
 /* Grid & Cards */
 .log-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; }
-.log-card { border-radius: 16px; border: 1px solid var(--app-line); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important; display: flex; flex-direction: column; }
+.log-card { border-radius: 16px; border: 1px solid var(--app-line); box-shadow: none; display: flex; flex-direction: column; }
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem; }
 .log-type-title { font-size: 1.15rem; color: var(--app-ink); }
 .log-date { display: flex; align-items: center; color: var(--app-muted); font-size: 0.85rem; margin: 0 0 1rem; }
 
 /* Detail Rows */
 .log-details { border-top: 1px solid #f1f5f9; padding-top: 0.75rem; margin-bottom: 1rem; }
-.detail-row { display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.9rem; }
+.detail-row { display: flex; justify-content: space-between; gap: 16px; padding: 0.35rem 0; font-size: 0.9rem; }
 .detail-label { color: var(--app-muted); }
 .detail-value { font-weight: 600; color: var(--app-ink); text-align: right; }
 
 /* Hash & Code blocks */
-.hash-block { background: var(--app-canvas); border: 1px solid var(--app-line); border-radius: 8px; padding: 0.5rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--app-muted); word-break: break-all; }
+.hash-block { background: var(--app-canvas); border: 1px solid var(--app-line); border-radius: 8px; padding: 0.5rem 0.75rem; font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--app-muted); overflow-wrap: anywhere; }
 .hash-line span { font-weight: 700; color: var(--app-muted); margin-right: 0.25rem; }
 
 /* Actions */
@@ -586,7 +567,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 .form-actions { display: flex; justify-content: flex-end; gap: 1rem; padding-top: 1rem; border-top: 1px solid #f1f5f9; }
 
 /* History & Verify UI */
-.history-list { max-height: 60vh; overflow-y: auto; padding-right: 0.5rem; }
+.history-list { padding-right: 0.5rem; }
 .v-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
 .correction-reason { font-size: 0.9rem; color: #334155; margin-bottom: 0.5rem; background: #f1f5f9; padding: 0.5rem; border-radius: 6px; }
 
@@ -628,5 +609,5 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
   .col-span-1 { grid-column: 1 / -1; }
   .summary-stats { grid-template-columns: 1fr; }
 }
-.hash-block summary { min-height: 36px; cursor: pointer; color: var(--app-primary-dark); font-size: 12px; font-weight: 600; }
+.hash-block summary { min-height: 44px; cursor: pointer; color: var(--app-primary-dark); font-size: 12px; font-weight: 600; }
 </style>

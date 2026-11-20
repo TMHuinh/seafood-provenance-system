@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import DecimalField from '../../components/DecimalField.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { VaModal, VaButton, VaInput, VaTextarea, VaSelect, VaAlert, VaInnerLoading, VaCard, VaCardContent, VaBadge } from 'vuestic-ui'
 import { api } from '../../api/client'
@@ -173,32 +175,33 @@ onMounted(load)
 </script>
 
 <template>
-  <va-modal :model-value="true" hide-default-actions size="large" :no-dismiss="saving || transportSaving"
+  <va-modal title="harvest-dialog-title" :model-value="true" hide-default-actions size="large" :no-dismiss="saving || transportSaving"
     @update:model-value="(value: boolean) => { if (!value && !saving && !transportSaving) emit('close') }">
-    <template #header><h2>Thu hoạch và lô hàng — {{ batch.batch_code }}</h2></template>
+    <template #header><h2 id="harvest-dialog-title">Thu hoạch và lô hàng — {{ batch.batch_code }}</h2></template>
     <p>Mỗi lần thu hoạch tạo một lô riêng. Tổng sản lượng: {{ batch.yield_quantity ?? 0 }} kg.</p>
     <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }}</va-alert>
     <va-alert v-if="notice" color="info" class="message">{{ notice }} Không cần gửi lại lần thu hoạch đã lưu.</va-alert>
     <form v-if="['GROWING', 'READY_FOR_HARVEST'].includes(batch.status)" class="harvest-form" @submit.prevent="submit">
+      <h3 class="form-section-heading">Ghi nhận lần thu hoạch</h3>
       <va-input v-model="form.harvestDate" type="date" label="Ngày thu hoạch *" :min="batch.stocking_date.slice(0, 10)" :max="today" :disabled="saving" />
-      <va-input v-model="form.quantity" type="number" label="Khối lượng (kg) *" min="0.01" step="0.01" :disabled="saving" />
+      <DecimalField v-model="form.quantity" label="Khối lượng (kg) *" :disabled="saving" />
       <va-select v-model="form.isFinal" :options="options" value-by="value" text-by="label" label="Loại thu hoạch" :disabled="saving" />
       <va-textarea v-model="form.note" label="Ghi chú" maxlength="5000" :disabled="saving" />
       <va-button type="submit" :loading="saving" :disabled="saving || loading">Lưu thu hoạch và tạo lô</va-button>
     </form>
     <p v-else>Vụ hiện không thể ghi thêm thu hoạch.</p>
     <va-button v-if="error && !saving" preset="secondary" size="small" @click="load">Tải lại danh sách lô</va-button>
-    <h3>Các lô đã tạo</h3>
+    <h3 class="harvest-section-title">Các lô đã tạo</h3>
     <va-inner-loading :loading="loading">
       <div class="lot-list">
         <va-card v-for="lot in lots" :key="lot.id">
           <va-card-content>
-            <strong class="hash">{{ lot.lot_code }}</strong>
-            <p>{{ harvestDay(lot.harvest.harvest_date) }} · {{ lot.quantity.toLocaleString('vi-VN') }} kg · {{ lot.harvest.is_final ? 'Kết thúc thu hoạch' : 'Thu một phần' }}</p>
+            <div class="lot-heading"><div><span class="lot-label">Lô thu hoạch</span><strong class="hash">{{ lot.lot_code }}</strong></div><strong class="lot-weight">{{ lot.quantity.toLocaleString('vi-VN') }} <small>kg</small></strong></div>
+            <p>{{ harvestDay(lot.harvest.harvest_date) }} · {{ lot.harvest.is_final ? 'Kết thúc thu hoạch' : 'Thu một phần' }}</p>
             <p>Nguồn: {{ lot.provenance.farm.name }} / {{ lot.provenance.pond.name }} / {{ lot.provenance.batch.batch_code }}</p>
             <p>{{ SPECIES_LABELS[lot.provenance.batch.species] }} · Giống: {{ lot.provenance.batch.seed_source || 'Chưa ghi nguồn giống' }}</p>
             <p v-if="lot.harvest.note">{{ lot.harvest.note }}</p>
-            <va-badge :color="lot.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'">{{ labels[lot.blockchain?.status ?? 'UNKNOWN'] }}</va-badge>
+            <va-badge :color="lot.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'" :text="labels[lot.blockchain?.status ?? 'UNKNOWN']" />
             <details class="technical-disclosure"><summary>Thông tin xác thực Blockchain</summary>
             <p class="hash">Sự kiện: {{ lot.blockchain_event_id }}</p>
             <p v-if="lot.blockchain" class="hash">Hash dữ liệu: {{ lot.blockchain.data_hash }}</p>
@@ -210,11 +213,11 @@ onMounted(load)
             </details>
           </va-card-content>
         </va-card>
-        <p v-if="!loading && !error && !lots.length">Chưa có lô hàng từ thu hoạch.</p>
+        <EmptyState v-if="!loading && !error && !lots.length" heading="h3" title="Chưa có lô hàng từ thu hoạch" />
       </div>
     </va-inner-loading>
-    <va-modal v-if="transportLot" :model-value="true" hide-default-actions size="large" :no-dismiss="transportSaving" @update:model-value="(v: boolean) => { if (!v) closeTransport() }">
-      <template #header><h2>Vận chuyển {{ transportLot.lot_code }}</h2></template>
+    <va-modal title="lot-transport-title" v-if="transportLot" :model-value="true" hide-default-actions size="large" :no-dismiss="transportSaving" @update:model-value="(v: boolean) => { if (!v) closeTransport() }">
+      <template #header><h2 id="lot-transport-title">Vận chuyển {{ transportLot.lot_code }}</h2></template>
       <p>Khối lượng lô: {{ transportLot.quantity }} kg</p>
       <p>Chọn nhà phân phối nhận lô. Người vận chuyển cập nhật tiến độ; nhà phân phối xác nhận đã nhận hàng.</p>
       <va-alert v-if="transportDataLoaded && !recipients.length" color="warning" class="message">Chưa có nhà phân phối liên kết với tài khoản đang hoạt động.</va-alert>
@@ -226,8 +229,10 @@ onMounted(load)
         <va-alert v-if="remainingTransportQuantity === 0" color="success" class="message" role="status">Lô này đã vận chuyển đủ {{ transportLot.quantity.toLocaleString('vi-VN') }} kg. Không thể tạo thêm chuyến.</va-alert>
         <form v-else class="harvest-form" @submit.prevent="saveTransport">
           <p class="generated-code-hint wide">Mã chuyến sẽ được tạo tự động khi lưu.</p>
+          <h3 class="form-section-heading">Kế hoạch vận chuyển</h3>
           <va-input :disabled="transportSaving" v-model="transportForm.transportDate" type="datetime-local" label="Thời gian vận chuyển *" />
-          <va-input :disabled="transportSaving" v-model="transportForm.quantity" type="number" min="0.01" step="0.01" :max="remainingTransportQuantity" label="Khối lượng vận chuyển (kg) *" />
+          <DecimalField :disabled="transportSaving" v-model="transportForm.quantity" label="Khối lượng vận chuyển (kg) *" />
+          <h3 class="form-section-heading">Điểm giao nhận</h3>
           <va-input :disabled="transportSaving" v-model="transportForm.fromLocation" label="Điểm đi *" maxlength="500" />
           <va-input :disabled="transportSaving" v-model="transportForm.toLocation" label="Điểm đến *" maxlength="500" />
           <va-select :disabled="transportSaving" :model-value="transportForm.recipientOrganizationId" :options="recipients" value-by="id" text-by="name" label="Nhà phân phối nhận hàng *" @update:model-value="chooseRecipient(String($event ?? ''))" />
@@ -246,7 +251,7 @@ onMounted(load)
         </div>
         <div class="trip-actions">
           <span>{{ trip.delivery_reported_at && trip.status === 'IN_TRANSIT' ? 'Đã báo giao · chờ bên nhận xác nhận' : transportLabels[trip.status] || trip.status }}</span>
-          <va-badge v-if="trip.blockchain" :color="trip.blockchain.status === 'SUCCESS' ? 'success' : trip.blockchain.status === 'FAILED' ? 'danger' : 'warning'">{{ blockchainStatusLabels[trip.blockchain.status] || trip.blockchain.status }}</va-badge>
+          <va-badge v-if="trip.blockchain" :color="trip.blockchain.status === 'SUCCESS' ? 'success' : trip.blockchain.status === 'FAILED' ? 'danger' : 'warning'" :text="blockchainStatusLabels[trip.blockchain.status] || trip.blockchain.status" />
         </div>
         <details v-if="trip.events?.length" class="transport-event-history">
           <summary>Lịch sử xác thực · {{ trip.events.length }} mốc</summary>
@@ -273,6 +278,12 @@ onMounted(load)
 </template>
 
 <style scoped>
+.lot-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.lot-heading > div { display: grid; gap: 6px; }
+.lot-label { color: var(--app-muted); font-size: 12px; }
+.lot-weight { color: var(--app-primary-dark); font-size: 24px; font-variant-numeric: tabular-nums; }
+.lot-weight small { font-size: 13px; font-weight: 400; }
+.harvest-section-title { margin: 24px 0 12px; padding-top: 16px; border-top: 1px solid var(--app-line); font-size: 17px; font-weight: 650; }
 .harvest-form, .lot-list { display: grid; gap: 1rem; margin: 1rem 0; }
 .hash { overflow-wrap: anywhere; }
 .message { margin: 1rem 0; }

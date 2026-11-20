@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import LoadingState from '../../components/LoadingState.vue'
+import DecimalField from '../../components/DecimalField.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, reactive, ref, watch, onUnmounted } from 'vue'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
@@ -145,24 +149,12 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 
 <template>
   <main class="page-container" :aria-busy="loading">
-    <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn"
-      @click="router.push({ name: 'ponds', params: { farmId } })">
-      Quay lại Danh sách Ao
-    </va-button>
 
-    <header class="page-header">
-      <div class="header-info">
-        <p class="eyebrow">
-          <va-icon name="water" size="small" class="mr-1" />
-          {{ pondName || 'Đang tải...' }}
-        </p>
-        <h1 class="page-title">Quản lý Vụ nuôi</h1>
-        <p class="page-description">Theo dõi vụ nuôi, nhật ký chăm sóc và các lô thu hoạch.</p>
-      </div>
-      <va-button icon="add" :disabled="loading || saving" gradient class="shadow-md" @click="openCreate">
-        Tạo vụ nuôi mới
-      </va-button>
-    </header>
+    <PageHeader title="Vụ nuôi" :context="pondName" description="Theo dõi vụ nuôi, nhật ký chăm sóc và các lô thu hoạch.">
+      <template #actions>
+        <va-button icon="add" :disabled="loading || saving" @click="openCreate">Tạo vụ nuôi mới</va-button>
+      </template>
+    </PageHeader>
 
     <!-- Alerts -->
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
@@ -175,18 +167,14 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
-    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statusOptions" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
-    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
-    <va-inner-loading :loading="loading">
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statusOptions" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="vụ nuôi trong danh sách đã tải" />
+    <LoadingState v-if="loading" />
+    <va-inner-loading v-else :loading="false">
       <!-- Empty State -->
-      <div v-if="!loading && !error && !items.length" class="empty-state">
-        <div class="empty-icon-wrapper">
-          <va-icon name="set_meal" size="3rem" color="info" />
-        </div>
-        <h2>Chưa có vụ nuôi nào</h2>
-        <p class="text-secondary">Hãy bắt đầu bằng việc tạo vụ nuôi đầu tiên cho ao này.</p>
-        <va-button icon="add" class="mt-4" @click="openCreate">Tạo vụ nuôi ngay</va-button>
-      </div>
+      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có vụ nuôi nào" description="Tạo vụ nuôi đầu tiên để theo dõi quá trình nuôi trong ao này." icon="set_meal">
+        <va-button icon="add" @click="openCreate">Tạo vụ nuôi mới</va-button>
+      </EmptyState>
+      <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có vụ nuôi phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
       <!-- Lưới Card -->
       <div v-else class="batch-grid">
@@ -197,9 +185,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
                 <va-icon name="tag" size="small" class="mr-1" />
                 <strong>{{ item.batch_code }}</strong>
               </div>
-              <va-badge :color="statusColors[item.status] || 'primary'" class="status-badge">
-                {{ STATUS_LABELS[item.status] }}
-              </va-badge>
+              <va-badge :color="statusColors[item.status] || 'primary'" class="status-badge" :text="STATUS_LABELS[item.status]" />
             </div>
 
             <h2 class="species-title">
@@ -227,15 +213,17 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
           </va-card-content>
 
           <!-- Footer Actions -->
-          <div class="card-actions">
+          <div class="card-actions batch-actions">
             <va-button preset="primary" icon="edit_document" class="flex-1"
               @click="router.push({ name: 'farming-logs', params: { farmId, pondId, batchId: item.id } })">
               Nhật ký
             </va-button>
-            <va-button preset="secondary" icon="edit" color="info" aria-label="Đính chính" @click="openEdit(item)" />
-            <va-button preset="secondary" icon="history" color="secondary" aria-label="Lịch sử" @click="openHistory(item)" />
-            <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch / Lô</va-button>
-            <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(item)" />
+            <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch và lô</va-button>
+            <div class="batch-secondary-actions">
+              <va-button preset="plain" size="small" icon="edit" color="secondary" @click="openEdit(item)">Đính chính</va-button>
+              <va-button preset="plain" size="small" icon="history" color="secondary" @click="openHistory(item)">Lịch sử</va-button>
+              <va-button preset="plain" size="small" icon="delete" color="danger" aria-label="Xóa vụ nuôi" @click="remove(item)" />
+            </div>
           </div>
         </va-card>
       </div>
@@ -245,15 +233,16 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       @close="harvestBatchId = null" @updated="updateHarvestBatch" />
 
     <!-- Modal Form -->
-    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions size="large" overlay-opacity="0.5">
+    <va-modal title="batch-form-title" v-model="showForm" :no-dismiss="saving" hide-default-actions size="large" overlay-opacity="0.5">
       <template #header>
-        <h2 class="modal-title">{{ editingId ? 'Đính chính Vụ nuôi' : 'Tạo Vụ nuôi mới' }}</h2>
+        <h2 id="batch-form-title" class="modal-title">{{ editingId ? 'Đính chính Vụ nuôi' : 'Tạo Vụ nuôi mới' }}</h2>
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
         <div v-if="editingBatch" class="generated-code col-span-2"><span>Mã vụ nuôi</span><strong>{{ editingBatch.batch_code }}</strong><small>Mã vụ được hệ thống tạo tự động và không thể sửa.</small></div>
         <p v-else class="generated-code-hint col-span-2">Mã vụ nuôi sẽ được tạo tự động khi lưu.</p>
 
+        <h3 class="form-section-heading">Con giống và kế hoạch nuôi</h3>
         <va-select v-model="form.species" :options="speciesOptions" value-by="value" text-by="label" label="Loài nuôi *"
           class="col-span-1" />
 
@@ -274,12 +263,12 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
             <h3 class="section-title">Thông tin thu hoạch thực tế</h3>
             <div class="harvest-grid">
               <va-input v-model="form.actualHarvestDate" type="date" label="Ngày kết thúc thu hoạch" readonly />
-              <va-input v-model="form.yieldQuantity" type="number" label="Sản lượng thu hoạch (kg)" min="0"
-                step="0.01" readonly />
+              <DecimalField v-model="form.yieldQuantity" label="Sản lượng thu hoạch (kg)" readonly />
             </div>
           </div>
         </template>
 
+        <h3 class="form-section-heading">Thông tin bổ sung</h3>
         <va-textarea v-model="form.note" label="Ghi chú" placeholder="Thông tin thêm..." class="col-span-2" />
 
         <va-textarea v-if="editingId" v-model="correctionReason" label="Lý do đính chính *"
@@ -300,10 +289,10 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       </form>
     </va-modal>
 
-    <va-modal :model-value="Boolean(historyTitle)" hide-default-actions size="large"
+    <va-modal title="batch-history-title" :model-value="Boolean(historyTitle)" hide-default-actions size="large"
       @update:model-value="toggleHistory">
       <template #header>
-        <h2 class="modal-title">Lịch sử vụ {{ historyTitle }}</h2>
+        <h2 id="batch-history-title" class="modal-title">Lịch sử vụ {{ historyTitle }}</h2>
       </template>
       <va-inner-loading :loading="historyLoading">
         <div class="version-list">
@@ -311,9 +300,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
             <va-card-content>
               <div class="version-heading">
                 <strong>Phiên bản {{ version.version_number }}</strong>
-                <va-badge :color="version.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'">
-                  {{ version.blockchain?.status === 'SUCCESS' ? 'Đã ghi blockchain' : 'Chưa xác nhận' }}
-                </va-badge>
+                <va-badge :color="version.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'" :text="version.blockchain?.status === 'SUCCESS' ? 'Đã ghi blockchain' : 'Chưa xác nhận'" />
               </div>
               <p>{{ version.correction_reason || 'Dữ liệu được lưu trước lần đính chính đầu tiên' }}</p>
               <dl class="version-details">
@@ -341,13 +328,14 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 </template>
 
 <style scoped>
-.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
+.batch-secondary-actions { width: 100%; display: flex; gap: 4px; align-items: center; border-top: 1px solid var(--app-line); padding-top: 8px; margin-top: 4px; flex-wrap: wrap; }
+.batch-secondary-actions :last-child { margin-left: auto; }
 
 .page-container {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.5rem 0 4rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: inherit;
 }
 
 .back-btn {
@@ -356,65 +344,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 }
 
 /* Header Styles */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.eyebrow {
-  display: flex;
-  align-items: center;
-  margin: 0 0 0.5rem;
-  color: var(--va-primary);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.page-title {
-  margin: 0;
-  font-size: clamp(1.8rem, 4vw, 2.2rem);
-  font-weight: 800;
-  color: var(--app-ink);
-}
 
 /* Empty State */
-.empty-state {
-  padding: 5rem 1rem;
-  text-align: center;
-  background: var(--app-canvas);
-  border: 2px dashed #cbd5e1;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.empty-icon-wrapper {
-  width: 80px;
-  height: 80px;
-  background: #e0f2fe;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1.5rem;
-}
-
-.empty-state h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
-  color: var(--app-ink);
-}
-
-.text-secondary {
-  color: var(--app-muted);
-  margin: 0;
-}
 
 /* Grid Layout */
 .batch-grid {
@@ -427,15 +358,15 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 .batch-card {
   border-radius: 16px;
   border: 1px solid var(--app-line);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease;
+  box-shadow: none;
+  transition: border-color var(--app-motion);
   display: flex;
   flex-direction: column;
 }
 
 .batch-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+  transform: none;
+  box-shadow: none;
   border-color: #cbd5e1;
 }
 
@@ -643,10 +574,6 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 
 /* Responsive */
 @media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 
   .batch-grid {
     grid-template-columns: 1fr;

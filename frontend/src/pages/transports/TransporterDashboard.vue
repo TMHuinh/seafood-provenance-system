@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import LoadingState from '../../components/LoadingState.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { VaAlert, VaButton, VaIcon, VaInnerLoading } from 'vuestic-ui'
 import { api } from '../../api/client'
@@ -19,6 +22,7 @@ interface TransportJob extends LotTransport {
 const available = ref<TransportJob[]>([])
 const assigned = ref<TransportJob[]>([])
 const loading = ref(false)
+const loadedJobs = ref(false)
 const busyId = ref<string | null>(null)
 const error = ref('')
 const notice = ref('')
@@ -104,6 +108,7 @@ async function load() {
     const result = await api.get<{ available: TransportJob[]; assigned: TransportJob[] }>('/transports')
     available.value = result.available; assigned.value = result.assigned
     for (const item of [...result.available, ...result.assigned]) formFor(item)
+    loadedJobs.value = true
   } catch (e) { error.value = e instanceof Error ? e.message : 'Không tải được danh sách chuyến' }
   finally { loading.value = false }
 }
@@ -119,6 +124,7 @@ async function update(job: TransportJob, status: LotTransport['status']) {
   if (status === 'IN_TRANSIT' && (!validText(form.vehicle, 'Phương tiện', 1, 255) || !validText(form.driver, 'Tài xế', 1, 255))) return
   if (status === 'CANCELLED' && !validText(form.cancellationReason, 'Lý do hủy', 3, 1000)) return
   if (!validTemperature(form.temperature)) return
+  if (status === 'CANCELLED' && !window.confirm(`Hủy chuyến ${job.transport_code}?`)) return
   busyId.value = job.id
   try {
     await api.patch(`/transports/${job.id}/status`, {
@@ -189,42 +195,36 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
 
 <template>
   <main class="transport-page" :aria-busy="loading">
-    <section class="welcome-panel">
-      <div class="welcome-copy">
-        <div class="welcome-kicker"><span class="live-dot"></span> KHÔNG GIAN LÀM VIỆC · NGƯỜI VẬN CHUYỂN</div>
-        <h1>Điều phối vận chuyển</h1>
-        <p>Nhận chuyến, cập nhật tiến độ và báo giao lô hàng cho nhà phân phối.</p>
-      </div>
-      <div class="welcome-actions">
-        <div class="today-label">HÔM NAY</div>
-        <div class="today-date">{{ new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date()) }}</div>
+    <PageHeader title="Điều phối vận chuyển" description="Nhận chuyến, cập nhật tiến độ và báo giao lô hàng cho nhà phân phối.">
+      <template #actions>
         <va-button preset="secondary" icon="refresh" :loading="loading" @click="load">Làm mới dữ liệu</va-button>
-      </div>
-    </section>
+      </template>
+    </PageHeader>
 
     <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }}</va-alert>
     <va-alert v-if="notice" color="success" class="message" role="status">{{ notice }}</va-alert>
 
-    <section class="summary-grid" aria-label="Tổng quan vận chuyển">
-      <article class="summary-card new-summary"><span class="summary-icon"><va-icon name="add_task" /></span><span class="summary-label">Yêu cầu mới</span><strong>{{ available.length }}</strong><small>Đang chờ người nhận</small></article>
-      <article class="summary-card active-summary"><span class="summary-icon"><va-icon name="local_shipping" /></span><span class="summary-label">Đang xử lý</span><strong>{{ activeCount }}</strong><small>Chuyến bạn đã nhận</small></article>
-      <article class="summary-card done-summary"><span class="summary-icon"><va-icon name="task_alt" /></span><span class="summary-label">Đã giao</span><strong>{{ deliveredCount }}</strong><small>Hoàn tất bàn giao</small></article>
-      <article class="summary-card total-summary"><span class="summary-icon"><va-icon name="inventory_2" /></span><span class="summary-label">Tổng chuyến của tôi</span><strong>{{ assigned.length }}</strong><small>Tính từ trước đến nay</small></article>
+    <section class="summary-grid" aria-label="Tổng quan vận chuyển" :aria-busy="loading">
+      <article class="summary-card new-summary"><span class="summary-icon"><va-icon name="add_task" /></span><span class="summary-label">Yêu cầu mới</span><strong>{{ !loadedJobs ? '—' : available.length }}</strong><small>Đang chờ người nhận</small></article>
+      <article class="summary-card active-summary"><span class="summary-icon"><va-icon name="local_shipping" /></span><span class="summary-label">Đang xử lý</span><strong>{{ !loadedJobs ? '—' : activeCount }}</strong><small>Chuyến bạn đã nhận</small></article>
+      <article class="summary-card done-summary"><span class="summary-icon"><va-icon name="task_alt" /></span><span class="summary-label">Đã giao</span><strong>{{ !loadedJobs ? '—' : deliveredCount }}</strong><small>Hoàn tất bàn giao</small></article>
+      <article class="summary-card total-summary"><span class="summary-icon"><va-icon name="inventory_2" /></span><span class="summary-label">Tổng chuyến của tôi</span><strong>{{ !loadedJobs ? '—' : assigned.length }}</strong><small>Tính từ trước đến nay</small></article>
     </section>
 
     <section class="dispatch-board">
       <div class="board-heading">
-        <div><p class="eyebrow">BẢNG CÔNG VIỆC</p><h2>Quản lý chuyến hàng</h2><p class="board-description">Chọn một yêu cầu để nhận, hoặc mở chuyến đang chạy để cập nhật tiến độ.</p></div>
-        <label class="search-box"><span aria-hidden="true">⌕</span><input v-model="search" type="search" placeholder="Tìm mã chuyến, lô hàng, tuyến đường…" aria-label="Tìm chuyến vận chuyển" /></label>
+        <div><h2>Quản lý chuyến hàng</h2><p class="board-description">Chọn một yêu cầu để nhận, hoặc mở chuyến đang chạy để cập nhật tiến độ.</p></div>
+        <label class="search-box"><va-icon name="search" aria-hidden="true" /><input v-model="search" type="search" placeholder="Mã chuyến, mã lô hoặc điểm giao nhận…" aria-label="Tìm chuyến vận chuyển" /></label>
       </div>
 
-      <div class="board-tabs" role="tablist" aria-label="Lọc chuyến vận chuyển">
-        <button role="tab" :aria-selected="selectedView === 'available'" :class="{ selected: selectedView === 'available' }" @click="selectedView = 'available'">Yêu cầu mới <span>{{ available.length }}</span></button>
-        <button role="tab" :aria-selected="selectedView === 'active'" :class="{ selected: selectedView === 'active' }" @click="selectedView = 'active'">Đang xử lý <span>{{ activeCount }}</span></button>
-        <button role="tab" :aria-selected="selectedView === 'history'" :class="{ selected: selectedView === 'history' }" @click="selectedView = 'history'">Lịch sử <span>{{ assigned.length - activeCount }}</span></button>
+      <div class="board-tabs" role="group" aria-label="Lọc chuyến vận chuyển">
+        <button type="button" :aria-pressed="selectedView === 'available'" :class="{ selected: selectedView === 'available' }" @click="selectedView = 'available'">Yêu cầu mới <span>{{ available.length }}</span></button>
+        <button type="button" :aria-pressed="selectedView === 'active'" :class="{ selected: selectedView === 'active' }" @click="selectedView = 'active'">Đang xử lý <span>{{ activeCount }}</span></button>
+        <button type="button" :aria-pressed="selectedView === 'history'" :class="{ selected: selectedView === 'history' }" @click="selectedView = 'history'">Lịch sử <span>{{ assigned.length - activeCount }}</span></button>
       </div>
 
-      <va-inner-loading :loading="loading">
+      <LoadingState v-if="loading" />
+    <va-inner-loading v-else :loading="false">
         <div v-if="visibleJobs.length" class="job-grid">
           <article v-for="job in visibleJobs" :key="job.id" class="job-card" :class="{ 'request-card': selectedView === 'available' }">
             <div class="job-topline"><div class="job-code"><span class="truck-icon"><va-icon name="local_shipping" /></span><div><small>MÃ CHUYẾN</small><strong>{{ job.transport_code }}</strong></div></div>
@@ -252,8 +252,10 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
               <div class="journey-progress" aria-label="Tiến trình chuyến hàng">
                 <div class="progress-step done"><span>✓</span><small>Đã nhận</small></div><div class="progress-track" :class="{ reached: job.status === 'IN_TRANSIT' }"></div>
                 <div class="progress-step" :class="{ done: job.status === 'IN_TRANSIT' }"><span>{{ job.status === 'IN_TRANSIT' ? '✓' : '2' }}</span><small>Đang đi</small></div><div class="progress-track"></div>
-                <div class="progress-step"><span>3</span><small>Đã giao</small></div>
+                <div class="progress-step"><span>3</span><small>Báo giao</small></div><div class="progress-track"></div>
+                <div class="progress-step"><span>4</span><small>Bên nhận xác nhận</small></div>
               </div>
+              <h3 class="job-section-title">Thông tin vận chuyển</h3>
               <div class="driver-form">
                 <label>Phương tiện<input v-model="formFor(job).vehicle" maxlength="255" placeholder="VD: Xe tải lạnh · 51A-12345" /></label>
                 <label>Tài xế<input v-model="formFor(job).driver" maxlength="255" placeholder="Tên người lái xe" /></label>
@@ -284,7 +286,7 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
                 <button v-if="!job.delivery_reported_at" class="cancel-action" :disabled="Boolean(busyId)" @click="update(job, 'CANCELLED')">Hủy chuyến</button>
               </details>
             </template>
-            <div v-else-if="job.delivery_reported_at" class="completed-note awaiting-confirmation"><span>…</span>Người vận chuyển đã báo giao thành công. Đang chờ nhà phân phối xác nhận đã nhận hàng.</div>
+            <div v-else-if="job.delivery_reported_at && job.status === 'IN_TRANSIT'" class="completed-note awaiting-confirmation"><span>…</span>Người vận chuyển đã báo giao thành công. Đang chờ nhà phân phối xác nhận đã nhận hàng.</div>
             <div v-else class="completed-note"><span>{{ job.status === 'DELIVERED' ? '✓' : '!' }}</span>{{ job.status === 'DELIVERED' ? 'Lô hàng đã được bàn giao thành công.' : 'Chuyến vận chuyển đã được hủy.' }}</div>
             <details v-if="job.events?.length" class="event-disclosure">
               <summary>Lịch sử sự kiện <span>{{ job.events.length }} mốc</span></summary>
@@ -304,50 +306,41 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
             </details>
           </article>
         </div>
-        <div v-else class="empty-state">
-          <div class="empty-icon"><va-icon :name="selectedView === 'available' ? 'local_shipping' : selectedView === 'active' ? 'inventory_2' : 'task_alt'" /></div>
-          <h3>{{ search ? 'Không tìm thấy chuyến phù hợp' : selectedView === 'available' ? 'Chưa có yêu cầu mới' : selectedView === 'active' ? 'Bạn chưa có chuyến đang xử lý' : 'Chưa có lịch sử chuyến' }}</h3>
-          <p>{{ search ? 'Thử tìm theo mã chuyến, mã lô hoặc điểm giao nhận.' : selectedView === 'available' ? 'Yêu cầu vận chuyển mới từ các cơ sở sẽ hiển thị tại đây.' : 'Các chuyến của bạn sẽ được hiển thị tại đây.' }}</p>
-        </div>
+        <EmptyState
+          v-else-if="!loading && loadedJobs"
+          heading="h3"
+          :icon="selectedView === 'available' ? 'local_shipping' : selectedView === 'active' ? 'inventory_2' : 'task_alt'"
+          :title="search ? 'Không tìm thấy chuyến phù hợp' : selectedView === 'available' ? 'Chưa có yêu cầu mới' : selectedView === 'active' ? 'Bạn chưa có chuyến đang xử lý' : 'Chưa có lịch sử chuyến'"
+          :description="search ? 'Thử tìm theo mã chuyến, mã lô hoặc điểm giao nhận.' : selectedView === 'available' ? 'Yêu cầu vận chuyển mới từ các cơ sở sẽ hiển thị tại đây.' : undefined"
+        />
       </va-inner-loading>
-      <footer class="board-footer">Hiển thị {{ visibleJobs.length }} / {{ selectedView === 'available' ? available.length : selectedView === 'active' ? activeCount : assigned.length - activeCount }} chuyến</footer>
+      <footer v-if="!loading && loadedJobs" class="board-footer">Hiển thị {{ visibleJobs.length }} / {{ selectedView === 'available' ? available.length : selectedView === 'active' ? activeCount : assigned.length - activeCount }} chuyến</footer>
     </section>
   </main>
 </template>
 
 <style scoped>
-.transport-page { --ink:#15343a; --muted:#6b8287; --line:#e4eeec; --teal:var(--app-primary); --mint:var(--app-primary-soft); max-width:1240px; width:calc(100% - 2rem); margin:2rem auto 4rem; color:var(--ink); }
-.welcome-panel { min-height:190px; position:relative; overflow:hidden; display:flex; align-items:center; justify-content:space-between; gap:2rem; padding:2rem 2.25rem; border-radius:22px; color:#f5fffc; background:linear-gradient(115deg,#103f43 0%,#0d6663 55%,#17847a 100%); box-shadow:0 16px 40px #104d421a; }
-.welcome-panel::after { content:""; position:absolute; width:340px; height:340px; right:90px; top:-220px; border:1px solid #ffffff18; border-radius:50%; box-shadow:0 0 0 35px #ffffff08,0 0 0 75px #ffffff06; }
-.welcome-copy,.welcome-actions { position:relative; z-index:1; }
-.welcome-kicker { display:flex; align-items:center; gap:.55rem; color:#bde8d9; font-size:.69rem; font-weight:800; letter-spacing:.11em; }
-.live-dot { width:8px; height:8px; border-radius:50%; background:#7de1b2; box-shadow:0 0 0 4px #8be5b222; }
-.welcome-copy h1 { margin:.8rem 0 .45rem; color:#fff; font-size:clamp(1.7rem,3vw,2.35rem); letter-spacing:-.035em; }
-.welcome-copy p { max-width:610px; margin:0; color:#d0e8e3; font-size:.95rem; line-height:1.6; }
-.welcome-actions { min-width:210px; text-align:right; }
-.today-label { color:#a8d6ca; font-size:.65rem; letter-spacing:.12em; font-weight:800; }
-.today-date { margin:.3rem 0 1rem; color:#fff; font-weight:700; text-transform:capitalize; }
-.welcome-actions :deep(.va-button) { color:#fff; border-color:#ffffff60; background:#ffffff12; }
+.transport-page { --ink:var(--app-ink); --muted:var(--app-muted); --line:var(--app-line); --teal:var(--app-primary); --mint:var(--app-primary-soft); max-width:1240px; width:calc(100% - 2rem); margin:2rem auto 4rem; color:var(--ink); }
+
 .message { margin:1rem 0; }
 .summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin:1.25rem 0 1.5rem; }
-.summary-card { position:relative; display:grid; grid-template-columns:1fr auto; align-items:center; gap:.1rem .75rem; padding:1.1rem 1.2rem; border:1px solid var(--line); border-radius:15px; background:#fff; box-shadow:0 4px 14px #183a3506; }
+.summary-card { min-width:0; position:relative; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.1rem .75rem; padding:1.1rem 1.2rem; border:1px solid var(--line); border-radius:15px; background:#fff; box-shadow:none; }
 .summary-icon { grid-column:2; grid-row:1 / span 3; display:grid; place-items:center; width:42px; height:42px; border-radius:13px; color:#0d766b; background:#e9f5f1; font-size:1.35rem; font-weight:700; }
 .active-summary .summary-icon { color:#3e6cbb; background:#edf3ff; }.done-summary .summary-icon { color:#18805b; background:#e9f7ef; }.total-summary .summary-icon { color:#aa771b; background:#fff6df; }
-.summary-label { color:#61797e; font-size:.79rem; font-weight:650; }.summary-card strong { font-size:1.75rem; letter-spacing:-.04em; line-height:1.25; }.summary-card small { color:#8a9c9e; font-size:.72rem; }
-.dispatch-board { overflow:hidden; border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:0 8px 30px #193b3507; }
+.summary-label { color:#61797e; font-size:.79rem; font-weight:650; }.summary-card strong { font-size:1.75rem; letter-spacing:-.04em; line-height:1.25; }.summary-card small { color:var(--app-muted); font-size:.72rem; }
+.dispatch-board { overflow:hidden; border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:none; }
 .board-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:1.5rem; padding:1.55rem 1.6rem 1.2rem; }
-.eyebrow { margin:0 0 .35rem; color:#0f8376; font-size:.67rem; font-weight:850; letter-spacing:.12em; }
 .board-heading h2 { margin:0; font-size:1.35rem; letter-spacing:-.025em; }.board-description { margin:.38rem 0 0; color:var(--muted); font-size:.84rem; }
 .search-box { display:flex; align-items:center; gap:.55rem; width:min(360px,40%); height:42px; padding:0 .8rem; border:1px solid #dce8e6; border-radius:10px; color:#759092; background:#fbfdfd; }.search-box span { font-size:1.5rem; line-height:1; }.search-box input { width:100%; border:0; outline:0; background:transparent; color:var(--ink); font:inherit; font-size:.8rem; }.search-box:focus-within { border-color:#63aaa1; box-shadow:0 0 0 3px #0f766e14; }
-.board-tabs { display:flex; gap:.3rem; padding:0 1.6rem; border-bottom:1px solid var(--line); }.board-tabs button { position:relative; display:flex; align-items:center; gap:.55rem; padding:.8rem .85rem .9rem; border:0; background:none; color:var(--app-muted); font:inherit; font-size:.82rem; font-weight:650; cursor:pointer; }.board-tabs button::after { position:absolute; right:.8rem; bottom:-1px; left:.8rem; height:2px; background:transparent; content:""; }.board-tabs button.selected { color:#0d766b; }.board-tabs button.selected::after { background:#0f8376; }.board-tabs button span { padding:.12rem .42rem; border-radius:99px; color:#73878a; background:#f0f5f4; font-size:.7rem; }.board-tabs button.selected span { color:#0e766b; background:#e3f3ef; }
-.job-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,560px),1fr)); gap:1rem; padding:1.25rem 1.6rem; }.job-card { min-width:0; padding:1.15rem; border:1px solid #e4edeb; border-radius:14px; background:#fff; transition:border-color .18s,box-shadow .18s,transform .18s; }.job-card:hover { border-color:#b8d8d1; box-shadow:0 8px 24px #124d4010; transform:translateY(-1px); }.request-card { border-left:3px solid #daae50; }
-.job-topline,.job-code,.route-point,.cargo-strip,.job-actions { display:flex; align-items:center; }.job-topline { justify-content:space-between; gap:.75rem; }.job-code { gap:.65rem; }.truck-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; color:#0e766b; background:#e9f5f1; font-size:1.3rem; font-weight:700; }.job-code div { display:grid; gap:.12rem; }.job-code small,.route-point small { color:#8a9c9e; font-size:.61rem; font-weight:800; letter-spacing:.08em; }.job-code strong { color:#193c41; font-size:.98rem; }.status-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.38rem .65rem; border-radius:99px; color:#8a6a23; background:#fff5dd; font-size:.68rem; font-weight:750; white-space:nowrap; }.status-pill i { width:6px; height:6px; border-radius:50%; background:currentColor; }.status-pill.in_transit { color:#3569a9; background:#edf4ff; }.status-pill.delivered { color:#22815a; background:#eaf7ef; }.status-pill.cancelled { color:#a44c4c; background:#fff0ef; }
-.route-line { display:grid; grid-template-columns:minmax(0,1fr) 55px minmax(0,1fr); align-items:center; margin:1.15rem 0 1rem; }.route-point { min-width:0; gap:.55rem; }.route-point div { min-width:0; display:grid; gap:.25rem; }.route-point strong { overflow:hidden; color:#28464b; font-size:.82rem; text-overflow:ellipsis; white-space:nowrap; }.route-dot { flex:none; width:9px; height:9px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 2px #2e9b8c; }.destination-dot { box-shadow:0 0 0 2px #d6a13a; }.route-connector { position:relative; border-top:1px dashed #afc6c1; text-align:center; }.route-connector span { position:relative; top:-.57rem; padding:0 .35rem; color:#5d7778; background:#fff; font-size:.64rem; font-weight:750; white-space:nowrap; }
-.cargo-strip { gap:.65rem; min-width:0; padding:.72rem .75rem; border:1px solid #edf2f1; border-radius:10px; background:var(--app-canvas); }.cargo-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:9px; color:#358d7d; background:#e6f2ee; }.cargo-copy { display:grid; min-width:0; flex:1; gap:.2rem; }.cargo-copy strong { overflow:hidden; color:#315055; font-size:.76rem; text-overflow:ellipsis; white-space:nowrap; }.cargo-copy strong span { color:#91aaa4; }.cargo-copy small { overflow:hidden; color:#829695; font-size:.68rem; text-overflow:ellipsis; white-space:nowrap; }.cargo-strip time { color:var(--app-muted); font-size:.66rem; white-space:nowrap; }.job-note { margin:.65rem 0 0; color:var(--app-muted); font-size:.75rem; }
+.board-tabs { display:flex; gap:.3rem; padding:0 1.6rem; border-bottom:1px solid var(--line); }.board-tabs button { position:relative; display:flex; align-items:center; gap:.55rem; padding:.8rem .85rem .9rem; border:0; background:none; color:var(--app-muted); font:inherit; font-size:.82rem; font-weight:650; cursor:pointer; }.board-tabs button::after { position:absolute; right:.8rem; bottom:-1px; left:.8rem; height:2px; background:transparent; content:""; }.board-tabs button.selected { color:#0d766b; }.board-tabs button.selected::after { background:#0f8376; }.board-tabs button span { padding:.12rem .42rem; border-radius:99px; color:var(--app-muted); background:#f0f5f4; font-size:.7rem; }.board-tabs button.selected span { color:#0e766b; background:#e3f3ef; }
+.job-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:1rem; padding:1.25rem 1.6rem; }.job-card { min-width:0; padding:1.15rem; border:1px solid #e4edeb; border-radius:14px; background:#fff; transition:border-color .18s,box-shadow .18s,transform .18s; }.job-card:hover { border-color:#b8d8d1; box-shadow:none; }.request-card { border-left:3px solid #daae50; }
+.job-topline,.job-code,.route-point,.cargo-strip,.job-actions { display:flex; align-items:center; }.job-topline { justify-content:space-between; gap:.75rem; }.job-code { gap:.65rem; }.truck-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; color:#0e766b; background:#e9f5f1; font-size:1.3rem; font-weight:700; }.job-code div { display:grid; gap:.12rem; }.job-code small,.route-point small { color:var(--app-muted); font-size:.61rem; font-weight:800; letter-spacing:.08em; }.job-code strong { color:#193c41; font-size:.98rem; }.status-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.38rem .65rem; border-radius:99px; color:#8a6a23; background:#fff5dd; font-size:.68rem; font-weight:750; white-space:nowrap; }.status-pill i { width:6px; height:6px; border-radius:50%; background:currentColor; }.status-pill.in_transit { color:#3569a9; background:#edf4ff; }.status-pill.delivered { color:#22815a; background:#eaf7ef; }.status-pill.cancelled { color:#a44c4c; background:#fff0ef; }
+.route-line { display:grid; grid-template-columns:minmax(0,1fr) 55px minmax(0,1fr); align-items:center; margin:1.15rem 0 1rem; }.route-point { min-width:0; gap:.55rem; }.route-point div { min-width:0; display:grid; gap:.25rem; }.route-point strong { overflow-wrap:anywhere; color:var(--app-ink); font-size:.85rem; }.route-dot { flex:none; width:9px; height:9px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 2px #2e9b8c; }.destination-dot { box-shadow:0 0 0 2px #d6a13a; }.route-connector { position:relative; border-top:1px dashed #afc6c1; text-align:center; }.route-connector span { position:relative; top:-.57rem; padding:0 .35rem; color:#5d7778; background:#fff; font-size:.64rem; font-weight:750; white-space:nowrap; }
+.cargo-strip { gap:.65rem; min-width:0; padding:.72rem .75rem; border:1px solid #edf2f1; border-radius:10px; background:var(--app-canvas); }.cargo-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:9px; color:#358d7d; background:#e6f2ee; }.cargo-copy { display:grid; min-width:0; flex:1; gap:.2rem; }.cargo-copy strong { overflow-wrap:anywhere; color:var(--app-ink); font-size:13px; }.cargo-copy strong span { color:#91aaa4; }.cargo-copy small { overflow-wrap:anywhere; color:var(--app-muted); font-size:.75rem; }.cargo-strip time { color:var(--app-muted); font-size:.66rem; white-space:nowrap; }.job-note { margin:.65rem 0 0; color:var(--app-muted); font-size:.75rem; }
 .driver-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.7rem; margin-top:.9rem; }
-.driver-form label,.cancel-field,.tracking-panel>label,.delivery-proof-field label { display:grid; min-width:0; gap:.35rem; color:#526d70; font-size:.7rem; font-weight:700; line-height:1.35; }
-.driver-form input,.cancel-field input,.tracking-panel input,.tracking-panel select,.delivery-proof-field input { box-sizing:border-box; width:100%; min-width:0; height:40px; padding:0 .7rem; border:1px solid #d9e5e3; border-radius:8px; outline:none; color:#244449; background:#fff; font:inherit; font-size:.76rem; font-weight:450; }
-.driver-form input::placeholder,.cancel-field input::placeholder,.tracking-panel input::placeholder { color:#9aabaa; }
+.driver-form label,.cancel-field,.tracking-panel>label,.delivery-proof-field label { display:grid; min-width:0; gap:.35rem; color:#526d70; font-size:13px; font-weight:500; line-height:1.6; }
+.driver-form input,.cancel-field input,.tracking-panel input,.tracking-panel select,.delivery-proof-field input { box-sizing:border-box; width:100%; min-width:0; min-height:44px; padding:8px 12px; border:1px solid var(--app-control-line); border-radius:8px; outline:none; color:#244449; background:#fff; font:inherit; font-size:14px; font-weight:400; }
+.driver-form input::placeholder,.cancel-field input::placeholder,.tracking-panel input::placeholder { color:var(--app-muted); }
 .driver-form input:focus,.cancel-field input:focus,.tracking-panel input:focus,.tracking-panel select:focus,.delivery-proof-field input:focus { border-color:#63aaa1; box-shadow:0 0 0 3px #0f766e14; }
 .cancel-field { margin-top:.75rem; }
 .job-actions { gap:.6rem; margin-top:.75rem; }
@@ -358,23 +351,48 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
 .tracking-panel { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.75rem; margin-top:.85rem; padding:.9rem; border:1px solid #e3eeeb; border-radius:11px; background:var(--app-canvas); }
 .tracking-panel-heading { display:grid; grid-column:1/-1; gap:.2rem; }
 .tracking-panel-heading strong { color:#31575a; font-size:.82rem; }
-.tracking-panel-heading small,.delivery-proof-field small { color:#7c9291; font-size:.68rem; line-height:1.45; }
+.tracking-panel-heading small,.delivery-proof-field small { color:var(--app-muted); font-size:.68rem; line-height:1.45; }
 .tracking-panel :deep(.va-button) { grid-column:1/-1; justify-self:start; }
 .delivery-proof-field { padding:.75rem; border:1px dashed #bdd6d0; border-radius:9px; background:#fff; }
 .delivery-proof-field input { height:auto; padding:.5rem; }
-.request-hint { display:flex; align-items:center; gap:.55rem; margin:.8rem 0 .65rem; color:#738588; }.request-hint span { display:grid; place-items:center; flex:none; width:18px; height:18px; border:1px solid #b6cbc6; border-radius:50%; font-size:.65rem; font-weight:800; }.request-hint p { margin:0; font-size:.72rem; line-height:1.45; }.primary-action { min-height:40px; display:flex; justify-content:space-between; width:100%; padding:0 .85rem; border:0; border-radius:9px; color:#fff; background:#107c70; font:inherit; font-size:.79rem; font-weight:750; cursor:pointer; }.primary-action:hover { background:#0b695f; }.primary-action:disabled { opacity:.65; cursor:wait; }.delivered-action { background:#16845d; }.delivered-action:hover { background:#116e4d; }
-.journey-progress { display:flex; align-items:center; margin:.9rem 0 .8rem; }.progress-step { display:grid; justify-items:center; gap:.25rem; color:#9aabaa; }.progress-step span { display:grid; place-items:center; width:22px; height:22px; border:1px solid #d7e2e0; border-radius:50%; background:#fff; font-size:.65rem; font-weight:800; }.progress-step small { font-size:.61rem; white-space:nowrap; }.progress-step.done { color:#148373; }.progress-step.done span { border-color:#168779; color:#fff; background:#168779; }.progress-track { flex:1; height:2px; margin:-1rem .35rem 0; background:#dce7e5; }.progress-track.reached { background:#168779; }
-.delivery-proof-field { display:grid; grid-column:1/-1; gap:.35rem; color:#627a7e; font-size:.67rem; }.delivery-proof-field label { display:grid; gap:.4rem; }.delivery-proof-field input { height:auto; padding:.4rem; }.delivery-proof-field small { color:#7c9291; }.delivery-proof-preview { display:block; width:min(100%,260px); max-height:180px; border:1px solid #dce7e5; border-radius:8px; object-fit:cover; }.delivery-proof-link { display:block; margin-top:.4rem; color:#107c70; font-size:.68rem; }
+.request-hint { display:flex; align-items:center; gap:.55rem; margin:.8rem 0 .65rem; color:var(--app-muted); }.request-hint span { display:grid; place-items:center; flex:none; width:18px; height:18px; border:1px solid #b6cbc6; border-radius:50%; font-size:.65rem; font-weight:800; }.request-hint p { margin:0; font-size:.72rem; line-height:1.45; }.primary-action { min-height:40px; display:flex; justify-content:space-between; width:100%; padding:0 .85rem; border:0; border-radius:9px; color:#fff; background:#107c70; font:inherit; font-size:.79rem; font-weight:750; cursor:pointer; }.primary-action:hover { background:#0b695f; }.primary-action:disabled { opacity:.65; cursor:wait; }.delivered-action { background:#16845d; }.delivered-action:hover { background:#116e4d; }
+.journey-progress { display:flex; align-items:center; margin:.9rem 0 .8rem; }.progress-step { display:grid; justify-items:center; gap:.25rem; color:var(--app-muted); }.progress-step span { display:grid; place-items:center; width:22px; height:22px; border:1px solid #d7e2e0; border-radius:50%; background:#fff; font-size:.65rem; font-weight:800; }.progress-step small { font-size:12px; text-align:center; max-width:76px; line-height:1.5; }.progress-step.done { color:var(--app-primary-dark); }.progress-step.done span { border-color:#168779; color:#fff; background:var(--app-primary); }.progress-track { flex:1; height:2px; margin:-1rem .35rem 0; background:#dce7e5; }.progress-track.reached { background:var(--app-primary); }
+.delivery-proof-field { display:grid; grid-column:1/-1; gap:.35rem; color:#627a7e; font-size:.67rem; }.delivery-proof-field label { display:grid; gap:.4rem; }.delivery-proof-field input { height:auto; padding:.4rem; }.delivery-proof-field small { color:var(--app-muted); }.delivery-proof-preview { display:block; width:min(100%,260px); max-height:180px; border:1px solid #dce7e5; border-radius:8px; object-fit:cover; }.delivery-proof-link { display:block; margin-top:.4rem; color:#107c70; font-size:.68rem; }
 .completed-note { display:flex; align-items:center; gap:.55rem; margin-top:.8rem; padding:.65rem .75rem; border-radius:8px; color:#39765d; background:#eff8f2; font-size:.74rem; }.completed-note span { font-weight:900; }
-.event-disclosure { margin-top:.8rem; border-top:1px solid #edf2f1; color:#3c5b5e; }.event-disclosure summary { display:flex; align-items:center; gap:.5rem; padding:.7rem 0 .2rem; color:#39766e; font-size:.72rem; font-weight:750; cursor:pointer; list-style-position:inside; }.event-disclosure summary span { padding:.12rem .45rem; border-radius:99px; color:#607b79; background:#eef5f3; font-size:.63rem; }.event-list { display:grid; gap:.7rem; margin:.5rem 0 0; padding:0 0 0 1.5rem; }.event-row { padding:.15rem 0 .45rem .2rem; color:#849695; font-size:.68rem; }.event-heading { display:flex; justify-content:space-between; gap:.5rem; }.event-heading strong { color:#365b5e; font-size:.7rem; }.event-heading time { color:#839493; font-size:.63rem; white-space:nowrap; }.event-summary { display:block; margin-top:.25rem; color:#536f70; font-size:.63rem; }.proof-line { display:flex; align-items:center; gap:.35rem; margin-top:.3rem; color:#788e8d; font-size:.62rem; overflow-wrap:anywhere; }.proof-dot { flex:none; width:7px; height:7px; border-radius:50%; background:#d9aa45; }.proof-dot.success { background:#278760; }.proof-dot.failed { background:#c65757; }.event-hash,.event-transaction { display:block; margin-top:.3rem; color:#617d7b; font-size:.59rem; overflow-wrap:anywhere; white-space:normal; }.event-error { display:block; margin-top:.3rem; color:#a94e4e; font-size:.63rem; }
-.empty-state { display:grid; justify-items:center; padding:3rem 1rem; text-align:center; }.empty-icon { display:grid; place-items:center; width:54px; height:54px; margin-bottom:.85rem; border-radius:16px; color:#348a7b; background:var(--app-primary-soft); font-size:1.5rem; }.empty-state h3 { margin:0; color:#27464a; font-size:1rem; }.empty-state p { max-width:420px; margin:.4rem 0 0; color:#829395; font-size:.8rem; line-height:1.5; }.board-footer { padding:.75rem 1.6rem; border-top:1px solid #eef3f2; color:#89999a; font-size:.68rem; }
+.event-disclosure { margin-top:.8rem; border-top:1px solid #edf2f1; color:#3c5b5e; }.event-disclosure summary { display:flex; align-items:center; gap:.5rem; padding:.7rem 0 .2rem; color:#39766e; font-size:.72rem; font-weight:750; cursor:pointer; list-style-position:inside; }.event-disclosure summary span { padding:.12rem .45rem; border-radius:99px; color:#607b79; background:#eef5f3; font-size:.63rem; }.event-list { display:grid; gap:.7rem; margin:.5rem 0 0; padding:0 0 0 1.5rem; }.event-row { padding:.15rem 0 .45rem .2rem; color:var(--app-muted); font-size:.68rem; }.event-heading { display:flex; justify-content:space-between; gap:.5rem; }.event-heading strong { color:#365b5e; font-size:.7rem; }.event-heading time { color:var(--app-muted); font-size:.63rem; white-space:nowrap; }.event-summary { display:block; margin-top:.25rem; color:#536f70; font-size:.63rem; }.proof-line { display:flex; align-items:center; gap:.35rem; margin-top:.3rem; color:var(--app-muted); font-size:.62rem; overflow-wrap:anywhere; }.proof-dot { flex:none; width:7px; height:7px; border-radius:50%; background:#d9aa45; }.proof-dot.success { background:#278760; }.proof-dot.failed { background:#c65757; }.event-hash,.event-transaction { display:block; margin-top:.3rem; color:#617d7b; font-size:.59rem; overflow-wrap:anywhere; white-space:normal; }.event-error { display:block; margin-top:.3rem; color:#a94e4e; font-size:.63rem; }
+.board-footer { padding:.75rem 1.6rem; border-top:1px solid #eef3f2; color:var(--app-muted); font-size:.68rem; }
 @media (max-width:900px) { .summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.job-grid { grid-template-columns:1fr; } }
 @media (max-width:760px) { .driver-form { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media (max-width:600px) { .transport-page { width:calc(100% - 1rem); margin:1rem auto 2rem; }.welcome-panel { align-items:flex-start; flex-direction:column; gap:1rem; padding:1.35rem; border-radius:17px; }.welcome-actions { display:flex; align-items:center; flex-wrap:wrap; gap:.4rem .65rem; min-width:0; text-align:left; }.today-label { width:100%; }.today-date { margin:0 auto 0 0; font-size:.8rem; }.welcome-actions :deep(.va-button) { min-height:34px; }.summary-grid { gap:.55rem; margin: .75rem 0 1rem; }.summary-card { padding:.8rem; }.summary-label { max-width:112px; font-size:.7rem; }.summary-card strong { font-size:1.45rem; }.summary-card small { font-size:.63rem; }.summary-icon { width:34px; height:34px; }.board-heading { align-items:stretch; flex-direction:column; padding:1.1rem 1rem .9rem; }.search-box { width:auto; }.board-tabs { gap:0; padding:0 .55rem; }.board-tabs button { gap:.35rem; padding:.75rem .5rem .8rem; font-size:.72rem; }.board-tabs button::after { right:.4rem; left:.4rem; }.job-grid { gap:.7rem; padding:.75rem; }.job-card { padding:.85rem; }.route-line { grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr); }.route-point { gap:.4rem; }.route-point strong { font-size:.73rem; }.route-point small { font-size:.53rem; }.cargo-strip { flex-wrap:wrap; }.cargo-strip time { margin-left:2.55rem; }.driver-form,.tracking-panel { grid-template-columns:1fr; }.tracking-panel-heading,.tracking-panel :deep(.va-button) { grid-column:1; }.board-footer { padding:.7rem 1rem; } }
+@media (max-width:600px) { .transport-page { width:calc(100% - 1rem); margin:1rem auto 2rem; }.summary-grid { gap:.55rem; margin: .75rem 0 1rem; }.summary-card { padding:.8rem; }.summary-label { max-width:112px; font-size:.7rem; }.summary-card strong { font-size:1.45rem; }.summary-card small { font-size:.63rem; }.summary-icon { width:34px; height:34px; }.board-heading { align-items:stretch; flex-direction:column; padding:1.1rem 1rem .9rem; }.search-box { width:auto; }.board-tabs { gap:0; padding:0 .55rem; }.board-tabs button { gap:.35rem; padding:.75rem .5rem .8rem; font-size:.72rem; }.board-tabs button::after { right:.4rem; left:.4rem; }.job-grid { gap:.7rem; padding:.75rem; }.job-card { padding:.85rem; }.route-line { grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr); }.route-point { gap:.4rem; }.route-point strong { font-size:.73rem; }.route-point small { font-size:.53rem; }.cargo-strip { flex-wrap:wrap; }.cargo-strip time { margin-left:2.55rem; }.driver-form,.tracking-panel { grid-template-columns:1fr; }.tracking-panel-heading,.tracking-panel :deep(.va-button) { grid-column:1; }.board-footer { padding:.7rem 1rem; } }
 .cancellation-panel { border-top: 1px solid var(--app-line); margin-top: 18px; }
 .cancellation-panel summary { min-height: 44px; padding: 12px 0; color: var(--app-danger); cursor: pointer; font-size: 13px; font-weight: 600; }
 .cancellation-panel p { font-size: 13px; color: var(--app-muted); margin: 0 0 12px; }
 .cancellation-panel .cancel-action { margin-top: 12px; min-height: 44px; }
 .board-tabs { flex-wrap: wrap; }
 .board-tabs button { min-height: 44px; }
+.search-box { min-height: 46px; }
+.job-topline { flex-wrap: wrap; }
+.job-code strong { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .search-box input { font-size: 16px; } }
+
+.summary-card strong, .board-tabs button span { font-variant-numeric: tabular-nums; }
+.status-pill, .route-point small, .job-code small { font-size: 12px; }
+.event-heading time, .event-summary, .proof-line { font-size: 12px; }
+@media (max-width: 600px) {
+  .summary-card small { display: none; }
+  .summary-card .summary-label { font-size: 12px; max-width: none; }
+  .route-line { grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr); }
+}
+.job-section-title { font-size: 14px; font-weight: 600; margin: 24px 0 12px; }
+.dispatch-board > :deep(.loading-state) { padding: 24px; }
+.job-card, .summary-card, .dispatch-board { border-radius: var(--app-radius); }
+.tracking-panel-heading small, .request-hint p, .event-hash, .event-transaction, .event-disclosure summary, .board-footer, .cargo-strip time { font-size: 12px; line-height: 1.7; }
+.event-heading { flex-wrap: wrap; }
+.transport-page :is(input, select):focus-visible { outline: 2px solid var(--app-primary); outline-offset: 2px; }
+@media (max-width: 600px) {
+  .summary-card { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .summary-icon { grid-column: 1; grid-row: auto; width: 32px; height: 32px; }
+  .transport-page :is(input, select) { font-size: 16px; }
+  .progress-step { max-width: 66px; }
+}
 </style>

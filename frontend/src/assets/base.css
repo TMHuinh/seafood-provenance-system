@@ -1,25 +1,52 @@
+/* Material Icons by Google, Apache-2.0. See /licenses/material-icons.txt. */
+@font-face {
+  font-family: 'Material Icons';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./fonts/MaterialIcons-Regular.woff2') format('woff2');
+}
+
+.material-icons {
+  display: inline-block;
+  font-family: 'Material Icons', sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-variant-ligatures: common-ligatures;
+  font-size: 24px;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+  direction: ltr;
+}
+
 :root {
-  font-family: Inter, 'Segoe UI', 'Noto Sans', Arial, sans-serif;
-  color: #17343a;
-  background: #f5f8fa;
+  font-family: 'Be Vietnam Pro', 'Segoe UI', sans-serif;
+  color: #132f3a;
+  background: #f1f6f5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --app-ink: #17343a;
-  --app-muted: #526b75;
-  --app-primary: #087f83;
-  --app-primary-dark: #08656b;
-  --app-primary-soft: #e8f5f5;
+  --app-ink: #132f3a;
+  --app-muted: #4b626b;
+  --app-primary: #08766b;
+  --app-primary-dark: #075e57;
+  --app-primary-soft: #e2f3ee;
   --app-info: #2563a6;
   --app-success: #24754f;
   --app-warning: #916117;
   --app-danger: #b64242;
   --app-canvas: #f5f8f7;
   --app-surface: #fff;
-  --app-line: #e4ebe8;
-  --app-radius: 22px;
-  --app-control-radius: 12px;
+  --app-line: #d6e4e0;
+  --app-sidebar: #102f3b;
+  --app-sidebar-text: #c5d9dc;
+  --app-accent: #a8e3d0;
+  --app-divider: #31505a;
+  --app-radius: 12px;
+  --app-control-radius: 8px;
   --app-shadow: 0 6px 28px rgb(30 67 58 / 5%);
   --app-space-1: 4px;
   --app-space-2: 8px;
@@ -27,17 +54,83 @@
   --app-space-4: 16px;
   --app-space-6: 24px;
   --app-space-8: 32px;
-  --va-primary: #087f83;
+  --app-space-12: 48px;
+  --app-text-xs: 12px;
+  --app-text-sm: 13px;
+  --app-text-base: 14px;
+  --app-text-lg: 18px;
+  --app-text-title: clamp(26px, 2.4vw, 34px);
+  --app-control-height: 44px;
+  --app-content-width: 1440px;
+  --app-motion: 160ms ease;
+  --app-control-line: #859d99;
+  --va-font-family: 'Be Vietnam Pro', 'Segoe UI', sans-serif;
+  --va-primary: #08766b;
   --va-success: #24754f;
   --va-warning: #916117;
   --va-danger: #b64242;
   --va-info: #2563a6;
 }
-*, *::before, *::after { box-sizing: border-box; }
-html { min-width: 320px; min-height: 100%; background: var(--app-canvas); scroll-behavior: smooth; }
-body { min-width: 320px; min-height: 100vh; margin: 0; background: var(--app-canvas); color: var(--app-ink); font-family: inherit; font-size: 14px; line-height: 1.6; }
-button, input, textarea, select { font: inherit; }
-button { color: inherit; }
-a { color: inherit; text-decoration: none; }
-::selection { color: #064e56; background: #cdeef0; }
-:focus-visible { outline: 3px solid var(--app-primary); outline-offset: 3px; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  min-width: 320px;
+  min-height: 100%;
+  background: var(--app-canvas);
+  scroll-behavior: smooth;
+}
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--app-canvas);
+  color: var(--app-ink);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+}
+body {
+  min-height: 100dvh;
+}
+h1,
+h2,
+h3,
+h4,
+h5 {
+  text-wrap: balance;
+}
+button,
+a,
+summary,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+img {
+  max-width: 100%;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+::selection {
+  color: #064e56;
+  background: #cdeef0;
+}
+:focus-visible {
+  outline: 3px solid var(--app-primary);
+  outline-offset: 3px;
+}

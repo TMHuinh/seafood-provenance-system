@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import LoadingState from '../../components/LoadingState.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { VaAlert, VaButton, VaInnerLoading } from 'vuestic-ui'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
@@ -11,6 +14,7 @@ interface ReceivingTrip extends LotTransport {
 }
 const trips = ref<ReceivingTrip[]>([])
 const loading = ref(false)
+const loadedTrips = ref(false)
 const busyId = ref<string | null>(null)
 const error = ref('')
 const notice = ref('')
@@ -67,7 +71,13 @@ async function load(silent = false) {
   const version = ++loadVersion
   if (!silent) loading.value = true
   error.value = ''
-  try { const result = await api.get<{ items: ReceivingTrip[] }>('/transports/receiving'); if (active && version === loadVersion) trips.value = result.items }
+  try {
+    const result = await api.get<{ items: ReceivingTrip[] }>('/transports/receiving')
+    if (active && version === loadVersion) {
+      trips.value = result.items
+      loadedTrips.value = true
+    }
+  }
   catch (e) { if (active && version === loadVersion) error.value = e instanceof Error ? e.message : 'Không tải được các chuyến gửi tới nhà phân phối' }
   finally { if (active && version === loadVersion) loading.value = false }
 }
@@ -88,18 +98,16 @@ onUnmounted(() => { active = false; ++loadVersion; if (refreshTimer) window.clea
 
 <template>
   <main class="receipts-page" :aria-busy="loading">
-    <header class="page-heading">
-      <div>
-        <p class="eyebrow">NHÀ PHÂN PHỐI</p>
-        <h1>Hàng nhận</h1>
-        <p>Theo dõi chuyến hàng và xác nhận khi đã nhận đủ hàng thực tế.</p>
-      </div>
-      <span class="pending-summary">{{ pendingCount }} chuyến chờ xác nhận</span>
-    </header>
+    <PageHeader title="Hàng nhận" description="Theo dõi chuyến hàng và xác nhận khi đã nhận đủ hàng thực tế.">
+      <template v-if="!loading && loadedTrips" #actions>
+        <span class="pending-summary">{{ pendingCount }} chuyến chờ xác nhận</span>
+      </template>
+    </PageHeader>
     <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }} <va-button preset="secondary" size="small" @click="load()">Thử lại</va-button></va-alert>
     <va-alert v-if="notice" color="success" class="message" role="status">{{ notice }}</va-alert>
     <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statusOptions" :total="filteredTrips.length" :page-size="pageSize" :loading="loading" label="chuyến" />
-    <va-inner-loading :loading="loading">
+    <LoadingState v-if="loading" />
+    <va-inner-loading v-else :loading="false">
       <section v-if="visibleTrips.length" class="trip-list" aria-label="Danh sách hàng nhận">
         <article v-for="trip in visibleTrips" :key="trip.id" class="trip-card">
           <div class="trip-overview">
@@ -156,8 +164,8 @@ onUnmounted(() => { active = false; ++loadVersion; if (refreshTimer) window.clea
           </details>
         </article>
       </section>
-      <p v-if="!loading && !error && trips.length && !filteredTrips.length" class="empty-state" role="status">Không có chuyến phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
-      <p v-else-if="!loading && !error && !trips.length" class="empty-state" role="status">Chưa có chuyến hàng gửi đến bạn.</p>
+      <EmptyState v-if="!loading && loadedTrips && trips.length && !filteredTrips.length" title="Không có chuyến phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
+      <EmptyState v-else-if="!loading && loadedTrips && !trips.length" title="Chưa có chuyến hàng gửi đến bạn" icon="inventory_2" />
     </va-inner-loading>
   </main>
 </template>
@@ -175,17 +183,13 @@ onUnmounted(() => { active = false; ++loadVersion; if (refreshTimer) window.clea
   background: var(--app-canvas);
   line-height: 1.6;
 }
-.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
-.eyebrow { color: #526d51; font-size: 11px; font-weight: 700; letter-spacing: .12em; margin: 0; }
-h1 { margin: 6px 0 8px; font-size: clamp(28px, 3vw, 36px); font-weight: 650; line-height: 1.2; letter-spacing: -.04em; }
-.page-heading p:last-child { margin: 0; color: var(--receipt-muted); font-size: 14px; }
 .pending-summary { padding: 9px 16px; border-radius: 24px; background: var(--app-primary-soft); color: var(--app-primary-dark); font-size: 13px; font-weight: 600; flex-shrink: 0; }
 .trip-list { display: grid; gap: 16px; }
-.trip-card { min-width: 0; overflow-wrap: anywhere; border: 1px solid var(--receipt-line); border-radius: 20px; background: #fff; box-shadow: 0 4px 20px rgb(47 72 55 / 3%); }
+.trip-card { min-width: 0; overflow-wrap: anywhere; border: 1px solid var(--receipt-line); border-radius: var(--app-radius); background: var(--app-surface); }
 .trip-overview { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 185px; gap: 24px; align-items: start; padding: 24px; }
 .field-label, .shipment-facts dt, .delivery-facts dt { display: block; color: var(--receipt-muted); font-size: 12px; margin-bottom: 8px; }
 .trip-heading h2 { margin: 0 0 10px; font-size: 16px; font-weight: 650; line-height: 1.5; }
-.trip-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; background: #fcf2db; color: #79591f; font-size: 12px; font-weight: 600; }
+.trip-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; background: #fcf2db; color: #79591f; font-size: 12px; font-weight: 600; }
 .trip-status::before { content: ''; width: 5px; height: 5px; background: currentColor; border-radius: 50%; flex-shrink: 0; }
 .trip-status.delivered { background: #eaf2e5; color: #42653c; }
 .trip-status.cancelled { background: #f9eae6; color: #934e43; }
@@ -218,12 +222,8 @@ h3 { margin: 0 0 12px; font-size: 14px; font-weight: 650; }
 .event-list strong { font-size: 13px; font-weight: 600; }
 .event-list time { display: block; color: var(--receipt-muted); font-size: 12px; margin: 4px 0; }
 .qr-details :deep(.qr-panel) { border: 0; margin: 0; padding: 20px 24px 24px; }
-.empty-state { padding: 48px 24px; text-align: center; color: var(--receipt-muted); background: #fff; border: 1px dashed #d2ddc9; border-radius: 20px; }
 .message { margin-bottom: 20px; border-radius: 14px; }
-.receipts-page :deep(.collection-toolbar) { padding: 20px; margin: 0 0 24px; border-radius: 18px; border-color: var(--receipt-line); background: #fff; }
-.receipts-page :deep(.collection-toolbar input), .receipts-page :deep(.collection-toolbar select), .receipts-page :deep(.collection-toolbar button) { min-height: 44px; border-radius: 10px; font-size: 14px; }
-.receipts-page :deep(.collection-toolbar input), .receipts-page :deep(.collection-toolbar select) { background: var(--app-canvas); border-color: var(--app-line); }
-a:focus-visible, summary:focus-visible { outline: 3px solid #6e8e62; outline-offset: 3px; border-radius: 6px; }
+a:focus-visible, summary:focus-visible { outline: 3px solid var(--app-primary); outline-offset: 3px; border-radius: 6px; }
 @media (max-width: 1000px) {
   .trip-overview { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
   .shipment-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -232,7 +232,6 @@ a:focus-visible, summary:focus-visible { outline: 3px solid #6e8e62; outline-off
 }
 @media (max-width: 600px) {
   .receipts-page { padding: 24px 16px; margin: 0 auto 24px; border-radius: 0; }
-  .page-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
   .trip-overview { padding: 20px; }
   .trip-heading, .shipment-origin, .shipment-facts, .trip-action { grid-column: 1 / -1; }
   .trip-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }

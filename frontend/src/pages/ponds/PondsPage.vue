@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import LoadingState from '../../components/LoadingState.vue'
+import DecimalField from '../../components/DecimalField.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, reactive, ref, watch, onUnmounted } from 'vue'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
@@ -162,24 +166,12 @@ onUnmounted(() => { ++contextVersion })
 
 <template>
   <main class="ponds-page" :aria-busy="loading">
-    <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn"
-      @click="router.push({ name: 'farms' })">
-      Quay lại danh sách Cơ sở
-    </va-button>
 
-    <header class="page-header">
-      <div class="header-content">
-        <p class="eyebrow">
-          <va-icon name="home_work" size="small" class="mr-1" />
-          {{ farmName || 'Đang tải...' }}
-        </p>
-        <h1 class="page-title">Danh sách Ao nuôi</h1>
-        <p class="page-description">Quản lý thông tin ao và mở từng vụ nuôi tại cơ sở này.</p>
-      </div>
-      <va-button icon="add" :disabled="loading || saving" gradient class="shadow-md" @click="openCreate">
-        Thêm ao nuôi
-      </va-button>
-    </header>
+    <PageHeader title="Ao nuôi" :context="farmName" description="Quản lý thông tin ao và mở từng vụ nuôi tại cơ sở này.">
+      <template #actions>
+        <va-button icon="add" :disabled="loading || saving" @click="openCreate">Thêm ao nuôi</va-button>
+      </template>
+    </PageHeader>
 
     <!-- Thông báo -->
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
@@ -189,18 +181,14 @@ onUnmounted(() => { ++contextVersion })
       {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
-    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
-    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
-    <va-inner-loading :loading="loading">
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="ao trong danh sách đã tải" />
+    <LoadingState v-if="loading" />
+    <va-inner-loading v-else :loading="false">
       <!-- Empty State -->
-      <div v-if="!loading && !error && !items.length" class="empty-state">
-        <div class="empty-icon-wrapper">
-          <va-icon name="water" size="3rem" color="info" />
-        </div>
-        <h2>Chưa có ao nuôi nào</h2>
-        <p class="text-secondary">Hãy thêm ao nuôi đầu tiên để quản lý các vụ nuôi tại cơ sở này.</p>
-        <va-button icon="add" class="mt-4" @click="openCreate">Tạo ao nuôi ngay</va-button>
-      </div>
+      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có ao nuôi nào" description="Hãy thêm ao đầu tiên để quản lý các vụ nuôi tại cơ sở này." icon="water">
+        <va-button icon="add" @click="openCreate">Thêm ao nuôi</va-button>
+      </EmptyState>
+      <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có ao phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
       <!-- Grid Layout -->
       <div v-else class="pond-grid">
@@ -239,7 +227,7 @@ onUnmounted(() => { ++contextVersion })
           <div class="card-actions">
             <va-button preset="primary" icon="calendar_month" class="flex-1"
               @click="router.push({ name: 'pond-batches', params: { farmId, pondId: pond.id } })">
-              Quản lý Vụ
+              Xem vụ nuôi
             </va-button>
             <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(pond)" />
             <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(pond)" />
@@ -249,21 +237,20 @@ onUnmounted(() => { ++contextVersion })
     </va-inner-loading>
 
     <!-- Modal Form -->
-    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
+    <va-modal title="pond-form-title" v-model="showForm" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
       <template #header>
-        <h2 class="modal-title">{{ editingId ? 'Cập nhật Ao nuôi' : 'Tạo Ao nuôi mới' }}</h2>
+        <h2 id="pond-form-title" class="modal-title">{{ editingId ? 'Cập nhật Ao nuôi' : 'Tạo Ao nuôi mới' }}</h2>
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
         <div v-if="editingPond" class="generated-code col-span-2"><span>Mã ao</span><strong>{{ editingPond.pond_code }}</strong><small>Mã ao được hệ thống tạo tự động và không thể sửa.</small></div>
         <p v-else class="generated-code-hint col-span-2">Mã ao sẽ được tạo tự động khi lưu.</p>
-        <va-input v-model="form.pondName" label="Tên ao *" placeholder="VD: Ao số 1" class="col-span-1"
+        <h3 class="form-section-heading">Thông tin và điều kiện ao</h3>
+        <va-input v-model="form.pondName" label="Tên ao *" placeholder="VD: Ao số 1" class="col-span-2"
           :rules="[(v) => !!v || 'Bắt buộc']" />
 
-        <va-input v-model="form.area" label="Diện tích (ha)" type="number" placeholder="VD: 0.5" :min="0.01"
-          :step="0.01" />
-        <va-input v-model="form.depth" label="Độ sâu (m)" type="number" placeholder="VD: 1.2" :min="0.01"
-          :step="0.01" />
+        <DecimalField v-model="form.area" label="Diện tích (ha)" placeholder="VD: 0.5" />
+        <DecimalField v-model="form.depth" label="Độ sâu (m)" placeholder="VD: 1.2" />
 
         <va-select v-model="form.waterType" :options="waterTypes" label="Loại nước" placeholder="Chọn loại nước"
           clearable class="col-span-1" />
@@ -289,13 +276,12 @@ onUnmounted(() => { ++contextVersion })
 </template>
 
 <style scoped>
-.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
 
 .ponds-page {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.5rem 0 4rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: inherit;
 }
 
 .back-btn {
@@ -304,65 +290,8 @@ onUnmounted(() => { ++contextVersion })
 }
 
 /* Header Styles */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.eyebrow {
-  display: flex;
-  align-items: center;
-  margin: 0 0 0.5rem;
-  color: var(--va-primary);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.page-title {
-  margin: 0;
-  font-size: clamp(1.8rem, 4vw, 2.2rem);
-  font-weight: 800;
-  color: var(--app-ink);
-}
 
 /* Empty State */
-.empty-state {
-  padding: 5rem 1rem;
-  text-align: center;
-  background: var(--app-canvas);
-  border: 2px dashed #cbd5e1;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.empty-icon-wrapper {
-  width: 80px;
-  height: 80px;
-  background: #e0f2fe;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1.5rem;
-}
-
-.empty-state h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
-  color: var(--app-ink);
-}
-
-.text-secondary {
-  color: var(--app-muted);
-  margin: 0;
-}
 
 /* Grid Layout */
 .pond-grid {
@@ -375,15 +304,15 @@ onUnmounted(() => { ++contextVersion })
 .pond-card {
   border-radius: 16px;
   border: 1px solid var(--app-line);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease;
+  box-shadow: none;
+  transition: border-color var(--app-motion);
   display: flex;
   flex-direction: column;
 }
 
 .pond-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+  transform: none;
+  box-shadow: none;
   border-color: #cbd5e1;
 }
 
@@ -532,10 +461,6 @@ onUnmounted(() => { ++contextVersion })
 
 /* Responsive */
 @media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 
   .pond-grid {
     grid-template-columns: 1fr;

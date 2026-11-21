@@ -214,7 +214,7 @@ async function receivingDashboard(profile) {
     id: job.lot.id, lot_code: job.lot.lot_code, quantity: job.lot.quantity,
     provenance: {
       farm: { name: job.lot.provenance?.farm?.name ?? 'Cơ sở nuôi' },
-      batch: { batch_code: job.lot.provenance?.batch?.batch_code ?? '' },
+      batch: { batch_code: job.lot.provenance?.batch?.batch_code ?? '', species: job.lot.provenance?.batch?.species ?? null },
     },
   } : null })) }
 }

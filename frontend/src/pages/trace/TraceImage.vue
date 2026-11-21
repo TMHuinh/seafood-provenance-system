@@ -21,7 +21,7 @@ watch(() => props.src, () => { failed.value = false })
 .trace-image a { display: block; overflow: hidden; border: 1px solid var(--app-line); border-radius: 20px; color: var(--app-ink); background: #f2f5ec; text-decoration: none; }
 .trace-image a:hover { border-color: var(--app-primary); }
 .trace-image a:focus-visible { outline: 3px solid var(--app-primary); outline-offset: 4px; }
-.trace-image img { display: block; width: 100%; height: auto; max-height: 320px; object-fit: contain; }
+.trace-image img { display: block; width: 100%; aspect-ratio: 16 / 10; max-height: 320px; object-fit: contain; }
 .image-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; padding: 14px 16px; font-size: 12px; font-weight: 600; }
 .image-action { color: var(--app-primary); }
 .image-fallback { display: block; padding: 24px 16px; font-size: 13px; }

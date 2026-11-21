@@ -15,6 +15,7 @@ const loading = ref(false)
 const error = ref('')
 const filters = reactive({ type: '', query: '', from: '', to: '' })
 const logPage = ref(1)
+const journal = ref<HTMLDetailsElement | null>(null)
 const logs = computed(() => (result.value?.status === 'ACTIVE' ? result.value.trace.logs : []))
 const summary = computed(() => summarizeLogs(logs.value))
 const productSections = computed(() => [
@@ -157,9 +158,8 @@ onBeforeUnmount(() => {
       </RouterLink>
       <span class="public-label"><span aria-hidden="true"></span>Thông tin công khai</span>
     </header>
-    <div class="page-intro">
-      <p class="eyebrow">TỪ VÙNG NUÔI ĐẾN TAY BẠN</p>
-      <h1>Mỗi lô hàng,<br /><em>một câu chuyện nguồn gốc.</em></h1>
+    <div class="page-intro" :class="{ 'has-lot': result?.status === 'ACTIVE' && result.trace }">
+      <h1>Hồ sơ nguồn gốc thủy sản</h1>
       <p>Biết nơi nuôi, thức ăn và quá trình chăm sóc qua những thông tin đã được ghi nhận.</p>
     </div>
     <section v-if="loading" class="trace-card state" role="status">
@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
           </svg>
         </div>
         <div class="lot-heading">
-          <span class="lot-label">LÔ THU HOẠCH</span><span class="lot-context">Hồ sơ theo lô</span>
+          <span class="lot-label">LÔ THU HOẠCH</span>
         </div>
         <h2 id="lot-title">
           {{ labels[result.trace.species] || result.trace.species || 'Chưa có thông tin loài' }}
@@ -225,17 +225,28 @@ onBeforeUnmount(() => {
           <span>MÃ LÔ</span><strong>{{ result.trace.lotCode }}</strong>
         </div>
       </section>
+      <a
+        class="proof-summary"
+        :class="`proof-${result.trace.proof.status.toLowerCase()}`"
+        href="#verification"
+      >
+        <span
+          ><strong>Đối soát hồ sơ thu hoạch</strong
+          ><span>{{ proofLabels[result.trace.proof.status] }}</span></span
+        >
+        <span aria-hidden="true">↗</span>
+      </a>
       <nav class="section-nav" aria-label="Nội dung hồ sơ">
         <a href="#origin">Nguồn gốc</a><a href="#care">Thức ăn &amp; chăm sóc</a
-        ><a href="#journal">Nhật ký</a><a href="#journey">Vận chuyển</a>
+        ><a href="#journal" @click="journal && (journal.open = true)">Nhật ký</a
+        ><a href="#journey">Vận chuyển</a><a href="#verification">Đối soát</a>
       </nav>
       <section id="origin" class="trace-card origin-card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">01 / NƠI BẮT ĐẦU</p>
+            <p class="eyebrow">VÙNG NUÔI</p>
             <h2>Nguồn gốc nuôi</h2>
           </div>
-          <span class="section-number" aria-hidden="true">01</span>
         </div>
         <dl class="facts">
           <div>
@@ -265,7 +276,7 @@ onBeforeUnmount(() => {
         </dl>
       </section>
       <div id="care" class="care-heading">
-        <p class="eyebrow">02 / QUÁ TRÌNH NUÔI</p>
+        <p class="eyebrow">QUÁ TRÌNH NUÔI</p>
         <h2>Được chăm sóc như thế nào?</h2>
         <p>Nhìn nhanh các sản phẩm được ghi nhận trong vụ nuôi của lô hàng.</p>
       </div>
@@ -310,10 +321,15 @@ onBeforeUnmount(() => {
         Thông tin được tổng hợp từ nhật ký đã xác nhận của người nuôi, không thay thế kết quả kiểm
         nghiệm an toàn hoặc tồn dư thuốc.
       </p>
-      <details id="journal" :key="String(route.params.traceCode)" class="trace-card log-details">
+      <details
+        id="journal"
+        ref="journal"
+        :key="String(route.params.traceCode)"
+        class="trace-card log-details"
+      >
         <summary>
           <span
-            ><span class="eyebrow">03 / NHẬT KÝ VỤ NUÔI</span><strong>Xem nhật ký chi tiết</strong
+            ><span class="eyebrow">NHẬT KÝ VỤ NUÔI</span><strong>Xem nhật ký chi tiết</strong
             ><small>{{ logs.length }} bản ghi · Lọc theo loại và thời gian</small></span
           ><span class="details-toggle" aria-hidden="true">+</span>
         </summary>
@@ -365,7 +381,12 @@ onBeforeUnmount(() => {
                 <dd>{{ detail.value }}</dd>
               </div>
             </dl>
-            <TraceImage v-if="log.imageUrl" :src="log.imageUrl" :alt="`Ảnh nhật ký ${labels[log.type] || log.type} ngày ${date(log.date)}`" caption="Ảnh nhật ký nuôi" />
+            <TraceImage
+              v-if="log.imageUrl"
+              :src="log.imageUrl"
+              :alt="`Ảnh nhật ký ${labels[log.type] || log.type} ngày ${date(log.date)}`"
+              caption="Ảnh nhật ký nuôi"
+            />
             <p v-if="!technicalDetails(log.details).length" class="muted">
               Chưa có chỉ số kỹ thuật công khai.
             </p>
@@ -379,7 +400,7 @@ onBeforeUnmount(() => {
           }}
         </p>
       </details>
-      <section class="trace-card proof-card">
+      <section id="verification" class="trace-card proof-card">
         <p class="eyebrow">BẰNG CHỨNG GHI NHẬN</p>
         <h2>Đối soát thu hoạch với Blockchain</h2>
         <va-alert
@@ -410,15 +431,16 @@ onBeforeUnmount(() => {
       <section id="journey" class="trace-card journey-card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">04 / SAU THU HOẠCH</p>
+            <p class="eyebrow">SAU THU HOẠCH</p>
             <h2>Hành trình vận chuyển</h2>
           </div>
-          <span class="section-number" aria-hidden="true">04</span>
         </div>
         <article v-for="(trip, index) in result.trace.transports" :key="index" class="trip">
-          <h3>{{ trip.code }}</h3>
+          <div class="trip-heading">
+            <h3>{{ trip.code }}</h3>
+            <span class="trip-status">{{ labels[trip.status] || trip.status }}</span>
+          </div>
           <p>{{ date(trip.date) }} · {{ Number(trip.quantity).toLocaleString('vi-VN') }} kg</p>
-          <p>{{ labels[trip.status] || trip.status }}</p>
           <p v-if="trip.recipientName">
             {{
               trip.status === 'DELIVERED' ? 'Đơn vị đã xác nhận nhận hàng' : 'Đơn vị nhận dự kiến'
@@ -431,7 +453,12 @@ onBeforeUnmount(() => {
               <p v-if="event.trackingStatus">
                 {{ labels[event.trackingStatus] || event.trackingStatus }}
               </p>
-              <TraceImage v-if="event.imageUrl" :src="event.imageUrl" :alt="`Ảnh bằng chứng giao hàng của chuyến ${trip.code}`" caption="Ảnh bằng chứng giao hàng" />
+              <TraceImage
+                v-if="event.imageUrl"
+                :src="event.imageUrl"
+                :alt="`Ảnh bằng chứng giao hàng của chuyến ${trip.code}`"
+                caption="Ảnh bằng chứng giao hàng"
+              />
               <p v-if="event.temperature != null">Nhiệt độ: {{ event.temperature }} °C</p>
               <p class="muted">
                 Blockchain:
@@ -460,452 +487,363 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .trace-page {
-  min-height: 100vh;
   width: min(100%, 1040px);
+  min-height: 100dvh;
+  display: grid;
+  align-content: start;
+  gap: 24px;
   margin: 0 auto;
   padding: 0 40px 48px;
-  display: grid;
-  gap: 28px;
   color: var(--app-ink);
-  line-height: 1.7;
-  font-size: 15px;
-  background: var(--app-canvas);
+  line-height: 1.8;
+  font-size: 14px;
 }
 .trace-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 25px 0;
+  gap: 12px;
+  padding: 24px 0;
   border-bottom: 1px solid var(--app-line);
 }
 .trace-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 17px;
-  font-weight: 750;
-  letter-spacing: -0.5px;
-  text-decoration: none;
+  font-weight: 600;
 }
 .trace-brand small {
   display: block;
-  margin-top: 2px;
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 1.6px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
   color: var(--app-muted);
 }
 .brand-symbol {
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
-  color: #fff;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: white;
   background: var(--app-primary);
 }
 .brand-symbol svg {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
 }
 .public-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
-  border: 1px solid var(--app-line);
-  border-radius: 22px;
-  color: var(--app-primary-dark);
-  background: var(--app-primary-soft);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.public-label > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #43775e;
+  font-size: 12px;
+  color: var(--app-muted);
 }
 .page-intro {
-  padding: 40px 0 16px;
-}
-.eyebrow {
-  font-size: 14px;
-  line-height: 1.6;
-  letter-spacing: 1.5px;
-  font-weight: 750;
-  color: #46725d;
-  margin: 0;
+  padding: 8px 0;
 }
 .page-intro h1 {
-  font-family: inherit;
-  font-size: clamp(36px, 4.5vw, 54px);
-  line-height: 1.2;
-  font-weight: 650;
-  letter-spacing: -1.5px;
-  margin: 14px 0 16px;
+  margin: 0 0 12px;
+  font-size: var(--app-text-title);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.035em;
 }
-.page-intro h1 em {
-  color: var(--app-primary);
-  font-weight: 500;
+.page-intro.has-lot h1 {
+  font-size: var(--app-text-title);
 }
-.page-intro > p:last-child {
+.page-intro p {
   color: var(--app-muted);
-  max-width: 510px;
-  font-size: 13px;
+  max-width: 65ch;
 }
 .trace-card {
-  background: #fff;
-  border: 1px solid var(--app-line);
-  border-radius: 26px;
-  padding: 32px;
-  display: grid;
-  gap: 14px;
   min-width: 0;
-  box-shadow: 0 8px 32px rgb(47 72 55 / 4%);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+}
+.trace-card h2,
+.care-heading h2 {
+  font-size: var(--app-text-section);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--app-primary-dark);
+  margin: 0 0 6px;
 }
 .lot-card {
   position: relative;
-  isolation: isolate;
   overflow: hidden;
-  padding: 30px 32px 0;
-  border: 1px solid #c7e3e8;
-  border-radius: 22px;
-  color: var(--app-primary-dark);
-  background: linear-gradient(120deg, var(--app-primary-soft), #f0f7fc);
-  box-shadow: 0 12px 32px rgb(57 84 49 / 6%);
-}
-.lot-card::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  width: 460px;
-  height: 460px;
-  border: 1px solid #ffffff0d;
-  border-radius: 50%;
-  right: -220px;
-  top: -170px;
-  box-shadow:
-    0 0 0 44px #ffffff04,
-    0 0 0 88px #ffffff03;
-  pointer-events: none;
-}
-.lot-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  position: relative;
+  padding: 32px 32px 0;
+  border-radius: 16px;
+  background: var(--app-sidebar);
+  color: white;
 }
 .lot-label {
-  font-size: 14px;
-  letter-spacing: 1.8px;
-  font-weight: 650;
-  color: var(--app-primary-dark);
-}
-.lot-context {
-  font-size: 14px;
-  color: var(--app-primary-dark);
-  border: 1px solid #b7cbb5;
-  padding: 4px 10px;
-  border-radius: 24px;
+  color: var(--app-accent);
+  font-size: 12px;
+  letter-spacing: 0.08em;
 }
 .lot-card h2 {
   position: relative;
-  max-width: 75%;
-  margin: 25px 0 6px;
-  font-family: inherit;
-  font-size: clamp(30px, 4.8vw, 45px);
-  line-height: 1.2;
-  letter-spacing: -1px;
-  color: var(--app-primary-dark);
+  max-width: 80%;
+  font-size: clamp(32px, 4vw, 44px);
+  line-height: 1.3;
   font-weight: 500;
+  letter-spacing: -0.035em;
+  margin: 16px 0 12px;
 }
 .lot-farm {
   position: relative;
-  max-width: 75%;
+  max-width: 80%;
   font-size: 16px;
-  font-weight: 650;
-  color: var(--app-primary-dark);
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 .lot-address {
   position: relative;
-  max-width: 75%;
-  font-size: 14px;
-  color: #516d55;
-  margin-top: 3px;
+  max-width: 80%;
+  color: var(--app-sidebar-text);
+  margin-top: 6px;
   overflow-wrap: anywhere;
 }
 .lot-illustration {
   position: absolute;
-  right: 42px;
-  top: 65px;
-  width: 125px;
-  height: 125px;
-  color: #7b976a;
-}
-.lot-illustration svg {
-  width: 100%;
-  height: 100%;
+  right: 24px;
+  top: 40px;
+  width: 120px;
+  color: var(--app-divider);
 }
 .lot-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
-  padding: 23px 0 25px;
-  margin: 24px 0 0;
-  border-top: 1px solid #bdcfb8;
+  gap: 24px;
+  margin: 28px 0 0;
+  padding: 24px 0;
+  border-top: 1px solid var(--app-divider);
 }
 .lot-facts dt {
-  font-size: 13px;
-  color: #51694d;
-  margin-bottom: 5px;
+  font-size: 12px;
+  color: var(--app-sidebar-text);
 }
 .lot-facts dd {
-  font-size: 19px;
-  font-weight: 600;
-  color: var(--app-primary-dark);
+  margin: 6px 0 0;
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 .lot-facts dd span {
   font-size: 13px;
   font-weight: 400;
-  color: #51694d;
 }
 .lot-code {
   display: flex;
-  gap: 14px;
   align-items: baseline;
-  border-top: 1px solid #bdcfb8;
-  padding: 13px 0;
-  color: var(--app-primary-dark);
+  gap: 16px;
+  border-top: 1px solid var(--app-divider);
+  padding: 16px 0;
   font-size: 12px;
-  letter-spacing: 0.8px;
 }
 .lot-code > span {
   flex-shrink: 0;
+  color: var(--app-sidebar-text);
 }
 .lot-code strong {
-  font:
-    12px/1.6 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
-  font-weight: 400;
-  letter-spacing: 0.6px;
+  font-family: ui-monospace, monospace;
+  font-weight: 500;
   overflow-wrap: anywhere;
-  color: var(--app-primary-dark);
+}
+.proof-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: -8px;
+  padding: 16px 20px;
+  border: 1px solid #e4d6b6;
+  border-radius: var(--app-control-radius);
+  background: #fff8e9;
+  color: #745114;
+}
+.proof-summary strong,
+.proof-summary > span > span {
+  display: block;
+}
+.proof-summary strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.proof-summary > span > span {
+  font-size: 13px;
+  margin-top: 4px;
+}
+.proof-match {
+  border-color: #bfdacc;
+  background: #eef7f1;
+  color: var(--app-success);
+}
+.proof-mismatch {
+  border-color: #eacaca;
+  background: #fceeee;
+  color: var(--app-danger);
+}
+.proof-summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 .section-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding-bottom: 3px;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--app-line);
 }
 .section-nav a {
-  padding: 11px 18px;
-  border-radius: 30px;
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--app-primary-dark);
-  background: #fff;
-  border: 1px solid var(--app-line);
-  text-decoration: none;
 }
 .section-nav a:hover {
-  background: #dcebe0;
-  border-color: #bdd5c3;
-  color: var(--app-primary-dark);
+  background: var(--app-primary-soft);
 }
 [id] {
   scroll-margin-top: 24px;
 }
-.section-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-.section-heading h2 {
-  margin-top: 5px;
-}
-.section-number {
-  font:
-    italic 42px/1 Georgia,
-    serif;
-  color: #b4cdb9;
-}
-h2 {
-  font-size: 21px;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: -0.5px;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-h3,
-h4 {
-  font-weight: 650;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
 .facts {
   display: grid;
-  gap: 0;
   margin: 0;
 }
 .facts > div {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) 2fr;
+  grid-template-columns: minmax(90px, 1fr) minmax(0, 2fr);
   gap: 16px;
   padding: 12px 0;
-  border-bottom: 1px solid #edf2ee;
+  border-bottom: 1px solid var(--app-line);
 }
 .facts > div:last-child {
-  border-bottom: 0;
+  border: 0;
 }
-dt,
+.facts dt,
 .muted {
   color: var(--app-muted);
 }
-dd {
+.facts dd {
   margin: 0;
-  font-weight: 550;
   overflow-wrap: anywhere;
+  font-weight: 500;
 }
 .origin-card > .facts {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 22px 24px;
-  padding-top: 6px;
+  gap: 24px;
 }
 .origin-card > .facts > div {
   display: block;
-  border-bottom: 0;
+  border: 0;
   padding: 0;
 }
 .origin-card dt {
-  font-size: 13px;
-  margin-bottom: 5px;
-}
-.origin-card dd {
-  font-size: 13px;
+  font-size: 12px;
+  margin-bottom: 6px;
 }
 .care-heading {
-  padding: 14px 0 0;
-}
-.care-heading h2 {
-  font-size: 26px;
-  margin: 7px 0;
+  padding-top: 8px;
 }
 .care-heading > p:last-child {
-  font-size: 13px;
+  margin-top: 8px;
   color: var(--app-muted);
 }
 .care-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 .care-card {
   align-content: start;
-  border-top: 1px solid var(--app-line);
-  background: var(--app-primary-soft);
-  padding: 24px;
-  font-size: 14px;
-}
-.care-card.medicine {
-  border-color: #e9e2d1;
-  background: #fcf8ee;
-}
-.medicine .eyebrow {
-  color: #85692f;
 }
 .care-card-heading {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .record-count {
-  background: var(--app-primary-soft);
-  color: #4d6d56;
-  border-radius: 20px;
-  font-size: 14px;
   padding: 3px 8px;
-  white-space: nowrap;
-}
-.medicine .record-count {
-  background: #f7f3e9;
-  color: #85692f;
+  font-size: 12px;
+  border-radius: 6px;
+  color: var(--app-primary-dark);
+  background: var(--app-primary-soft);
 }
 .care-title {
   font-size: 18px;
-  letter-spacing: -0.4px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 .care-card > p {
   color: var(--app-muted);
   font-size: 13px;
 }
 .product-list {
-  list-style: none;
   padding: 0;
   margin: 0;
-  display: grid;
-  gap: 10px;
+  list-style: none;
 }
 .product-list li {
-  padding: 14px;
-  border: 1px solid #e1ece2;
-  border-radius: 12px;
-  background: #f5f9f5;
+  padding: 16px 0;
+  border-top: 1px solid var(--app-line);
   overflow-wrap: anywhere;
-}
-.medicine .product-list li {
-  background: #fbf9f2;
-  border-color: #ede7d6;
 }
 .product-heading {
   display: flex;
-  gap: 12px;
-  align-items: baseline;
   justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
 }
 .product-heading h4 {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
 }
 .product-heading > span {
-  color: #446a4c;
-  font-size: 14px;
+  font-size: 12px;
+  color: var(--app-muted);
   flex-shrink: 0;
 }
-.medicine .product-heading > span {
-  color: #85692f;
-}
 .product-dates {
-  font-size: 14px;
-  margin-top: 6px;
+  font-size: 12px;
+  margin-top: 8px;
   color: var(--app-muted);
 }
 .product-dates span {
-  padding: 0 5px;
+  padding-inline: 4px;
 }
 .care-note {
-  padding: 0 4px;
-  margin-top: -8px;
-  font-size: 13px;
-  line-height: 1.8;
   color: var(--app-muted);
+  font-size: 13px;
+  margin-top: -8px;
 }
 .log-details {
   display: block;
 }
 .log-details > summary {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   list-style: none;
-  cursor: pointer;
+  min-height: 44px;
 }
 .log-details > summary::-webkit-details-marker {
   display: none;
@@ -915,253 +853,201 @@ dd {
   display: block;
 }
 .log-details summary strong {
-  font-size: 19px;
-  margin: 6px 0 3px;
-  letter-spacing: -0.5px;
+  font-size: 18px;
+  font-weight: 600;
 }
 .log-details summary small {
   font-size: 13px;
   color: var(--app-muted);
+  margin-top: 4px;
 }
 .details-toggle {
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  border: 1px solid #cbdccd;
-  color: var(--app-primary-dark);
+  border: 1px solid var(--app-line);
+  border-radius: 8px;
   font-size: 24px;
-  line-height: 1;
-  transition: transform 0.15s;
+  color: var(--app-primary);
 }
 .log-details[open] .details-toggle {
   transform: rotate(45deg);
 }
 .log-details > p {
-  margin-top: 18px;
-  font-size: 14px;
-}
-.log-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
   margin-top: 20px;
 }
-.log-filters label {
-  flex: 1;
-  min-width: 150px;
+.log-filters {
   display: grid;
-  gap: 6px;
-  font-size: 13px;
-  color: #4d695a;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 24px 0 16px;
+}
+.log-filters label {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--app-muted);
 }
 .log-filters input,
 .log-filters select {
-  box-sizing: border-box;
   width: 100%;
-  min-height: 46px;
-  padding: 8px 10px;
-  border: 1px solid var(--app-line);
-  border-radius: 12px;
-  background: var(--app-surface);
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--app-control-line);
+  border-radius: 8px;
+  background: white;
   color: var(--app-ink);
-  font: inherit;
+  font-size: 14px;
 }
 .timeline {
-  list-style: none;
-  padding: 4px 0 4px 24px;
-  margin: 18px 0 0 5px;
-  border-left: 1px solid #cedfd2;
   display: grid;
   gap: 24px;
+  list-style: none;
+  padding: 4px 0 4px 24px;
+  margin: 16px 0 0 4px;
+  border-left: 1px solid var(--app-line);
 }
 .timeline > li {
   position: relative;
-  display: grid;
-  gap: 6px;
   min-width: 0;
-  font-size: 14px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
 }
 .timeline > li::before {
   content: '';
   position: absolute;
-  left: -29px;
-  top: 6px;
-  width: 8px;
-  height: 8px;
-  background: #6d9b77;
-  border: 2px solid white;
+  left: -28px;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  background: var(--app-primary);
   border-radius: 50%;
-  box-shadow: 0 0 0 1px #b1ceb6;
+  box-shadow: 0 0 0 4px var(--app-surface);
 }
 .timeline h3,
 .timeline h4 {
   font-size: 14px;
+  font-weight: 600;
 }
 .timeline .facts {
-  background: #f6f9f6;
-  border: 1px solid #e4ece5;
-  padding: 10px 14px;
-  border-radius: 16px;
-  margin: 5px 0 0;
-}
-.timeline .facts > div {
-  padding: 8px 0;
-}
-.proof-card {
-  background: #f4f8f4;
-  border-color: #d9e5da;
-}
-.proof-card h2 {
-  font-size: 18px;
+  padding: 8px 16px;
+  background: var(--app-canvas);
+  border-radius: 8px;
 }
 .proof-card > p:not(.eyebrow) {
   font-size: 13px;
 }
-.proof-card :deep(.va-alert) {
-  border-radius: 10px;
-  font-size: 14px;
-}
 .hash {
-  overflow-wrap: anywhere;
   font-family: ui-monospace, monospace;
-  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 .trip {
-  display: grid;
-  gap: 7px;
+  padding-top: 20px;
   border-top: 1px solid var(--app-line);
-  padding-top: 18px;
-  font-size: 14px;
 }
-.trip > h3 {
+.trip-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.trip-heading h3 {
   font-size: 15px;
-  color: var(--app-primary-dark);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.trip-status {
+  font-size: var(--app-text-xs);
+  padding: var(--app-space-1) var(--app-space-2);
+  border-radius: var(--app-pill-radius);
+  background: var(--app-canvas);
+  color: var(--app-muted);
 }
 .inspection-card {
-  border-style: dashed;
   background: transparent;
-  box-shadow: none;
+  border-style: dashed;
 }
 .inspection-card h2 {
-  font-size: 17px;
+  font-size: 18px;
 }
-.inspection-card > p:last-child {
-  font-size: 14px;
+.inspection-card p:last-child {
   color: var(--app-muted);
 }
 .trace-footer {
-  text-align: center;
-  padding: 18px 12px 8px;
-  font-size: 14px;
-  color: var(--app-muted);
+  padding: 24px 0 0;
   border-top: 1px solid var(--app-line);
+  text-align: center;
+  color: var(--app-muted);
+  font-size: 12px;
 }
 .footer-brand {
   display: block;
+  color: var(--app-primary-dark);
   font-size: 14px;
-  font-weight: 700;
-  color: #35654b;
-  margin-bottom: 8px;
+  font-weight: 600;
+  margin-bottom: 12px;
 }
 .trace-footer p + p {
-  margin-top: 5px;
+  margin-top: 8px;
 }
 .state {
-  text-align: center;
   justify-items: center;
-  gap: 12px;
-  padding: 48px 28px;
+  text-align: center;
+  padding: 48px 24px;
 }
 .state p {
   color: var(--app-muted);
-  font-size: 13px;
-  max-width: 420px;
+  max-width: 48ch;
 }
 .state-symbol {
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: #e8f2e9;
-  color: #346b49;
-  font:
-    32px Georgia,
-    serif;
+  width: 48px;
+  height: 48px;
+  font-size: 28px;
+  border-radius: 12px;
+  background: var(--app-primary-soft);
+  color: var(--app-primary);
 }
 .revoked-state .state-symbol {
-  background: #faf0d9;
-  color: #866320;
-}
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-summary:focus-visible {
-  outline: 3px solid #7caf91;
-  outline-offset: 4px;
-}
-.trace-page :deep(.collection-toolbar) {
-  border-radius: 18px;
-  background: var(--app-canvas);
-  padding: 18px;
-}
-.trace-page :deep(.collection-toolbar input),
-.trace-page :deep(.collection-toolbar select),
-.trace-page :deep(.collection-toolbar button) {
-  min-height: 44px;
-  border-radius: 12px;
-  font-size: 14px;
+  color: var(--app-warning);
+  background: #fff5df;
 }
 @media (max-width: 640px) {
   .trace-page {
-    padding: 0 18px 24px;
-    gap: 18px;
+    padding: 0 16px 32px;
+    gap: 20px;
   }
   .trace-header {
-    padding: 20px 0;
-    gap: 10px;
+    padding-block: 20px;
   }
   .trace-brand {
     font-size: 15px;
-    gap: 8px;
-  }
-  .brand-symbol {
-    width: 35px;
-    height: 35px;
-    border-radius: 11px;
   }
   .trace-brand small {
-    font-size: 7px;
-    letter-spacing: 1px;
+    font-size: 9px;
   }
   .public-label {
     font-size: 11px;
-    padding: 5px 8px;
   }
-  .page-intro {
-    padding: 16px 0 8px;
+  .trace-card {
+    padding: 20px;
   }
-  .page-intro h1 {
-    font-size: 34px;
-    letter-spacing: -1px;
-  }
-  .page-intro > p:last-child {
-    font-size: 14px;
+  .trace-card h2 {
+    font-size: 20px;
   }
   .lot-card {
-    padding: 24px 22px 0;
-    border-radius: 18px;
+    padding: 24px 24px 0;
   }
   .lot-card h2 {
-    font-size: 34px;
-    max-width: 100%;
-    margin-top: 24px;
+    font-size: 32px;
   }
-  .lot-farm,
-  .lot-address {
+  .lot-card :is(h2, .lot-farm, .lot-address) {
     max-width: 100%;
   }
   .lot-illustration {
@@ -1169,86 +1055,39 @@ summary:focus-visible {
   }
   .lot-facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-    margin-top: 20px;
+    gap: 16px;
   }
   .lot-facts > div:first-child {
-    grid-column: 1/-1;
+    grid-column: 1 / -1;
+  }
+  .lot-facts dd {
+    font-size: 16px;
   }
   .lot-facts > div:first-child dd {
     font-size: 28px;
   }
-  .lot-facts dd {
-    font-size: 15px;
-  }
-  .lot-code {
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .section-nav {
-    gap: 6px;
-  }
-  .section-nav a {
-    padding: 7px 11px;
-    font-size: 13px;
-    min-height: 44px;
-  }
-  .trace-card {
-    padding: 22px;
-    border-radius: 22px;
-  }
   .origin-card > .facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    gap: 20px;
   }
-  .care-heading h2 {
-    font-size: 24px;
-  }
-  .care-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
-  }
-  .log-details summary strong {
-    font-size: 18px;
-  }
+  .care-grid,
   .log-filters {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
-  .log-filters label {
-    min-width: 0;
-  }
-  .log-filters input, .log-filters select { font-size: 16px; }
-}
-@media (max-width: 360px) {
-  .trace-page {
-    padding-inline: 14px;
-  }
-  .public-label {
-    font-size: 8px;
-    padding: 4px 6px;
-    gap: 4px;
-  }
-  .trace-brand {
-    font-size: 14px;
-  }
-  .trace-brand small {
-    letter-spacing: 0.5px;
-  }
-  .page-intro h1 {
-    font-size: 30px;
-  }
-  .trace-card {
-    padding: 18px;
-  }
-  .lot-card {
-    padding-inline: 18px;
-  }
-  .origin-card > .facts {
-    grid-template-columns: 1fr;
+  .log-filters input,
+  .log-filters select {
+    font-size: 16px;
   }
   .facts > div {
-    grid-template-columns: 1fr;
-    gap: 3px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .section-nav {
+    gap: 4px;
+  }
+  .section-nav a {
+    padding-inline: 8px;
+    font-size: 12px;
   }
 }
 </style>

@@ -1,4 +1,9 @@
 <script setup lang="ts">
+import { draftDismiss } from '../../components/overlay-dismiss'
+import LoadingState from '../../components/LoadingState.vue'
+import DecimalField from '../../components/DecimalField.vue'
+import PageHeader from '../../components/PageHeader.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, reactive, ref, watch, onUnmounted } from 'vue'
 import CollectionToolbar from '../../components/CollectionToolbar.vue'
 import { storeToRefs } from 'pinia'
@@ -9,17 +14,54 @@ import {
 } from 'vuestic-ui'
 import { usePondsStore } from '../../stores/ponds.store'
 import { usePondBatchesStore } from '../../stores/pond-batches.store'
+import BatchVersionList from './BatchVersionList.vue'
+import BatchDetailDrawer from './BatchDetailDrawer.vue'
 import HarvestModal from './HarvestModal.vue'
+import { useAuthStore } from '../../stores/auth.store'
 import { SPECIES_LABELS, STATUS_LABELS, type BatchVersion, type BatchInput, type BatchItem, type BatchStatusCode, type Species } from '../../types'
 
 const route = useRoute(); const router = useRouter(); const store = usePondBatchesStore(); const pondsStore = usePondsStore()
+const auth = useAuthStore()
+const farmer = computed(() => auth.user?.role === 'FARMER')
 const { items, loading, saving, error } = storeToRefs(store)
-const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const pondName = ref('')
+const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId))
+const pond = computed(() => pondsStore.scope === farmId.value ? pondsStore.items.find((item) => item.id === pondId.value) : undefined)
+const pondName = computed(() => pond.value?.pond_name ?? '')
 const showForm = ref(false); const editingId = ref<string | null>(null); const formError = ref(''); const success = ref(''); const warning = ref('')
 const correctionReason = ref(''); const expectedVersion = ref(1)
 const editingBatch = computed(() => items.value.find((item) => item.id === editingId.value) ?? null)
 const historyItems = ref<BatchVersion[]>([]); const historyTitle = ref(''); const historyLoading = ref(false)
+const detailId = ref('')
+const detailSection = ref<'general' | 'history'>('general')
+
+function openDetail(item: BatchItem, section: 'general' | 'history' = 'general') {
+  detailSection.value = section
+  detailId.value = item.id
+}
+
+function chooseAction(event: Event, action?: () => void) {
+  const menu = (event.currentTarget as HTMLElement).closest('details')
+  if (menu) {
+    menu.open = false
+    menu.querySelector('summary')?.focus()
+  }
+  action?.()
+}
+
+const detailBatch = computed(() => items.value.find((item) => item.id === detailId.value))
 const harvestBatchId = ref<string | null>(null)
+watch([() => route.query.harvest, items, loading], ([id, rows, pending], [previousId]) => {
+  if (!pending && typeof id === 'string' && rows.some((item) => item.id === id)) harvestBatchId.value = id
+  if (id == null && typeof previousId === 'string') harvestBatchId.value = null
+})
+
+function closeHarvest() {
+  harvestBatchId.value = null
+  if (!route.query.harvest) return
+  const { harvest, ...query } = route.query
+  if (harvest) void router.replace({ query })
+}
+
 const harvestBatch = computed(() => items.value.find((item) => item.id === harvestBatchId.value))
 function updateHarvestBatch(batch: BatchItem) {
   const index = items.value.findIndex((item) => item.id === batch.id)
@@ -27,9 +69,10 @@ function updateHarvestBatch(batch: BatchItem) {
 }
 
 const query = ref(''); const filterStatus = ref(''); const listPage = ref(1); const listPageSize = 9
-const filteredItems = computed(() => items.value.filter((item) => (!filterStatus.value || item.status === filterStatus.value) && `${item.batch_code} ${item.seed_source ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const filteredItems = computed(() => items.value.filter((item) => (!filterStatus.value || item.status === filterStatus.value) && (!filterSpecies.value || item.species === filterSpecies.value) && `${item.batch_code} ${SPECIES_LABELS[item.species]} ${item.seed_source ?? ''}`.toLocaleLowerCase('vi').includes(query.value.trim().toLocaleLowerCase('vi'))))
+const filterSpecies = ref('')
 const visibleItems = computed(() => filteredItems.value.slice((listPage.value - 1) * listPageSize, listPage.value * listPageSize))
-watch([query, filterStatus], () => { listPage.value = 1 })
+watch([query, filterStatus, filterSpecies], () => { listPage.value = 1 })
 watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
 
 let contextVersion = 0; let historyVersion = 0
@@ -52,13 +95,16 @@ const statusColors: Record<string, string> = {
 
 const canEnterHarvest = computed(() => Boolean(editingId.value) && ['HARVESTED', 'COMPLETED'].includes(form.status))
 const numeric = (value: string | number) => value === '' ? null : Number(value)
+const day = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
+const displayDate = (value: string | null | undefined) => value ? day.format(new Date(value)) : '—'
 const dateOnly = (value: string | null | undefined) => value
   ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value)) : ''
 
 function reset() { correctionReason.value = ''; expectedVersion.value = 1; editingId.value = null; Object.assign(form, { species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
 function openCreate() { if (saving.value || loading.value) return; reset(); showForm.value = true }
 function openEdit(item: BatchItem) { if (saving.value || loading.value) return; correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
-function close() { if (saving.value) return; showForm.value = false; reset() }
+const formDismiss = draftDismiss(() => [form, correctionReason.value], () => saving.value, showForm).dismiss
+function close() { showForm.value = false; reset() }
 
 async function submit() {
   if (saving.value || loading.value) return
@@ -132,11 +178,10 @@ async function remove(item: BatchItem) {
 async function loadContext() {
   const version = ++contextVersion; ++historyVersion
   const farm = farmId.value; const pond = pondId.value
-  showForm.value = false; reset(); historyTitle.value = ''; historyItems.value = []; historyLoading.value = false; harvestBatchId.value = null; pondName.value = ''; success.value = ''; warning.value = ''; query.value = ''; filterStatus.value = ''
+  detailId.value = ''; showForm.value = false; reset(); historyTitle.value = ''; historyItems.value = []; historyLoading.value = false; harvestBatchId.value = null; success.value = ''; warning.value = ''; query.value = ''; filterStatus.value = ''; filterSpecies.value = ''
   await store.load(farm, pond)
   if (version !== contextVersion) return
   await pondsStore.load(farm)
-  if (version === contextVersion) pondName.value = pondsStore.items.find((x) => x.id === pond)?.pond_name ?? ''
 }
 watch(() => `${farmId.value}/${pondId.value}`, loadContext, { immediate: true })
 
@@ -144,25 +189,13 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 </script>
 
 <template>
-  <main class="page-container" :aria-busy="loading">
-    <va-button preset="plain" color="secondary" icon="arrow_back" class="back-btn"
-      @click="router.push({ name: 'ponds', params: { farmId } })">
-      Quay lại Danh sách Ao
-    </va-button>
+  <main class="page-container" :class="{ 'farmer-batches': farmer }" :aria-busy="loading">
 
-    <header class="page-header">
-      <div class="header-info">
-        <p class="eyebrow">
-          <va-icon name="water" size="small" class="mr-1" />
-          {{ pondName || 'Đang tải...' }}
-        </p>
-        <h1 class="page-title">Quản lý Vụ nuôi</h1>
-        <p class="page-description">Theo dõi vụ nuôi, nhật ký chăm sóc và các lô thu hoạch.</p>
-      </div>
-      <va-button icon="add" :disabled="loading || saving" gradient class="shadow-md" @click="openCreate">
-        Tạo vụ nuôi mới
-      </va-button>
-    </header>
+    <PageHeader title="Vụ nuôi" :context="pondName" :description="farmer ? 'Quản lý các vụ nuôi tại ao, theo dõi trạng thái, nhật ký và thu hoạch.' : 'Theo dõi vụ nuôi, nhật ký chăm sóc và các lô thu hoạch.'">
+      <template #actions>
+        <va-button icon="add" :disabled="loading || saving" @click="openCreate">{{ farmer ? 'Thêm vụ nuôi' : 'Tạo vụ nuôi mới' }}</va-button>
+      </template>
+    </PageHeader>
 
     <!-- Alerts -->
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">
@@ -175,21 +208,72 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
-    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statusOptions" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="kết quả trong danh sách đã tải" />
-    <p v-if="!loading && !error && items.length && !filteredItems.length" role="status">Không có kết quả phù hợp. Thử đổi từ khóa hoặc trạng thái.</p>
-    <va-inner-loading :loading="loading">
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage"
+      class="batch-toolbar" :statuses="statusOptions" :total="filteredItems.length" :page-size="listPageSize"
+      :loading="loading" :extra-filters-active="Boolean(filterSpecies)"
+      :search-placeholder="farmer ? 'Mã vụ hoặc loại thủy sản…' : undefined"
+      label="vụ nuôi trong danh sách đã tải" @clear="filterSpecies = ''">
+      <template v-if="farmer" #filters>
+        <label class="species-filter">Loài nuôi
+          <select v-model="filterSpecies" aria-label="Loài nuôi">
+            <option value="">Tất cả loài</option>
+            <option v-for="species in speciesOptions" :key="species.value" :value="species.value">{{ species.label }}</option>
+          </select>
+        </label>
+      </template>
+    </CollectionToolbar>
+
+    <div v-if="loading && farmer" class="batch-rows" role="status">
+      <span class="sr-only">Đang tải vụ nuôi</span>
+      <div v-for="index in 3" :key="index" class="batch-row batch-skeleton" aria-hidden="true"><span /><span /><span /></div>
+    </div>
+    <LoadingState v-else-if="loading" />
+    <template v-else>
       <!-- Empty State -->
-      <div v-if="!loading && !error && !items.length" class="empty-state">
-        <div class="empty-icon-wrapper">
-          <va-icon name="set_meal" size="3rem" color="info" />
-        </div>
-        <h2>Chưa có vụ nuôi nào</h2>
-        <p class="text-secondary">Hãy bắt đầu bằng việc tạo vụ nuôi đầu tiên cho ao này.</p>
-        <va-button icon="add" class="mt-4" @click="openCreate">Tạo vụ nuôi ngay</va-button>
-      </div>
+      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có vụ nuôi nào" description="Tạo vụ nuôi đầu tiên để theo dõi quá trình nuôi trong ao này." icon="set_meal">
+        <va-button icon="add" @click="openCreate">Tạo vụ nuôi mới</va-button>
+      </EmptyState>
+      <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có vụ nuôi phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
+
+      <ul v-else-if="farmer && visibleItems.length" class="batch-rows" aria-label="Danh sách vụ nuôi">
+        <li v-for="item in visibleItems" :key="item.id" class="batch-row">
+          <div class="batch-identity">
+            <span class="species-icon"><va-icon name="set_meal" aria-hidden="true" /></span>
+            <div>
+              <h2>{{ SPECIES_LABELS[item.species] }}</h2>
+              <span class="batch-code">{{ item.batch_code }}</span>
+              <va-badge :color="statusColors[item.status]" :text="STATUS_LABELS[item.status]" />
+            </div>
+          </div>
+
+          <dl class="row-facts">
+            <div><dt>Ngày thả giống</dt><dd>{{ displayDate(item.stocking_date) }}</dd></div>
+            <div><dt>Số lượng giống</dt><dd>{{ item.seed_quantity.toLocaleString('vi-VN') }}</dd></div>
+            <div><dt>Dự kiến thu hoạch</dt><dd>{{ displayDate(item.expected_harvest_date) }}</dd></div>
+          </dl>
+
+          <div class="row-actions">
+            <va-button size="small" preset="secondary" icon="edit_document"
+              :to="{ name: 'farming-logs', params: { farmId, pondId, batchId: item.id } }">Nhật ký</va-button>
+            <va-button size="small" preset="secondary" icon="agriculture" @click="harvestBatchId = item.id">Thu hoạch &amp; Lô</va-button>
+            <va-button size="small" preset="secondary" @click="openDetail(item)">Xem chi tiết</va-button>
+            <details class="batch-menu" name="batch-actions"
+              @keydown.esc.stop="chooseAction($event)">
+              <summary :aria-label="`Thao tác khác cho vụ ${item.batch_code}`" title="Thao tác khác">
+                <va-icon name="more_horiz" aria-hidden="true" />
+              </summary>
+              <div class="menu-actions">
+                <button type="button" :disabled="saving" @click="chooseAction($event, () => openEdit(item))">Đính chính</button>
+                <button type="button" @click="chooseAction($event, () => openDetail(item, 'history'))">Lịch sử</button>
+                <button type="button" class="menu-danger" :disabled="saving" @click="chooseAction($event, () => remove(item))">Xóa vụ nuôi</button>
+              </div>
+            </details>
+          </div>
+        </li>
+      </ul>
 
       <!-- Lưới Card -->
-      <div v-else class="batch-grid">
+      <div v-else-if="!farmer && visibleItems.length" class="batch-grid">
         <va-card v-for="item in visibleItems" :key="item.id" class="batch-card hover-elevation">
           <va-card-content>
             <div class="card-top">
@@ -197,9 +281,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
                 <va-icon name="tag" size="small" class="mr-1" />
                 <strong>{{ item.batch_code }}</strong>
               </div>
-              <va-badge :color="statusColors[item.status] || 'primary'" class="status-badge">
-                {{ STATUS_LABELS[item.status] }}
-              </va-badge>
+              <va-badge :color="statusColors[item.status] || 'primary'" class="status-badge" :text="STATUS_LABELS[item.status]" />
             </div>
 
             <h2 class="species-title">
@@ -227,33 +309,43 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
           </va-card-content>
 
           <!-- Footer Actions -->
-          <div class="card-actions">
+          <div class="card-actions batch-actions">
             <va-button preset="primary" icon="edit_document" class="flex-1"
               @click="router.push({ name: 'farming-logs', params: { farmId, pondId, batchId: item.id } })">
               Nhật ký
             </va-button>
-            <va-button preset="secondary" icon="edit" color="info" aria-label="Đính chính" @click="openEdit(item)" />
-            <va-button preset="secondary" icon="history" color="secondary" aria-label="Lịch sử" @click="openHistory(item)" />
-            <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch / Lô</va-button>
-            <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(item)" />
+            <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch và lô</va-button>
+            <div class="batch-secondary-actions">
+              <va-button preset="plain" size="small" icon="edit" color="secondary" @click="openEdit(item)">Đính chính</va-button>
+              <va-button preset="plain" size="small" icon="history" color="secondary" @click="openHistory(item)">Lịch sử</va-button>
+              <va-button preset="plain" size="small" icon="delete" color="danger" aria-label="Xóa vụ nuôi" @click="remove(item)" />
+            </div>
           </div>
         </va-card>
       </div>
-    </va-inner-loading>
+    </template>
+
+    <BatchDetailDrawer v-if="detailBatch" :key="detailBatch.id" :batch="detailBatch"
+      :farm-id="farmId" :pond-id="pondId" :pond="pond" :initial-section="detailSection"
+      :badge-color="statusColors[detailBatch.status] ?? 'primary'"
+      @close="detailId = ''"
+      @edit="openEdit(detailBatch); detailId = ''"
+      @harvest="harvestBatchId = detailBatch.id; detailId = ''" />
 
     <HarvestModal v-if="harvestBatch" :key="harvestBatch.id" :batch="harvestBatch" :farm-id="farmId" :pond-id="pondId"
-      @close="harvestBatchId = null" @updated="updateHarvestBatch" />
+      @close="closeHarvest" @updated="updateHarvestBatch" />
 
     <!-- Modal Form -->
-    <va-modal v-model="showForm" :no-dismiss="saving" hide-default-actions size="large" overlay-opacity="0.5">
+    <va-modal title="batch-form-title" :model-value="showForm" @update:model-value="(open: boolean) => { if (!open) close() }" :mobile-fullscreen="false" :before-close="formDismiss" close-button aria-close-label="Đóng biểu mẫu" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
       <template #header>
-        <h2 class="modal-title">{{ editingId ? 'Đính chính Vụ nuôi' : 'Tạo Vụ nuôi mới' }}</h2>
+        <h2 id="batch-form-title" class="modal-title">{{ editingId ? 'Đính chính vụ nuôi' : 'Tạo vụ nuôi mới' }}</h2>
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
         <div v-if="editingBatch" class="generated-code col-span-2"><span>Mã vụ nuôi</span><strong>{{ editingBatch.batch_code }}</strong><small>Mã vụ được hệ thống tạo tự động và không thể sửa.</small></div>
         <p v-else class="generated-code-hint col-span-2">Mã vụ nuôi sẽ được tạo tự động khi lưu.</p>
 
+        <h3 class="form-section-heading">Con giống và kế hoạch nuôi</h3>
         <va-select v-model="form.species" :options="speciesOptions" value-by="value" text-by="label" label="Loài nuôi *"
           class="col-span-1" />
 
@@ -274,12 +366,12 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
             <h3 class="section-title">Thông tin thu hoạch thực tế</h3>
             <div class="harvest-grid">
               <va-input v-model="form.actualHarvestDate" type="date" label="Ngày kết thúc thu hoạch" readonly />
-              <va-input v-model="form.yieldQuantity" type="number" label="Sản lượng thu hoạch (kg)" min="0"
-                step="0.01" readonly />
+              <DecimalField v-model="form.yieldQuantity" label="Sản lượng thu hoạch (kg)" readonly />
             </div>
           </div>
         </template>
 
+        <h3 class="form-section-heading">Thông tin bổ sung</h3>
         <va-textarea v-model="form.note" label="Ghi chú" placeholder="Thông tin thêm..." class="col-span-2" />
 
         <va-textarea v-if="editingId" v-model="correctionReason" label="Lý do đính chính *"
@@ -290,8 +382,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
         </va-alert>
 
         <div class="form-actions col-span-2">
-          <va-button preset="secondary" type="button" color="secondary" @click="close">
-            Hủy bỏ
+          <va-button preset="secondary" type="button" color="secondary" :disabled="saving" @click="formDismiss(close)">
+            Hủy
           </va-button>
           <va-button type="submit" :loading="saving" :disabled="saving" color="primary">
             {{ editingId ? 'Đính chính và ghi blockchain' : 'Tạo và ghi blockchain' }}
@@ -300,38 +392,13 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       </form>
     </va-modal>
 
-    <va-modal :model-value="Boolean(historyTitle)" hide-default-actions size="large"
+    <va-modal title="batch-history-title" :mobile-fullscreen="false" :model-value="Boolean(historyTitle)" hide-default-actions size="large"
       @update:model-value="toggleHistory">
       <template #header>
-        <h2 class="modal-title">Lịch sử vụ {{ historyTitle }}</h2>
+        <h2 id="batch-history-title" class="modal-title">Lịch sử vụ {{ historyTitle }}</h2>
       </template>
       <va-inner-loading :loading="historyLoading">
-        <div class="version-list">
-          <va-card v-for="version in historyItems" :key="version.id" class="version-card">
-            <va-card-content>
-              <div class="version-heading">
-                <strong>Phiên bản {{ version.version_number }}</strong>
-                <va-badge :color="version.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'">
-                  {{ version.blockchain?.status === 'SUCCESS' ? 'Đã ghi blockchain' : 'Chưa xác nhận' }}
-                </va-badge>
-              </div>
-              <p>{{ version.correction_reason || 'Dữ liệu được lưu trước lần đính chính đầu tiên' }}</p>
-              <dl class="version-details">
-                <div><dt>Mã vụ / loài</dt><dd>{{ version.snapshot.batch_code }} / {{ SPECIES_LABELS[version.snapshot.species] }}</dd></div>
-                <div><dt>Nguồn giống</dt><dd>{{ version.snapshot.seed_source || '—' }}</dd></div>
-                <div><dt>Số lượng giống</dt><dd>{{ version.snapshot.seed_quantity.toLocaleString('vi-VN') }}</dd></div>
-                <div><dt>Ngày thả / dự kiến thu</dt><dd>{{ dateOnly(version.snapshot.stocking_date) }} / {{ dateOnly(version.snapshot.expected_harvest_date) || '—' }}</dd></div>
-                <div><dt>Ngày thu / sản lượng (kg)</dt><dd>{{ dateOnly(version.snapshot.actual_harvest_date) || '—' }} / {{ version.snapshot.yield_quantity ?? '—' }}</dd></div>
-                <div><dt>Trạng thái</dt><dd>{{ STATUS_LABELS[version.snapshot.status] }}</dd></div>
-                <div><dt>Ghi chú</dt><dd>{{ version.snapshot.note || '—' }}</dd></div>
-              </dl>
-              <p v-if="version.blockchain?.transaction_hash" class="transaction">
-                Giao dịch: {{ version.blockchain.transaction_hash }}
-              </p>
-            </va-card-content>
-          </va-card>
-          <p v-if="!historyLoading && !historyItems.length" class="text-secondary">Chưa có dữ liệu lịch sử.</p>
-        </div>
+        <BatchVersionList :versions="historyItems" :loading="historyLoading" />
       </va-inner-loading>
       <div class="form-actions">
         <va-button preset="secondary" @click="historyTitle = ''">Đóng</va-button>
@@ -341,13 +408,48 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 </template>
 
 <style scoped>
-.page-description { max-width:60ch; margin:.6rem 0 0; color:#67827d; font-size:.9rem; line-height:1.55; }
+.farmer-batches .batch-toolbar { margin-bottom: 14px; }
+.farmer-batches .species-filter { flex: 1; display: grid; gap: 8px; min-width: 150px; font-size: 12px; font-weight: 500; }
+.species-filter select { width: 100%; min-height: 44px; border: 1px solid var(--app-control-line); border-radius: var(--app-control-radius); background: var(--app-surface); color: var(--app-ink); padding: 8px 12px; font: inherit; font-size: 1rem; }
+.batch-rows { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.batch-row { display: grid; min-height: 104px; box-sizing: border-box; grid-template-columns: minmax(150px, 1fr) minmax(240px, 1.5fr) auto; align-items: center; gap: 16px; padding: 14px 16px; border: 1px solid var(--app-line); border-radius: var(--app-radius); background: var(--app-surface); overflow-wrap: anywhere; }
+.batch-row:hover, .batch-row:focus-within { border-color: var(--app-control-line); }
+.batch-identity { display: flex; min-width: 0; gap: 10px; align-items: center; }
+.species-icon { display: grid; place-items: center; width: 40px; height: 40px; flex: 0 0 40px; border-radius: var(--app-control-radius); background: var(--app-primary-soft); color: var(--app-primary-dark); }
+.batch-identity h2 { margin: 0; font-size: 1rem; }
+.batch-code { display: block; margin: 2px 0 4px; color: var(--app-muted); font-size: .8rem; }
+.row-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.row-facts dt { color: var(--app-muted); font-size: .78rem; }
+.row-facts dd { margin: 4px 0 0; font-size: .9rem; font-weight: 650; }
+.row-actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.row-actions :deep(.va-button), .batch-menu summary { min-height: 44px; }
+.batch-menu { position: relative; }
+.batch-menu summary { display: grid; place-items: center; width: 44px; cursor: pointer; border: 1px solid var(--app-line); border-radius: var(--app-control-radius); color: var(--app-primary-dark); }
+.batch-menu summary::-webkit-details-marker { display: none; }
+.menu-actions { position: absolute; top: calc(100% + 4px); right: 0; z-index: 4; min-width: 152px; padding: 4px; border: 1px solid var(--app-line); border-radius: var(--app-control-radius); background: var(--app-surface); box-shadow: 0 6px 18px rgb(0 0 0 / 12%); }
+.menu-actions button { display: block; width: 100%; min-height: 44px; text-align: start; padding: 6px 9px; color: var(--app-ink); background: transparent; border: 0; cursor: pointer; }
+.menu-actions button:hover, .batch-menu summary:hover { background: var(--app-primary-soft); }
+.menu-actions .menu-danger { color: var(--va-danger); }
+.menu-actions button:disabled { opacity: .6; cursor: default; }
+.batch-skeleton { min-height: 70px; }
+.batch-skeleton span { min-height: 18px; width: min(100%, 124px); border-radius: var(--app-control-radius); background: var(--app-canvas); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 1160px), (min-width: 1024px) and (max-width: 1360px) {
+  .batch-row { grid-template-columns: minmax(140px, 1fr) minmax(0, 1.7fr); }
+  .row-actions { grid-column: 1 / -1; justify-content: end; }
+}
+@media (max-width: 600px) {
+  .batch-row { grid-template-columns: minmax(0, 1fr); }
+  .row-actions { justify-content: start; }
+}
+.batch-secondary-actions { width: 100%; display: flex; gap: 4px; align-items: center; border-top: 1px solid var(--app-line); padding-top: 8px; margin-top: 4px; flex-wrap: wrap; }
+.batch-secondary-actions :last-child { margin-left: auto; }
 
 .page-container {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.5rem 0 4rem;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: inherit;
 }
 
 .back-btn {
@@ -356,65 +458,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 }
 
 /* Header Styles */
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.eyebrow {
-  display: flex;
-  align-items: center;
-  margin: 0 0 0.5rem;
-  color: var(--va-primary);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.page-title {
-  margin: 0;
-  font-size: clamp(1.8rem, 4vw, 2.2rem);
-  font-weight: 800;
-  color: var(--app-ink);
-}
 
 /* Empty State */
-.empty-state {
-  padding: 5rem 1rem;
-  text-align: center;
-  background: var(--app-canvas);
-  border: 2px dashed #cbd5e1;
-  border-radius: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.empty-icon-wrapper {
-  width: 80px;
-  height: 80px;
-  background: #e0f2fe;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 1.5rem;
-}
-
-.empty-state h2 {
-  margin: 0 0 0.5rem;
-  font-size: 1.5rem;
-  color: var(--app-ink);
-}
-
-.text-secondary {
-  color: var(--app-muted);
-  margin: 0;
-}
 
 /* Grid Layout */
 .batch-grid {
@@ -427,15 +472,15 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 .batch-card {
   border-radius: 16px;
   border: 1px solid var(--app-line);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease;
+  box-shadow: none;
+  transition: border-color var(--app-motion);
   display: flex;
   flex-direction: column;
 }
 
 .batch-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+  transform: none;
+  box-shadow: none;
   border-color: #cbd5e1;
 }
 
@@ -527,33 +572,10 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 }
 
 /* Modal & Form */
-.modal-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--app-ink);
-  margin-bottom: 1rem;
-}
 
-.modern-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  width: 100%;
-  min-width: 500px;
-}
 
-.generated-code { display: grid; gap: .25rem; padding: .8rem 1rem; border: 1px solid #dbe7e4; border-radius: 10px; background: #f7faf9; }
-.generated-code > span { color: var(--app-muted); font-size: .75rem; }
-.generated-code > strong { color: #1d5149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.generated-code > small, .generated-code-hint { margin: 0; color: var(--app-muted); font-size: .8rem; }
 
-.col-span-1 {
-  grid-column: span 1;
-}
 
-.col-span-2 {
-  grid-column: 1 / -1;
-}
 
 .harvest-section {
   background: var(--app-canvas);
@@ -575,50 +597,6 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
   gap: 1.25rem;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 0.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid #f1f5f9;
-}
-
-.version-list {
-  display: grid;
-  gap: 1rem;
-  min-width: 500px;
-}
-
-.version-card {
-  border: 1px solid var(--app-line);
-}
-
-.version-heading,
-.version-details div {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.version-details div {
-  padding: 0.6rem 0;
-  border-top: 1px solid #f1f5f9;
-}
-
-.version-details dd {
-  max-width: 65%;
-  margin: 0;
-  font-weight: 600;
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.transaction {
-  overflow-wrap: anywhere;
-  color: var(--app-muted);
-  font-size: 0.85rem;
-}
 
 /* Utilities */
 .mr-1 {
@@ -643,25 +621,16 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 
 /* Responsive */
 @media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
 
   .batch-grid {
     grid-template-columns: 1fr;
   }
 
-  .modern-form,
   .harvest-grid,
   .version-list {
     grid-template-columns: 1fr;
     min-width: 100%;
   }
 
-  .col-span-1,
-  .col-span-2 {
-    grid-column: 1 / -1;
-  }
 }
 </style>

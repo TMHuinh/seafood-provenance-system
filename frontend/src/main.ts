@@ -13,9 +13,9 @@ app.use(router)
 app.use(createVuestic({
   config: {
     colors: { variables: {
-      primary: '#087f83', secondary: '#526b75', success: '#24754f',
+      primary: '#08766b', secondary: '#4b626b', success: '#24754f',
       warning: '#916117', danger: '#b64242', info: '#2563a6',
-      backgroundPrimary: '#f5f8fa', backgroundSecondary: '#ffffff', textPrimary: '#17343a',
+      backgroundPrimary: '#f1f6f5', backgroundSecondary: '#ffffff', textPrimary: '#132f3a',
     } },
   },
 }))

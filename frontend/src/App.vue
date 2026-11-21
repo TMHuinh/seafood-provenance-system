@@ -14,6 +14,7 @@ try { sidebarCollapsed.value = localStorage.getItem('seafood_sidebar_collapsed')
 watch(sidebarCollapsed, (collapsed) => {
   try { localStorage.setItem('seafood_sidebar_collapsed', String(collapsed)) } catch { /* Keep the toggle usable without persistent storage. */ }
 })
+const transportWorkspace = computed(() => authStore.user?.role === 'TRANSPORTER' && ['home', 'transports'].includes(String(route.name)))
 const workspace = computed(() => authStore.isAuthenticated && !['trace', 'login', 'register'].includes(String(route.name)))
 
 function handleUnauthorized() {
@@ -46,7 +47,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'is-workspace': workspace }" :style="{ '--sidebar-width': sidebarCollapsed ? '80px' : '240px' }">
+  <div class="app-shell" :class="{ 'is-workspace': workspace, 'transport-workspace': transportWorkspace }" :style="{ '--sidebar-width': sidebarCollapsed ? 'var(--app-sidebar-collapsed-width)' : 'var(--app-sidebar-width)' }">
     <a class="skip-link" href="#main-content">Đến nội dung chính</a>
     <AppNavbar v-if="route.name !== 'trace'" :collapsed="sidebarCollapsed" @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
     <div id="main-content" class="workspace-content" tabindex="-1">
@@ -60,5 +61,8 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+.transport-workspace > .workspace-content {
+  background: linear-gradient(#f5f9fb, #edf4f9);
 }
 </style>

@@ -1,47 +1,386 @@
+@import './fonts.css';
 @import './base.css';
+@import './auth.css';
 
 html,
 body,
 #app {
   min-height: 100%;
 }
-
 #app {
-  min-height: 100vh;
+  min-height: 100dvh;
+  isolation: isolate;
 }
-
 .app-shell {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
+.workspace-content {
+  min-width: 0;
+  flex: 1;
+}
+.is-workspace > .workspace-content {
+  margin-left: var(--sidebar-width, var(--app-sidebar-width));
+}
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 10000;
+  padding: 12px 18px;
+  border-radius: 8px;
+  background: var(--app-primary-dark);
+  color: white;
+  transform: translateY(-160%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
 
-.page-container,
-.farms-page,
-.ponds-page,
-.logs-page,
-.transport-page {
+/* Shared collection layout; 1024px is the shell breakpoint, 600px stacks forms. */
+.workspace-content
+  :is(
+    .farms-page,
+    .ponds-page,
+    .page-container,
+    .transport-workspace-page,
+    .receipts-page,
+    .dashboard-wrapper
+  ) {
+  width: min(100%, var(--app-content-width));
+  max-width: var(--app-content-width);
+  margin: 0 auto;
+  padding: var(--app-space-8) clamp(20px, 3vw, 48px) var(--app-space-12);
+  background: transparent;
+  border-radius: 0;
   color: var(--app-ink);
 }
-
-.page-title,
-.section-title,
-.home-page-promax h1,
-.home-page-promax h2,
-.home-page-promax h3 {
-  letter-spacing: -0.035em;
+.workspace-content :is(.farm-grid, .pond-grid, .batch-grid, .log-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card) {
+  min-width: 0;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+  transition: border-color var(--app-motion);
+}
+.workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card):hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--app-control-line);
+}
+.workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card) > .va-card__content {
+  flex: 1;
+  padding: 24px;
+}
+.workspace-content :is(.farm-title, .pond-name, .species-title) {
+  font-size: var(--app-text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.workspace-content :is(.card-actions-custom, .card-actions) {
+  display: flex;
+  margin-top: auto;
+  padding: 12px 20px;
+  gap: 8px;
+  background: var(--app-surface);
+  border-top: 1px solid var(--app-line);
+  flex-wrap: wrap;
+}
+.workspace-content :is(.card-actions-custom, .card-actions) .va-button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.workspace-content :is(.card-actions-custom, .card-actions) .flex-1 {
+  flex: 1 0 auto;
+}
+.workspace-content :is(.stats-grid, .log-details) {
+  background: transparent;
+  border-radius: 0;
+  border-top: 1px solid var(--app-line);
+  padding: 16px 0 0;
+  gap: 16px;
+}
+.workspace-content :is(.stat-label, .detail-label, .address-text, .log-date) {
+  color: var(--app-muted);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.workspace-content :is(.stat-value, .detail-value) {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-content :is(.card-top, .card-header, .card-topline) {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.workspace-content :is(.pond-code-badge, .batch-code-badge) {
+  background: transparent;
+  padding: 0;
+  color: var(--app-primary-dark);
+}
+.workspace-content .back-btn {
+  margin-bottom: 20px;
+  font-size: 13px;
 }
 
-.va-modal__inner,
-.va-modal__container {
-  border-radius: 18px;
+/* Vuestic retains focus management, validation and loading behavior. */
+.va-button {
+  --va-button-border-radius: var(--app-control-radius);
+  --va-button-size: var(--app-control-height);
+  font-weight: 600;
 }
-
-.va-input-wrapper,
-.va-select {
+.va-button--normal {
+  min-height: var(--app-control-height);
+}
+.va-button--small {
+  min-height: 36px;
+}
+.va-button__background {
+  background-image: none !important;
+}
+.va-input-wrapper {
+  --va-input-wrapper-border-radius: var(--app-control-radius);
+  --va-input-wrapper-min-height: var(--app-control-height);
   font-family: inherit;
 }
+.va-input-wrapper__field {
+  border-radius: var(--app-control-radius);
+  min-height: var(--app-control-height);
+}
+.va-input-wrapper:not(.va-input-wrapper--error):not(.va-input-wrapper--success):not(
+    .va-input-wrapper--focused
+  ) {
+  --va-input-wrapper-border-color: var(--app-control-line);
+}
+.va-badge {
+  --va-badge-text-transform: none;
+  --va-badge-font-size: var(--app-text-xs);
+}
+.va-input-wrapper__label {
+  line-height: 1.6;
+}
+.va-badge__text-wrapper {
+  font-size: var(--app-text-xs);
+  line-height: 1.5;
+  padding: var(--app-space-1) var(--app-space-2);
+  border-radius: var(--app-pill-radius);
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+}
+.va-alert {
+  border-radius: var(--app-control-radius);
+  line-height: 1.6;
+}
+.va-modal__inner,
+.va-modal__container {
+  border-radius: var(--app-radius);
+}
+.va-modal__inner {
+  max-width: calc(100vw - 32px);
+  overscroll-behavior: contain;
+}
+.va-modal__dialog {
+  color: var(--app-ink);
+}
+.va-modal__dialog h2 {
+  font-size: var(--app-text-section);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+.va-modal__dialog .modal-title {
+  margin: 0 0 16px;
+}
+.va-modal__dialog :is(.modern-form, .harvest-form) {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.va-modal__dialog :is(.form-actions, .col-span-2, .wide, .form-section-heading) {
+  grid-column: 1 / -1;
+}
+.va-modal__dialog .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid var(--app-line);
+  padding-top: 20px;
+  margin-top: 4px;
+}
+.form-section-heading {
+  margin: 4px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--app-line);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-ink);
+}
+.form-section-heading:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.va-modal__dialog :is(.form-context, .generated-code) {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--app-control-radius);
+  background: var(--app-primary-soft);
+  color: var(--app-primary-dark);
+  overflow-wrap: anywhere;
+}
+.va-modal__dialog .generated-code {
+  display: grid;
+  gap: 4px;
+}
+.va-modal__dialog :is(.generated-code > span, .generated-code > small, .generated-code-hint) {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: .8rem;
+}
+.va-modal__dialog :is(.hash, .hash-block, code) {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+.va-modal__dialog :is(.lot-list > .va-card, .trip-card) {
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  box-shadow: none;
+}
+.va-modal__dialog :is(.lot-list p, .transport-event-history small) {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.va-modal__dialog .harvest-form > .va-button {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+.va-modal__dialog :is(.version-details, .summary-stats, .harvest-grid) {
+  min-width: 0;
+}
+.va-modal__dialog :is(.version-heading, .v-top) {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+summary {
+  cursor: pointer;
+}
+summary:hover {
+  color: var(--app-primary-dark);
+}
 
+/* Small utilities used across existing templates. */
+.mb-0 {
+  margin-bottom: 0 !important;
+}
+.mb-2 {
+  margin-bottom: 8px;
+}
+.mb-3 {
+  margin-bottom: 16px;
+}
+.mb-4 {
+  margin-bottom: 24px;
+}
+.mt-2 {
+  margin-top: 8px;
+}
+.mt-3 {
+  margin-top: 12px;
+}
+.mt-4 {
+  margin-top: 16px;
+}
+.mr-1 {
+  margin-right: 4px;
+}
+.mr-2 {
+  margin-right: 8px;
+}
+.text-right {
+  text-align: right;
+}
+.fw-600 {
+  font-weight: 600;
+}
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.text-primary {
+  color: var(--app-primary);
+}
+.bg-success {
+  background: var(--app-success);
+}
+.bg-warning {
+  background: var(--app-warning);
+}
+.bg-danger {
+  background: var(--app-danger);
+}
+
+@media (max-width: 1023px) {
+  .is-workspace > .workspace-content {
+    margin-left: 0;
+    transition: none;
+  }
+}
+@media (max-width: 600px) {
+  .workspace-content
+    :is(
+      .farms-page,
+      .ponds-page,
+      .page-container,
+      .transport-workspace-page,
+      .receipts-page,
+      .dashboard-wrapper
+    ) {
+    padding: var(--app-space-6) var(--app-space-4) var(--app-space-8);
+  }
+  .va-modal__dialog :is(.modern-form, .harvest-form, .harvest-grid) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .va-modal__dialog :is(.col-span-1, .col-span-2, .wide) {
+    grid-column: 1 / -1;
+  }
+  .va-modal__dialog .form-actions > .va-button {
+    flex: 1 1 auto;
+  }
+  .va-modal__dialog .summary-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace-content :is(.card-actions-custom, .card-actions) {
+    padding-inline: 16px;
+  }
+  .workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card) > .va-card__content {
+    padding: 20px;
+  }
+  .va-input-wrapper input,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  .va-button--small {
+    min-height: 44px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -53,104 +392,6 @@ body,
   }
 }
 
-/* Shared management layout; page-specific content keeps its own semantics. */
-.workspace-content { min-width: 0; flex: 1; }
-.is-workspace > .workspace-content { margin-left: var(--sidebar-width, 240px); transition: margin-left .24s ease; }
-.skip-link { position: fixed; top: 8px; left: 8px; z-index: 10000; padding: 12px 18px; border-radius: 8px; background: var(--app-primary-dark); color: white; transform: translateY(-160%); }
-.skip-link:focus { transform: translateY(0); }
-.app-shell .workspace-content :is(.farms-page, .ponds-page, .page-container, .transport-page, .receipts-page) {
-  width: min(100%, 1280px); max-width: 1280px; margin: 0 auto; padding: 32px; background: transparent; border-radius: 0;
-}
-.app-shell .workspace-content :is(.page-header, .page-heading) { align-items: center; margin-bottom: 32px; gap: 24px; }
-.app-shell .workspace-content :is(.page-title, .page-heading h1) { font-family: inherit; font-size: clamp(26px, 2.4vw, 32px); font-weight: 600; letter-spacing: -.025em; line-height: 1.25; }
-.app-shell .workspace-content :is(.page-description, .page-heading p:last-child) { color: var(--app-muted); font-size: 14px; line-height: 1.65; }
-.app-shell .workspace-content :is(.eyebrow, .overview-kicker, .table-kicker) { color: var(--app-primary-dark); font-size: 12px; letter-spacing: .055em; }
-.app-shell .workspace-content :is(.farm-grid, .pond-grid, .batch-grid, .log-grid) { grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 24px; align-items: stretch; }
-.app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card) { min-width: 0; border: 1px solid rgb(30 67 58 / 5%); border-radius: var(--app-radius); box-shadow: var(--app-shadow) !important; display: flex; flex-direction: column; overflow-wrap: anywhere; }
-.app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .log-card):hover { transform: none; border-color: #a5cdd1; }
-.app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card) > .va-card__content { flex: 1; padding: 24px; }
-.app-shell .workspace-content :is(.farm-title, .pond-name, .species-title) { font-size: 18px; font-weight: 650; line-height: 1.5; }
-.app-shell .workspace-content :is(.card-actions-custom, .card-actions) { margin-top: auto; padding: 16px 24px 24px; gap: 8px; background: transparent; border-top: 0; flex-wrap: wrap; }
-.app-shell .workspace-content :is(.card-actions-custom, .card-actions) .va-button { flex-shrink: 0; white-space: nowrap; }
-.app-shell .workspace-content :is(.card-actions-custom, .card-actions) .flex-1 { flex: 1 0 auto; }
-.app-shell .workspace-content :is(.stats-grid, .log-details) { background: #f5f9f7; border-radius: 16px; padding: 18px; gap: 16px; }
-.app-shell .workspace-content :is(.stat-label, .detail-label, .address-text, .log-date) { color: var(--app-muted); font-size: 13px; }
-.app-shell .workspace-content :is(.stat-value, .detail-value) { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-.app-shell .workspace-content :is(.card-top, .card-header, .card-topline) { flex-wrap: wrap; gap: 12px; }
-.app-shell .workspace-content :is(.back-btn) { margin-bottom: 20px; font-size: 13px; }
-.app-shell .workspace-content :is(.empty-state, .empty-state-promax) { border: 1px dashed var(--app-line); border-radius: var(--app-radius); background: var(--app-surface); padding: 48px 24px; text-align: center; }
-.app-shell .workspace-content :is(.empty-state h2, .empty-state h3) { font-size: 18px; margin: 16px 0 8px; }
-.app-shell .workspace-content :is(.empty-state p, .empty-state-promax p) { color: var(--app-muted); max-width: 520px; margin-inline: auto; line-height: 1.7; }
-.va-button { --va-button-border-radius: 12px; --va-button-size: 44px; font-weight: 600; }
-.va-button--normal { min-height: 44px; }
-.va-button--small { min-height: 36px; }
-.va-button__background { background-image: none !important; }
-.va-input-wrapper { --va-input-wrapper-border-radius: 12px; --va-input-wrapper-min-height: 44px; }
-.va-input-wrapper__field { border-radius: 12px; min-height: 44px; }
-.va-badge { --va-badge-border-radius: 6px; font-size: 12px; }
-.va-alert { border-radius: 12px; line-height: 1.6; }
-.va-modal__inner { max-width: calc(100vw - 32px); }
-.va-modal__dialog { color: var(--app-ink); }
-.va-modal__dialog h2 { font-size: 22px; font-weight: 650; line-height: 1.4; letter-spacing: -.025em; }
-.va-modal__dialog :is(.modern-form, .harvest-form) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.va-modal__dialog :is(.form-actions, .col-span-2, .wide) { grid-column: 1 / -1; }
-.va-modal__dialog .form-actions { display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--app-line); padding-top: 20px; }
-.va-modal__dialog :is(.hash, .hash-block, code) { font-size: 12px; overflow-wrap: anywhere; line-height: 1.7; }
-.va-modal__dialog :is(.lot-list > .va-card, .trip-card) { border: 1px solid var(--app-line); border-radius: 14px; box-shadow: none; }
-.va-modal__dialog :is(.lot-list p, .transport-event-history small) { font-size: 13px; line-height: 1.65; }
-.app-shell .workspace-content .table-responsive { overflow-x: auto; border: 1px solid var(--app-line); border-radius: 12px; }
-.app-shell .workspace-content .table-promax { width: 100%; border-collapse: collapse; }
-.app-shell .workspace-content .table-promax th { background: #f5f9fb; color: var(--app-muted); padding: 16px; font-size: 12px; text-transform: none; letter-spacing: .01em; white-space: nowrap; }
-.app-shell .workspace-content .table-promax td { padding: 18px 16px; border-top: 1px solid var(--app-line); font-size: 14px; }
-.app-shell .workspace-content .table-promax tbody tr:hover { background: #f6fbfc; }
-.app-shell .workspace-content .dashboard-wrapper { width: 100%; max-width: 1280px; padding: 32px; margin: 0 auto; }
-.app-shell .workspace-content .workspace-hero { min-height: 0; padding: 36px; border-radius: 28px; background: linear-gradient(115deg, #e6f3ed, #edf6f7 58%, #f5f8fc); border: 1px solid rgb(30 67 58 / 4%); box-shadow: none; gap: 24px; }
-.app-shell .workspace-content .workspace-copy h1 { color: var(--app-ink); font-size: clamp(26px, 2.2vw, 32px); font-weight: 600; max-width: 680px; }
-.app-shell .workspace-content :is(.workspace-description, .workspace-greeting, .workspace-date, .workspace-eyebrow) { color: var(--app-muted); font-size: 13px; }
-.app-shell .workspace-content .workspace-description { max-width: 620px; line-height: 1.7; }
-.app-shell .workspace-content .workspace-decoration { display: none; }
-.app-shell .workspace-content .home-stats { margin: 28px 0; gap: 20px; }
-.app-shell .workspace-content .home-stat-card { padding: 24px; gap: 16px; border-radius: var(--app-radius); border: 1px solid rgb(30 67 58 / 4%); box-shadow: var(--app-shadow); align-items: flex-start; }
-.app-shell .workspace-content .home-stat-card p { font-size: 13px; color: var(--app-muted); }
-.app-shell .workspace-content .home-stat-card strong { font-size: 30px; font-weight: 650; line-height: 1.4; }
-.app-shell .workspace-content .home-stat-card small { font-size: 12px; color: var(--app-muted); line-height: 1.5; }
-.app-shell .workspace-content :is(.table-card-promax, .transport-overview-card) { border: 1px solid rgb(30 67 58 / 5%); border-radius: var(--app-radius); padding: 28px; box-shadow: var(--app-shadow); }
-.app-shell .workspace-content .hero-promax { background: linear-gradient(130deg, #e8f5f5, #f2f7fc); padding: 80px 24px; }
-.app-shell .workspace-content .hero-title { font-size: clamp(40px, 6vw, 72px); font-weight: 650; }
-.app-shell .workspace-content :is(.hero-glow-1, .hero-glow-2) { display: none; }
-.app-shell .workspace-content .step-card { border: 1px solid var(--app-line); border-radius: var(--app-radius); padding: 24px; background: white; }
-.app-shell .workspace-content .transport-page .job-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); align-items: start; }
-.app-shell .workspace-content .transport-page :is(.summary-card, .dispatch-board, .job-card) { border-radius: var(--app-radius); box-shadow: var(--app-shadow); border: 1px solid rgb(30 67 58 / 5%); }
-.app-shell .workspace-content .transport-page .driver-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.app-shell .workspace-content .transport-page :is(input, select) { min-height: 44px; border-radius: var(--app-control-radius); font-size: 14px; }
-@media (max-width: 1200px) {
-  .app-shell .workspace-content .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .app-shell .workspace-content .workspace-hero { flex-wrap: wrap; }
-}
-@media (max-width: 1023px) { .is-workspace > .workspace-content { margin-left: 0; transition: none; } }
-@media (max-width: 600px) {
-  .app-shell .workspace-content :is(.farms-page, .ponds-page, .page-container, .transport-page, .receipts-page, .dashboard-wrapper) { padding: 24px 16px; }
-  .app-shell .workspace-content :is(.page-header, .page-heading) { align-items: flex-start; flex-direction: column; gap: 16px; }
-  .app-shell .workspace-content :is(.table-card-promax, .transport-overview-card, .workspace-hero) { padding: 20px; }
-  .app-shell .workspace-content .home-stat-card { flex-direction: column; padding: 16px; }
-  .app-shell .workspace-content .home-stat-card strong { font-size: 26px; }
-  .app-shell .workspace-content .home-stat-icon { width: 36px; height: 36px; }
-  .va-modal__dialog :is(.modern-form, .harvest-form) { grid-template-columns: minmax(0, 1fr); }
-  .va-modal__dialog :is(.col-span-2, .wide) { grid-column: 1; }
-  .va-modal__dialog .form-actions { flex-wrap: wrap; }
-  .app-shell .workspace-content .transport-page .driver-form { grid-template-columns: minmax(0, 1fr); }
-  input, select, textarea { font-size: 16px; }
-}
-.app-shell .workspace-content :is(.workspace-role, .workspace-org) { color: var(--app-primary-dark); background: #fff; border-color: #c7dfe4; font-size: 12px; }
-.app-shell .workspace-content .home-stat-card small { white-space: normal; }
-.va-badge__text-wrapper { font-size: 12px; line-height: 1.4; padding: 5px 8px; border-radius: 6px; letter-spacing: 0; text-transform: none; }
-.va-modal__dialog .harvest-form > .va-button { grid-column: 1 / -1; justify-self: end; }
-
-.app-shell .workspace-content .table-card-promax .collection-toolbar { padding: 20px 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; }
-.app-shell .workspace-content .production-overview { border-color: transparent; border-radius: var(--app-radius); background: #eef5f2; }
-.app-shell .workspace-content .receipts-page .trip-card { border-color: rgb(30 67 58 / 5%); border-radius: var(--app-radius); box-shadow: var(--app-shadow); }
-.app-shell .workspace-content .home-stat-icon { border-radius: 15px; }
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  .app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .home-stat-card) { transition: transform .2s ease, border-color .2s ease; }
-  .app-shell .workspace-content :is(.farm-card, .pond-card, .batch-card, .home-stat-card):hover { transform: translateY(-2px); }
+html:has(dialog:modal) {
+  overflow: hidden;
 }

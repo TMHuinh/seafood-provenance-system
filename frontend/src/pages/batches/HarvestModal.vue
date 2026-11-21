@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { draftDismiss } from '../../components/overlay-dismiss'
+import DecimalField from '../../components/DecimalField.vue'
+import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { VaModal, VaButton, VaInput, VaTextarea, VaSelect, VaAlert, VaInnerLoading, VaCard, VaCardContent, VaBadge } from 'vuestic-ui'
 import { api } from '../../api/client'
@@ -8,12 +11,19 @@ import { SPECIES_LABELS, type BatchItem, type HarvestLot, type HarvestCreateResp
 const props = defineProps<{ batch: BatchItem; farmId: string; pondId: string }>()
 const emit = defineEmits<{ close: []; updated: [batch: BatchItem] }>()
 const lots = ref<HarvestLot[]>([])
+const section = ref<'harvest' | 'lots'>('harvest')
+const tripFilter = ref('')
+const transportStatuses = { PLANNING: 'Chờ nhận chuyến', IN_TRANSIT: 'Đang vận chuyển', PENDING: 'Chờ xác nhận', DELIVERED: 'Đã nhận hàng', CANCELLED: 'Đã hủy' }
+function tripStatus(trip: LotTransport) {
+  return trip.status === 'IN_TRANSIT' && trip.delivery_reported_at ? 'PENDING' : trip.status
+}
 const loading = ref(false); const saving = ref(false); const error = ref(''); const notice = ref('')
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 const form = reactive({ harvestDate: today, quantity: '' as string | number, isFinal: false, note: '' })
 const requestId = ref(crypto.randomUUID())
 const transportLot = ref<HarvestLot | null>(null)
 const transports = ref<LotTransport[]>([])
+const visibleTransports = computed(() => transports.value.filter((trip) => !tripFilter.value || tripStatus(trip) === tripFilter.value))
 const recipients = ref<TransportRecipient[]>([])
 const recipientAssignments = ref<Record<string, string>>({})
 const transportSaving = ref(false)
@@ -34,10 +44,13 @@ const remainingTransportQuantity = computed(() => {
 const localDateTime = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
 const transportRequestId = ref(crypto.randomUUID())
 const transportForm = reactive({ transportDate: localDateTime(), quantity: '' as string | number, fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
+const harvestDismiss = draftDismiss(() => form, () => saving.value || transportSaving.value)
+const transportDismiss = draftDismiss(() => transportForm, () => transportSaving.value)
+function closeHarvest() { emit('close') }
+
 const options = [{ value: false, label: 'Thu hoạch một phần, tiếp tục nuôi' }, { value: true, label: 'Kết thúc thu hoạch vụ này' }]
 const base = `/farms/${props.farmId}/ponds/${props.pondId}/batches/${props.batch.id}/harvests`
 const labels: Record<string, string> = { SUCCESS: 'Đã ghi blockchain', PENDING: 'Chưa gửi blockchain', FAILED: 'Ghi blockchain thất bại', UNKNOWN: 'Chưa xác định kết quả' }
-const transportLabels: Record<string, string> = { PLANNING: 'Đang chờ người vận chuyển nhận', IN_TRANSIT: 'Đang vận chuyển', DELIVERED: 'Đã giao', CANCELLED: 'Đã hủy' }
 const transportEventLabels: Record<string, string> = { REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển', CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Người vận chuyển báo giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận', TRACKING_UPDATE: 'Cập nhật hành trình', DELIVERED: 'Nhà phân phối xác nhận đã nhận', CANCELLED: 'Hủy chuyến' }
 const blockchainStatusLabels: Record<string, string> = { SUCCESS: 'Đã xác nhận trên blockchain', PENDING: 'Đang chờ blockchain', FAILED: 'Sẽ tự động thử lại' }
 const harvestDay = (value: string) => new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value))
@@ -93,6 +106,7 @@ async function submit() {
     lots.value = [lot, ...lots.value.filter((item) => item.id !== lot.id)]
     notice.value = `Đã lưu thu hoạch và tạo lô ${lot.lot_code}. ${labels[result.blockchain.status]}.`
     requestId.value = crypto.randomUUID(); form.quantity = ''; form.note = ''
+    harvestDismiss.markClean()
   } catch (e) { error.value = e instanceof Error ? e.message : 'Không lưu được thu hoạch' }
   finally { saving.value = false }
 }
@@ -102,9 +116,11 @@ async function openTransport(lot: HarvestLot) {
   const sameLot = transportLot.value?.id === lot.id
   transportLoading.value = true; transportError.value = ''; transportNotice.value = ''
   if (!sameLot) {
+    tripFilter.value = ''
     transportRequestId.value = crypto.randomUUID()
     Object.assign(transportForm, { transportDate: localDateTime(), quantity: '', fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
   }
+  if (!sameLot) transportDismiss.markClean()
   transportLot.value = lot; transports.value = []; recipients.value = []; recipientAssignments.value = {}; transportDataLoaded.value = false
   try {
     const [transportResult, recipientResult] = await Promise.all([
@@ -166,6 +182,7 @@ async function saveTransport() {
     transportNotice.value = `Đã tạo chuyến ${result.transport.transport_code}.`
     transportRequestId.value = crypto.randomUUID()
     Object.assign(transportForm, { transportDate: localDateTime(), quantity: '', fromLocation: '', toLocation: '', recipientOrganizationId: '', note: '' })
+    transportDismiss.markClean()
   } catch (e) { transportError.value = e instanceof Error ? e.message : 'Không lưu được chuyến vận chuyển' }
   finally { transportSaving.value = false }
 }
@@ -173,32 +190,61 @@ onMounted(load)
 </script>
 
 <template>
-  <va-modal :model-value="true" hide-default-actions size="large" :no-dismiss="saving || transportSaving"
+  <va-modal title="harvest-dialog-title" :mobile-fullscreen="false" :before-close="harvestDismiss.dismiss" :model-value="true" hide-default-actions size="large" :no-dismiss="saving || transportSaving"
     @update:model-value="(value: boolean) => { if (!value && !saving && !transportSaving) emit('close') }">
-    <template #header><h2>Thu hoạch và lô hàng — {{ batch.batch_code }}</h2></template>
+    <template #header><h2 id="harvest-dialog-title">Thu hoạch và lô hàng — {{ batch.batch_code }}</h2></template>
     <p>Mỗi lần thu hoạch tạo một lô riêng. Tổng sản lượng: {{ batch.yield_quantity ?? 0 }} kg.</p>
     <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }}</va-alert>
     <va-alert v-if="notice" color="info" class="message">{{ notice }} Không cần gửi lại lần thu hoạch đã lưu.</va-alert>
+    <va-button v-if="error && !saving" preset="secondary" size="small" @click="load">Tải lại danh sách lô</va-button>
+    <div class="harvest-tabs" role="group" aria-label="Thu hoạch và lô hàng">
+      <va-button preset="secondary" :aria-pressed="section === 'harvest'" :disabled="saving" @click="section = 'harvest'">Thu hoạch</va-button>
+      <va-button preset="secondary" :aria-pressed="section === 'lots'" :disabled="saving" @click="section = 'lots'">Lô hàng</va-button>
+    </div>
+    <template v-if="section === 'harvest'">
     <form v-if="['GROWING', 'READY_FOR_HARVEST'].includes(batch.status)" class="harvest-form" @submit.prevent="submit">
+      <h3 class="form-section-heading">Ghi nhận lần thu hoạch</h3>
       <va-input v-model="form.harvestDate" type="date" label="Ngày thu hoạch *" :min="batch.stocking_date.slice(0, 10)" :max="today" :disabled="saving" />
-      <va-input v-model="form.quantity" type="number" label="Khối lượng (kg) *" min="0.01" step="0.01" :disabled="saving" />
+      <DecimalField v-model="form.quantity" label="Khối lượng (kg) *" :disabled="saving" />
       <va-select v-model="form.isFinal" :options="options" value-by="value" text-by="label" label="Loại thu hoạch" :disabled="saving" />
-      <va-textarea v-model="form.note" label="Ghi chú" maxlength="5000" :disabled="saving" />
-      <va-button type="submit" :loading="saving" :disabled="saving || loading">Lưu thu hoạch và tạo lô</va-button>
+      <va-textarea v-model="form.note" label="Ghi chú" maxlength="5000" class="wide" :disabled="saving" />
+      <div class="form-actions">
+        <va-button type="submit" :loading="saving" :disabled="saving || loading">Lưu thu hoạch và tạo lô</va-button>
+      </div>
     </form>
     <p v-else>Vụ hiện không thể ghi thêm thu hoạch.</p>
-    <va-button v-if="error && !saving" preset="secondary" size="small" @click="load">Tải lại danh sách lô</va-button>
-    <h3>Các lô đã tạo</h3>
+    <h3 class="harvest-section-title">Lịch sử thu hoạch</h3>
+    <va-inner-loading :loading="loading">
+      <ul v-if="lots.length" class="harvest-history">
+        <li v-for="lot in lots" :key="lot.id">
+          <div><strong>{{ harvestDay(lot.harvest.harvest_date) }}</strong><span>{{ lot.harvest.is_final ? 'Kết thúc thu hoạch' : 'Thu một phần' }}</span></div>
+          <div><strong>{{ lot.quantity.toLocaleString('vi-VN') }} kg</strong><span class="hash">{{ lot.lot_code }}</span></div>
+        </li>
+      </ul>
+      <EmptyState v-else-if="!loading && !error" heading="h3" title="Chưa ghi nhận thu hoạch" />
+    </va-inner-loading>
+    </template>
+    <template v-else>
+    <h3 class="harvest-section-title">Các lô đã tạo</h3>
     <va-inner-loading :loading="loading">
       <div class="lot-list">
         <va-card v-for="lot in lots" :key="lot.id">
           <va-card-content>
-            <strong class="hash">{{ lot.lot_code }}</strong>
-            <p>{{ harvestDay(lot.harvest.harvest_date) }} · {{ lot.quantity.toLocaleString('vi-VN') }} kg · {{ lot.harvest.is_final ? 'Kết thúc thu hoạch' : 'Thu một phần' }}</p>
-            <p>Nguồn: {{ lot.provenance.farm.name }} / {{ lot.provenance.pond.name }} / {{ lot.provenance.batch.batch_code }}</p>
+            <div class="lot-heading"><div><span class="lot-label">Lô thu hoạch</span><strong class="hash">{{ lot.lot_code }}</strong></div><strong class="lot-weight">{{ lot.quantity.toLocaleString('vi-VN') }} <small>kg</small></strong></div>
+            <p>{{ harvestDay(lot.harvest.harvest_date) }} · {{ lot.harvest.is_final ? 'Kết thúc thu hoạch' : 'Thu một phần' }}</p>
+            <details class="technical-disclosure">
+              <summary>Chuỗi nguồn gốc</summary>
+              <ol class="lot-origin">
+                <li><span>Cơ sở nuôi</span><strong>{{ lot.provenance.farm.name }}</strong></li>
+                <li><span>Ao nuôi</span><strong>{{ lot.provenance.pond.name }}</strong></li>
+                <li><span>Vụ nuôi</span><strong>{{ lot.provenance.batch.batch_code }}</strong></li>
+                <li><span>Thu hoạch</span><strong>{{ harvestDay(lot.harvest.harvest_date) }}</strong></li>
+              </ol>
+              <RouterLink :to="{ name: 'farming-logs', params: { farmId, pondId, batchId: batch.id } }">Mở nhật ký của vụ</RouterLink>
+            </details>
             <p>{{ SPECIES_LABELS[lot.provenance.batch.species] }} · Giống: {{ lot.provenance.batch.seed_source || 'Chưa ghi nguồn giống' }}</p>
             <p v-if="lot.harvest.note">{{ lot.harvest.note }}</p>
-            <va-badge :color="lot.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'">{{ labels[lot.blockchain?.status ?? 'UNKNOWN'] }}</va-badge>
+            <va-badge :color="lot.blockchain?.status === 'SUCCESS' ? 'success' : 'warning'" :text="labels[lot.blockchain?.status ?? 'UNKNOWN']" />
             <details class="technical-disclosure"><summary>Thông tin xác thực Blockchain</summary>
             <p class="hash">Sự kiện: {{ lot.blockchain_event_id }}</p>
             <p v-if="lot.blockchain" class="hash">Hash dữ liệu: {{ lot.blockchain.data_hash }}</p>
@@ -210,11 +256,12 @@ onMounted(load)
             </details>
           </va-card-content>
         </va-card>
-        <p v-if="!loading && !error && !lots.length">Chưa có lô hàng từ thu hoạch.</p>
+        <EmptyState v-if="!loading && !error && !lots.length" heading="h3" title="Chưa có lô hàng từ thu hoạch" />
       </div>
     </va-inner-loading>
-    <va-modal v-if="transportLot" :model-value="true" hide-default-actions size="large" :no-dismiss="transportSaving" @update:model-value="(v: boolean) => { if (!v) closeTransport() }">
-      <template #header><h2>Vận chuyển {{ transportLot.lot_code }}</h2></template>
+    </template>
+    <va-modal title="lot-transport-title" :mobile-fullscreen="false" :before-close="transportDismiss.dismiss" v-if="transportLot" :model-value="true" hide-default-actions overlay-opacity="0.5" :no-dismiss="transportSaving" @update:model-value="(v: boolean) => { if (!v) closeTransport() }">
+      <template #header><h2 id="lot-transport-title">Vận chuyển {{ transportLot.lot_code }}</h2></template>
       <p>Khối lượng lô: {{ transportLot.quantity }} kg</p>
       <p>Chọn nhà phân phối nhận lô. Người vận chuyển cập nhật tiến độ; nhà phân phối xác nhận đã nhận hàng.</p>
       <va-alert v-if="transportDataLoaded && !recipients.length" color="warning" class="message">Chưa có nhà phân phối liên kết với tài khoản đang hoạt động.</va-alert>
@@ -226,18 +273,29 @@ onMounted(load)
         <va-alert v-if="remainingTransportQuantity === 0" color="success" class="message" role="status">Lô này đã vận chuyển đủ {{ transportLot.quantity.toLocaleString('vi-VN') }} kg. Không thể tạo thêm chuyến.</va-alert>
         <form v-else class="harvest-form" @submit.prevent="saveTransport">
           <p class="generated-code-hint wide">Mã chuyến sẽ được tạo tự động khi lưu.</p>
+          <h3 class="form-section-heading">Kế hoạch vận chuyển</h3>
           <va-input :disabled="transportSaving" v-model="transportForm.transportDate" type="datetime-local" label="Thời gian vận chuyển *" />
-          <va-input :disabled="transportSaving" v-model="transportForm.quantity" type="number" min="0.01" step="0.01" :max="remainingTransportQuantity" label="Khối lượng vận chuyển (kg) *" />
+          <DecimalField :disabled="transportSaving" v-model="transportForm.quantity" label="Khối lượng vận chuyển (kg) *" />
+          <h3 class="form-section-heading">Điểm giao nhận</h3>
           <va-input :disabled="transportSaving" v-model="transportForm.fromLocation" label="Điểm đi *" maxlength="500" />
           <va-input :disabled="transportSaving" v-model="transportForm.toLocation" label="Điểm đến *" maxlength="500" />
           <va-select :disabled="transportSaving" :model-value="transportForm.recipientOrganizationId" :options="recipients" value-by="id" text-by="name" label="Nhà phân phối nhận hàng *" @update:model-value="chooseRecipient(String($event ?? ''))" />
           <va-textarea :disabled="transportSaving" v-model="transportForm.note" label="Ghi chú" maxlength="5000" class="wide" />
-          <va-button type="submit" :loading="transportSaving" :disabled="!recipients.length || transportSaving || !transportDataLoaded">Tạo chuyến</va-button>
+          <div class="form-actions">
+            <va-button type="button" preset="secondary" color="secondary" :disabled="transportSaving" @click="transportDismiss.dismiss(closeTransport)">Hủy</va-button>
+            <va-button type="submit" :loading="transportSaving" :disabled="!recipients.length || transportSaving || !transportDataLoaded">Tạo chuyến</va-button>
+          </div>
         </form>
       </template>
       <h3>Lịch sử vận chuyển</h3>
-      <va-card v-for="trip in transports" :key="trip.id" class="trip-card"><va-card-content>
-        <strong>{{ trip.transport_code }}</strong> · {{ trip.quantity }} kg · {{ trip.delivery_reported_at && trip.status === 'IN_TRANSIT' ? 'Chờ nhà phân phối nhận hàng xác nhận' : trip.status }}
+      <label v-if="transports.length" class="transport-filter">Trạng thái chuyến
+        <select v-model="tripFilter" aria-label="Trạng thái chuyến">
+          <option value="">Tất cả trạng thái</option>
+          <option v-for="(label, status) in transportStatuses" :key="status" :value="status">{{ label }}</option>
+        </select>
+      </label>
+      <va-card v-for="trip in visibleTransports" :key="trip.id" class="trip-card"><va-card-content>
+        <div class="trip-heading"><strong>{{ trip.transport_code }}</strong><span>{{ trip.quantity }} kg</span></div>
         <p>{{ trip.from_location }} → {{ trip.to_location }} · {{ trip.vehicle || 'Chưa có phương tiện' }} · {{ trip.temperature ?? '—' }} °C</p>
         <p v-if="trip.recipient_organization_id">Nhà phân phối nhận: {{ recipientName(trip) }}</p>
         <div v-else-if="!['DELIVERED', 'CANCELLED'].includes(trip.status)" class="recipient-assignment">
@@ -245,8 +303,8 @@ onMounted(load)
           <va-button size="small" preset="secondary" :loading="transportSaving" :disabled="!recipientAssignments[trip.id] || transportSaving" @click="assignTripRecipient(trip)">Gán nhà phân phối</va-button>
         </div>
         <div class="trip-actions">
-          <span>{{ trip.delivery_reported_at && trip.status === 'IN_TRANSIT' ? 'Đã báo giao · chờ bên nhận xác nhận' : transportLabels[trip.status] || trip.status }}</span>
-          <va-badge v-if="trip.blockchain" :color="trip.blockchain.status === 'SUCCESS' ? 'success' : trip.blockchain.status === 'FAILED' ? 'danger' : 'warning'">{{ blockchainStatusLabels[trip.blockchain.status] || trip.blockchain.status }}</va-badge>
+          <span>{{ transportStatuses[tripStatus(trip)] }}</span>
+          <va-badge v-if="trip.blockchain" :color="trip.blockchain.status === 'SUCCESS' ? 'success' : trip.blockchain.status === 'FAILED' ? 'danger' : 'warning'" :text="blockchainStatusLabels[trip.blockchain.status] || trip.blockchain.status" />
         </div>
         <details v-if="trip.events?.length" class="transport-event-history">
           <summary>Lịch sử xác thực · {{ trip.events.length }} mốc</summary>
@@ -265,14 +323,31 @@ onMounted(load)
         </details>
         <p v-else class="legacy-event-note">Chuyến này chưa có timeline sự kiện. Các chuyến được tạo sau khi bật lịch sử blockchain sẽ hiển thị từng mốc tại đây.</p>
       </va-card-content></va-card>
-      <p v-if="transportDataLoaded && !transports.length">Chưa có chuyến vận chuyển cho lô này.</p>
-      <va-button preset="secondary" :disabled="transportSaving" @click="closeTransport">Đóng</va-button>
+      <p v-if="transportDataLoaded && !visibleTransports.length">{{ transports.length ? 'Không có chuyến phù hợp.' : 'Chưa có chuyến vận chuyển cho lô này.' }}</p>
+      <va-button preset="secondary" :disabled="transportSaving" @click="transportDismiss.dismiss(closeTransport)">Đóng</va-button>
     </va-modal>
-    <va-button preset="secondary" :disabled="saving || transportSaving" @click="emit('close')">Đóng</va-button>
+    <va-button preset="secondary" :disabled="saving || transportSaving" @click="harvestDismiss.dismiss(closeHarvest)">Đóng</va-button>
   </va-modal>
 </template>
 
 <style scoped>
+.harvest-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.harvest-tabs [aria-pressed="true"] { background: var(--app-primary-soft); color: var(--app-primary-dark); }
+.harvest-history, .lot-origin { margin: 0; padding: 0; list-style: none; }
+.harvest-history li { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--app-line); }
+.harvest-history span, .lot-origin span { display: block; color: var(--app-muted); font-size: .8rem; }
+.lot-origin { display: grid; gap: 8px; padding-left: 12px; margin: 0 0 10px; border-left: 2px solid var(--app-line); }
+.technical-disclosure a { color: var(--app-primary-dark); text-decoration: underline; }
+.transport-filter { display: grid; max-width: 260px; gap: 6px; }
+.transport-filter select { min-height: 44px; width: 100%; padding: 6px 12px; border: 1px solid var(--app-control-line); border-radius: var(--app-control-radius); background: var(--app-surface); color: var(--app-ink); font: inherit; }
+.trip-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--app-primary-dark); }
+
+.lot-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.lot-heading > div { display: grid; gap: 6px; }
+.lot-label { color: var(--app-muted); font-size: 12px; }
+.lot-weight { color: var(--app-primary-dark); font-size: 24px; font-variant-numeric: tabular-nums; }
+.lot-weight small { font-size: 13px; font-weight: 400; }
+.harvest-section-title { margin: 24px 0 12px; padding-top: 16px; border-top: 1px solid var(--app-line); font-size: 17px; font-weight: 650; }
 .harvest-form, .lot-list { display: grid; gap: 1rem; margin: 1rem 0; }
 .hash { overflow-wrap: anywhere; }
 .message { margin: 1rem 0; }

@@ -39,7 +39,7 @@ const BATCH_STATUSES = ['PREPARING', 'GROWING', 'READY_FOR_HARVEST', 'HARVESTED'
 function scopedQuery(profile, { search = '', status = '' } = {}, head = false) {
   // Inner joins ensure scope filtering happens in SQL before count/range.
   const fields = head ? 'id,pond:ponds!inner(id,farm:farms!inner(id))'
-    : `${BATCH_FIELDS},pond:ponds!inner(id,pond_code,pond_name,status,farm:farms!inner(farm_name,organization_id,owner_id))`
+    : `${BATCH_FIELDS},pond:ponds!inner(id,pond_code,pond_name,status,farm_id,farm:farms!inner(farm_name,organization_id,owner_id))`
   let query = supabase.from('batches').select(fields, { count: 'exact', head })
   if (profile.role !== 'ADMIN') {
     if (profile.organization_id) {

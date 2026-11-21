@@ -42,7 +42,7 @@ async function list(profile, input) {
   ])
   const items = result.items.map(batch => ({ ...batch, pond: batch.pond ? {
     id: batch.pond.id, pond_code: batch.pond.pond_code, pond_name: batch.pond.pond_name,
-    status: batch.pond.status, farm_name: batch.pond.farm?.farm_name ?? null,
+    status: batch.pond.status, farm_id: batch.pond.farm_id, farm_name: batch.pond.farm?.farm_name ?? null,
   } : null }))
   return { count: result.count, items, summary, page: options.page, pageSize: options.pageSize, totalPages: Math.ceil(result.count / options.pageSize) }
 }

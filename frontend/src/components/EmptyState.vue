@@ -34,7 +34,7 @@ defineProps<{ title: string; description?: string; icon?: string; heading?: 'h2'
   background: var(--app-primary-soft);
   color: var(--app-primary-dark);
 }
-.list-empty :is(h2, h3) { margin: 0; color: var(--app-ink); font-size: 18px; font-weight: 650; }
+.list-empty :is(h2, h3) { margin: 0; color: var(--app-ink); font-size: var(--app-text-lg); font-weight: 650; }
 .list-empty p { max-width: 48ch; margin: 0; color: var(--app-muted); }
 .list-empty__actions { margin-top: var(--app-space-2); }
 </style>

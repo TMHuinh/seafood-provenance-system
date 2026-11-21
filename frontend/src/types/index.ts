@@ -137,6 +137,7 @@ export interface BatchItem {
     id: string
     pond_code: string
     pond_name: string
+    farm_id?: string
     status: string
     farm_name: string | null
   } | null

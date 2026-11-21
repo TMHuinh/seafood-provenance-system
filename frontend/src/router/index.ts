@@ -34,6 +34,18 @@ const router = createRouter({
       component: () => import('../pages/farms/FarmsPage.vue'),
       meta: { requiresAuth: true },
     },
+    ...([
+      ['farm-ponds', 'ao-nuoi', 'ponds'],
+      ['farm-batches', 'vu-nuoi', 'batches'],
+      ['farm-logs', 'nhat-ky', 'logs'],
+      ['farm-harvest', 'thu-hoach', 'harvest'],
+    ] as const).map(([name, path, section]) => ({
+      path: `/quan-ly/${path}`,
+      name,
+      component: () => import('../pages/farms/FarmWorkspace.vue'),
+      props: { section },
+      meta: { requiresAuth: true, role: 'FARMER' },
+    })),
     {
       path: '/transports',
       name: 'transports',

@@ -38,6 +38,10 @@
   --app-success: #24754f;
   --app-warning: #916117;
   --app-danger: #b64242;
+  --app-info-soft: #e7f0fe;
+  --app-success-soft: #def6e8;
+  --app-warning-soft: #fff1d7;
+  --app-danger-soft: #fae8e5;
   --app-canvas: #f5f8f7;
   --app-surface: #fff;
   --app-line: #d6e4e0;
@@ -46,6 +50,10 @@
   --app-accent: #a8e3d0;
   --app-divider: #31505a;
   --app-radius: 12px;
+  --app-pill-radius: 999px;
+  --app-sidebar-width: 240px;
+  --app-sidebar-collapsed-width: 80px;
+  --app-header-height: 64px;
   --app-control-radius: 8px;
   --app-shadow: 0 6px 28px rgb(30 67 58 / 5%);
   --app-space-1: 4px;
@@ -59,8 +67,10 @@
   --app-text-sm: 13px;
   --app-text-base: 14px;
   --app-text-lg: 18px;
+  --app-text-section: 22px;
   --app-text-title: clamp(26px, 2.4vw, 34px);
   --app-control-height: 44px;
+  --app-focus-width: 2px;
   --app-content-width: 1440px;
   --app-motion: 160ms ease;
   --app-control-line: #859d99;
@@ -89,7 +99,7 @@ body {
   background: var(--app-canvas);
   color: var(--app-ink);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--app-text-base);
   line-height: 1.6;
 }
 body {
@@ -130,7 +140,10 @@ a {
   color: #064e56;
   background: #cdeef0;
 }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
 :focus-visible {
-  outline: 3px solid var(--app-primary);
-  outline-offset: 3px;
+  outline: var(--app-focus-width) solid var(--app-primary);
+  outline-offset: 2px;
 }

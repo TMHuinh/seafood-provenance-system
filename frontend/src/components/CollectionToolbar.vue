@@ -11,6 +11,7 @@ const props = withDefaults(
     loading?: boolean
     label?: string
     searchPlaceholder?: string
+    extraFiltersActive?: boolean
   }>(),
   {
     status: '',
@@ -24,11 +25,13 @@ const emit = defineEmits<{
   'update:query': [value: string]
   'update:status': [value: string]
   'update:page': [value: number]
+  clear: []
 }>()
 const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)))
 function clearFilters() {
   emit('update:query', '')
   emit('update:status', '')
+  emit('clear')
 }
 </script>
 <template>
@@ -52,6 +55,7 @@ function clearFilters() {
           </option>
         </select></label
       >
+      <slot name="filters" />
     </div>
     <div class="collection-navigation">
       <div class="collection-count">
@@ -66,7 +70,7 @@ function clearFilters() {
           <template v-else>{{ total.toLocaleString('vi-VN') }} {{ label }}</template>
         </span>
         <button
-          v-if="query || status"
+          v-if="query || status || extraFiltersActive"
           type="button"
           class="clear-filters"
           @click="clearFilters"
@@ -97,7 +101,7 @@ function clearFilters() {
 .collection-toolbar {
   display: grid;
   gap: var(--app-space-3);
-  margin: 0 0 24px;
+  margin: 0 0 var(--app-space-6);
   padding: 0;
   color: var(--app-muted);
 }
@@ -114,7 +118,7 @@ nav {
   gap: 8px;
   flex: 1;
   min-width: 150px;
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   font-weight: 500;
 }
 .filters label:first-child {
@@ -123,14 +127,14 @@ nav {
 .filters input,
 .filters select {
   width: 100%;
-  min-height: 44px;
+  min-height: var(--app-control-height);
   padding: 10px 14px;
   border: 1px solid var(--app-control-line);
   border-radius: var(--app-control-radius);
   background: var(--app-surface);
   color: var(--app-ink);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--app-text-base);
 }
 .collection-navigation {
   justify-content: space-between;
@@ -139,7 +143,7 @@ nav {
   padding-top: var(--app-space-3);
 }
 button {
-  min-height: 44px;
+  min-height: var(--app-control-height);
   padding: 8px 14px;
   border: 1px solid var(--app-line);
   border-radius: 8px;
@@ -165,7 +169,7 @@ button:disabled {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  min-height: 44px;
+  min-height: var(--app-control-height);
 }
 .clear-filters {
   border: 0;

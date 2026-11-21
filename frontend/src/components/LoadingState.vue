@@ -15,9 +15,9 @@ withDefaults(defineProps<{ label?: string }>(), { label: 'Đang tải dữ liệ
 
 <style scoped>
 .loading-state p {
-  margin: 0 0 16px;
+  margin: 0 0 var(--app-space-4);
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
 }
 .loading-state__grid {
   display: grid;
@@ -27,7 +27,7 @@ withDefaults(defineProps<{ label?: string }>(), { label: 'Đang tải dữ liệ
 .loading-state__card {
   display: grid;
   gap: 20px;
-  padding: 24px;
+  padding: var(--app-space-6);
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius);
   background: var(--app-surface);

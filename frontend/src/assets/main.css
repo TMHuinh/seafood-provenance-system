@@ -21,7 +21,7 @@ body,
   flex: 1;
 }
 .is-workspace > .workspace-content {
-  margin-left: var(--sidebar-width, 240px);
+  margin-left: var(--sidebar-width, var(--app-sidebar-width));
 }
 .skip-link {
   position: fixed;
@@ -44,14 +44,14 @@ body,
     .farms-page,
     .ponds-page,
     .page-container,
-    .transport-page,
+    .transport-workspace-page,
     .receipts-page,
     .dashboard-wrapper
   ) {
   width: min(100%, var(--app-content-width));
   max-width: var(--app-content-width);
   margin: 0 auto;
-  padding: 32px clamp(20px, 3vw, 48px) 48px;
+  padding: var(--app-space-8) clamp(20px, 3vw, 48px) var(--app-space-12);
   background: transparent;
   border-radius: 0;
   color: var(--app-ink);
@@ -82,7 +82,7 @@ body,
   padding: 24px;
 }
 .workspace-content :is(.farm-title, .pond-name, .species-title) {
-  font-size: 18px;
+  font-size: var(--app-text-lg);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -166,16 +166,16 @@ body,
 }
 .va-badge {
   --va-badge-text-transform: none;
-  --va-badge-font-size: 12px;
+  --va-badge-font-size: var(--app-text-xs);
 }
 .va-input-wrapper__label {
   line-height: 1.6;
 }
 .va-badge__text-wrapper {
-  font-size: 12px;
+  font-size: var(--app-text-xs);
   line-height: 1.5;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: var(--app-space-1) var(--app-space-2);
+  border-radius: var(--app-pill-radius);
   letter-spacing: 0;
   text-transform: none;
   white-space: normal;
@@ -196,11 +196,14 @@ body,
   color: var(--app-ink);
 }
 .va-modal__dialog h2 {
-  font-size: 22px;
+  font-size: var(--app-text-section);
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.025em;
   overflow-wrap: anywhere;
+}
+.va-modal__dialog .modal-title {
+  margin: 0 0 16px;
 }
 .va-modal__dialog :is(.modern-form, .harvest-form) {
   min-width: 0;
@@ -232,6 +235,23 @@ body,
 .form-section-heading:first-child {
   padding-top: 0;
   border-top: 0;
+}
+.va-modal__dialog :is(.form-context, .generated-code) {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--app-control-radius);
+  background: var(--app-primary-soft);
+  color: var(--app-primary-dark);
+  overflow-wrap: anywhere;
+}
+.va-modal__dialog .generated-code {
+  display: grid;
+  gap: 4px;
+}
+.va-modal__dialog :is(.generated-code > span, .generated-code > small, .generated-code-hint) {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: .8rem;
 }
 .va-modal__dialog :is(.hash, .hash-block, code) {
   font-size: 12px;
@@ -327,11 +347,11 @@ summary:hover {
       .farms-page,
       .ponds-page,
       .page-container,
-      .transport-page,
+      .transport-workspace-page,
       .receipts-page,
       .dashboard-wrapper
     ) {
-    padding: 24px 16px 32px;
+    padding: var(--app-space-6) var(--app-space-4) var(--app-space-8);
   }
   .va-modal__dialog :is(.modern-form, .harvest-form, .harvest-grid) {
     grid-template-columns: minmax(0, 1fr);
@@ -370,4 +390,8 @@ summary:hover {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+html:has(dialog:modal) {
+  overflow: hidden;
 }

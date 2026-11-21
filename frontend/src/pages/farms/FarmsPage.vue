@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { draftDismiss } from '../../components/overlay-dismiss'
 import LoadingState from '../../components/LoadingState.vue'
 import DecimalField from '../../components/DecimalField.vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -75,6 +76,7 @@ function openEdit(farm: Farm) {
   showForm.value = true
 }
 
+const formDismiss = draftDismiss(() => form, () => saving.value, showForm).dismiss
 function closeForm() {
   showForm.value = false
   resetForm()
@@ -87,6 +89,7 @@ function optionalNumber(value: string | number): number | null {
 }
 
 async function submit() {
+  if (saving.value) return
   formError.value = ''
   successMessage.value = ''
   if (!form.farmName.trim()) {
@@ -138,7 +141,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="farms-page" :aria-busy="loading">
+  <main class="farms-page" :class="{ 'farmer-farms': authStore.user?.role === 'FARMER' }" :aria-busy="loading">
     <PageHeader title="Cơ sở nuôi của tôi" :context="authStore.organizationName || 'Hộ nuôi độc lập'" description="Quản lý cơ sở và truy cập các ao nuôi.">
       <template #actions>
         <va-button icon="add" @click="openCreate">Thêm cơ sở mới</va-button>
@@ -153,7 +156,7 @@ onMounted(async () => {
       {{ error }} <va-button preset="secondary" size="small" @click="farmsStore.load()">Thử lại</va-button>
     </va-alert>
 
-    <section class="farms-panel">
+    <section class="farms-panel" aria-label="Danh sách cơ sở nuôi">
       <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" search-placeholder="Tên cơ sở hoặc địa chỉ…" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="cơ sở trong danh sách đã tải" />
     <LoadingState v-if="loading" />
     <va-inner-loading v-else :loading="false">
@@ -169,7 +172,7 @@ onMounted(async () => {
             <va-card-content>
               <div class="card-header">
                 <div class="farm-icon-box">
-                  <va-icon name="home_work" size="large" color="primary" />
+                  <va-icon name="domain" size="24px" color="primary" aria-hidden="true" />
                 </div>
                 <va-badge 
                   :color="farm.status ? 'success' : 'secondary'" 
@@ -217,7 +220,7 @@ onMounted(async () => {
     </section>
 
     <!-- Vuestic Modal Form -->
-    <va-modal title="farm-form-title" v-model="showForm" hide-default-actions overlay-opacity="0.5">
+    <va-modal title="farm-form-title" :model-value="showForm" @update:model-value="(open: boolean) => { if (!open) closeForm() }" :mobile-fullscreen="false" :before-close="formDismiss" close-button aria-close-label="Đóng biểu mẫu" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
       <template #header>
         <h2 id="farm-form-title" class="modal-title">{{ formTitle }}</h2>
       </template>
@@ -266,11 +269,11 @@ onMounted(async () => {
         </va-alert>
 
         <div class="form-actions col-span-2">
-          <va-button preset="secondary" type="button" color="secondary" @click="closeForm">
-            Hủy bỏ
+          <va-button preset="secondary" type="button" color="secondary" :disabled="saving" @click="formDismiss(closeForm)">
+            Hủy
           </va-button>
           <va-button type="submit" :loading="saving" color="primary">
-            {{ editingId ? 'Lưu thay đổi' : 'Hoàn tất tạo' }}
+            {{ editingId ? 'Lưu thay đổi' : 'Tạo mới' }}
           </va-button>
         </div>
       </form>
@@ -279,6 +282,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.workspace-content .farmer-farms .farm-grid { gap: 14px; }
+.workspace-content .farmer-farms .farm-card > .va-card__content { padding: 18px; }
+.workspace-content .farmer-farms .card-actions-custom { padding: 10px 16px; }
+.farmer-farms .farm-card .card-header { margin-bottom: 12px; }
+.farmer-farms .farm-card .address-text { margin-bottom: 12px; }
+.farmer-farms .farm-card .farm-icon-box { width: 42px; height: 42px; background: var(--app-primary-soft); }
+
 .farms-page { 
   width: min(1180px, calc(100% - 2rem)); 
   margin: 0 auto; 
@@ -374,28 +384,11 @@ onMounted(async () => {
 /* Empty State */
 
 /* Modal & Form */
-.modal-title { font-size: 1.4rem; font-weight: 700; color: var(--app-ink); margin-bottom: 1rem; }
-.modern-form { 
-  display: grid; 
-  grid-template-columns: 1fr 1fr; 
-  gap: 1.25rem; 
-  width: 100%;
-  min-width: 450px;
-}
-.col-span-2 { grid-column: 1 / -1; }
 .switch-wrapper {
   padding: 0.75rem;
   background: var(--app-canvas);
   border-radius: 8px;
   border: 1px solid var(--app-line);
-}
-.form-actions { 
-  display: flex; 
-  justify-content: flex-end; 
-  gap: 1rem; 
-  margin-top: 1rem; 
-  padding-top: 1rem;
-  border-top: 1px solid #f1f5f9;
 }
 
 /* Utilities */
@@ -408,7 +401,5 @@ onMounted(async () => {
 @media (max-width: 768px) { 
 
   .farm-grid { grid-template-columns: 1fr; } 
-  .modern-form { grid-template-columns: 1fr; min-width: 100%; }
-  .col-span-2 { grid-column: auto; }
 }
 </style>

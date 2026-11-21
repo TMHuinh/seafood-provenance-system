@@ -52,11 +52,11 @@
 }
 .auth-back {
   display: inline-flex;
-  min-height: 44px;
+  min-height: var(--app-control-height);
   align-items: center;
   margin-bottom: 24px;
   color: var(--app-primary-dark);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 600;
 }
 .auth-header {
@@ -89,7 +89,7 @@
   display: block;
   margin-bottom: 8px;
   color: var(--app-ink);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   font-weight: 500;
   line-height: 1.5;
 }
@@ -107,9 +107,9 @@
   display: grid;
   place-items: center;
   min-width: 44px;
-  min-height: 44px;
+  min-height: var(--app-control-height);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--app-control-radius);
   background: transparent;
   color: var(--app-muted);
   cursor: pointer;
@@ -130,7 +130,7 @@
   margin-top: 24px;
   border-top: 1px solid var(--app-line);
   color: var(--app-muted);
-  font-size: 13px;
+  font-size: var(--app-text-sm);
   text-align: center;
 }
 .auth-link {
@@ -147,7 +147,7 @@
 }
 .checkbox-container {
   display: flex;
-  min-height: 44px;
+  min-height: var(--app-control-height);
   align-items: center;
   gap: 12px;
   cursor: pointer;

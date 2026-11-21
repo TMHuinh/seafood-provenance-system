@@ -47,6 +47,7 @@ function dismissAccountMenu(event: KeyboardEvent) {
   accountToggle.value?.focus()
 }
 
+const isTransporter = computed(() => authStore.user?.role === 'TRANSPORTER')
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const showNavbar = computed(() => !['login', 'register'].includes(String(route.name)))
 const initials = computed(() => {
@@ -59,15 +60,14 @@ const initials = computed(() => {
     .toUpperCase()
 })
 const navigation = computed(() => [
-  { name: 'home', label: 'Tổng quan', icon: 'dashboard', active: route.name === 'home' },
+  { name: 'home', label: 'Tổng quan', icon: 'dashboard', group: 'Không gian làm việc', active: route.name === 'home' },
   ...(authStore.user?.role === 'FARMER'
     ? [
-        {
-          name: 'farms',
-          label: 'Vùng nuôi',
-          icon: 'water',
-          active: ['farms', 'ponds', 'pond-batches', 'farming-logs'].includes(String(route.name)),
-        },
+        { name: 'farms', label: 'Cơ sở nuôi', icon: 'domain', group: 'Quản lý vùng nuôi', active: route.name === 'farms' },
+        { name: 'farm-ponds', label: 'Ao nuôi', icon: 'water', active: ['farm-ponds', 'ponds'].includes(String(route.name)) },
+        { name: 'farm-batches', label: 'Vụ nuôi', icon: 'calendar_month', active: route.name === 'farm-batches' || (route.name === 'pond-batches' && !route.query.harvest) },
+        { name: 'farm-logs', label: 'Nhật ký nuôi', icon: 'edit_document', active: ['farm-logs', 'farming-logs'].includes(String(route.name)) },
+        { name: 'farm-harvest', label: 'Thu hoạch & Lô hàng', icon: 'agriculture', group: 'Thu hoạch và phân phối', active: route.name === 'farm-harvest' || (route.name === 'pond-batches' && Boolean(route.query.harvest)) },
       ]
     : []),
   ...(authStore.user?.role === 'TRANSPORTER'
@@ -75,6 +75,7 @@ const navigation = computed(() => [
         {
           name: 'transports',
           label: 'Vận chuyển',
+          group: 'Quản lý nghiệp vụ',
           icon: 'local_shipping',
           active: route.name === 'transports',
         },
@@ -85,6 +86,7 @@ const navigation = computed(() => [
         {
           name: 'receipts',
           label: 'Hàng nhận',
+          group: 'Quản lý nghiệp vụ',
           icon: 'inventory_2',
           active: route.name === 'receipts',
         },
@@ -93,6 +95,10 @@ const navigation = computed(() => [
 ])
 const pageTitles: Record<string, string> = {
   home: 'Tổng quan',
+  'farm-ponds': 'Ao nuôi',
+  'farm-batches': 'Vụ nuôi',
+  'farm-logs': 'Nhật ký nuôi',
+  'farm-harvest': 'Thu hoạch & Lô hàng',
   farms: 'Cơ sở nuôi',
   ponds: 'Ao nuôi',
   'pond-batches': 'Vụ nuôi',
@@ -108,7 +114,7 @@ const breadcrumbs = computed(() => {
   const { farmId, pondId } = route.params
   return names.map((name) => ({
     name,
-    label: pageTitles[name],
+    label: isTransporter.value && name === 'home' ? 'Tổng quan vận chuyển' : pageTitles[name],
     params: name === 'ponds' ? { farmId } : name === 'pond-batches' ? { farmId, pondId } : {},
   }))
 })
@@ -185,6 +191,8 @@ async function handleHome() {
         <va-icon :name="mobileMenuOpen ? 'close' : 'menu'" aria-hidden="true" />
         <span>Điều hướng</span>
       </button>
+      <button v-if="isAuthenticated && mobileMenuOpen" class="mobile-nav-backdrop" type="button"
+        aria-label="Đóng điều hướng" tabindex="-1" @click="closeMobileMenu" />
       <nav
         v-if="isAuthenticated"
         id="workspace-navigation"
@@ -192,9 +200,7 @@ async function handleHome() {
         aria-label="Điều hướng chính"
       >
         <template v-for="item in navigation" :key="item.name">
-          <span class="nav-group-label">{{
-            item.name === 'home' ? 'Không gian làm việc' : 'Quản lý nghiệp vụ'
-          }}</span>
+          <span v-if="item.group" class="nav-group-label">{{ item.group }}</span>
           <router-link
             class="nav-link"
             :class="{ active: item.active }"
@@ -211,10 +217,10 @@ async function handleHome() {
       </nav>
 
       <div v-if="isAuthenticated" class="workspace-identity">
-        <va-icon name="domain" aria-hidden="true" />
+        <va-icon :name="isTransporter ? 'local_shipping' : 'domain'" aria-hidden="true" />
         <div>
           <span>{{ roleName }}</span
-          ><strong>{{ authStore.organizationName || authStore.fullName }}</strong>
+          ><strong>{{ isTransporter ? authStore.fullName : authStore.organizationName || authStore.fullName }}</strong>
         </div>
       </div>
 
@@ -306,8 +312,8 @@ async function handleHome() {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: var(--app-control-height);
+  height: var(--app-control-height);
   border-radius: var(--app-control-radius);
   background: var(--app-primary);
   color: white;
@@ -352,7 +358,7 @@ async function handleHome() {
   display: flex;
   align-items: center;
   gap: var(--app-space-3);
-  min-height: 44px;
+  min-height: var(--app-control-height);
   padding: 8px 14px;
   border-radius: var(--app-control-radius);
   color: var(--app-primary-dark);
@@ -370,8 +376,8 @@ async function handleHome() {
   align-items: center;
   justify-content: space-between;
   gap: var(--app-space-3);
-  min-height: 64px;
-  margin-left: var(--sidebar-width, 240px);
+  min-height: var(--app-header-height);
+  margin-left: var(--sidebar-width, var(--app-sidebar-width));
   padding: 10px clamp(16px, 3vw, 32px);
   border-bottom: 1px solid var(--app-line);
   background: var(--app-surface);
@@ -412,7 +418,7 @@ async function handleHome() {
   gap: 6px;
   flex-shrink: 0;
   min-width: 44px;
-  min-height: 44px;
+  min-height: var(--app-control-height);
   padding: 0 10px;
   border: 1px solid var(--app-line);
   border-radius: var(--app-control-radius);
@@ -433,7 +439,7 @@ async function handleHome() {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
-  min-height: 44px;
+  min-height: var(--app-control-height);
   max-width: 220px;
   padding: 4px 8px 4px 4px;
   border-radius: var(--app-control-radius);
@@ -450,6 +456,7 @@ async function handleHome() {
 .user-avatar {
   width: 34px;
   height: 34px;
+  border-radius: 50%;
   font-size: 12px;
   font-weight: 750;
 }
@@ -481,7 +488,7 @@ async function handleHome() {
   display: flex;
   align-items: center;
   gap: var(--app-space-2);
-  min-height: 44px;
+  min-height: var(--app-control-height);
   padding: 8px 0 0;
   margin-top: 4px;
   border: 0;
@@ -501,10 +508,10 @@ async function handleHome() {
   .workspace-sidebar {
     position: fixed;
     inset: 0 auto 0 0;
-    width: var(--sidebar-width, 240px);
+    width: var(--sidebar-width, var(--app-sidebar-width));
     overflow-y: auto;
     border: 0;
-    background: var(--app-sidebar);
+    background: linear-gradient(165deg, var(--app-sidebar), #07515e 110%);
     color: white;
   }
   .workspace-sidebar .navbar-inner {
@@ -570,7 +577,42 @@ async function handleHome() {
     padding-inline: 0;
   }
 }
+.mobile-nav-backdrop { display: none; }
 @media (max-width: 1023px) {
+  .workspace-sidebar { z-index: 110; }
+  .workspace-sidebar.menu-open .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    background: rgb(7 28 36 / 38%);
+  }
+  .workspace-sidebar.menu-open .mobile-menu-toggle {
+    position: relative;
+    z-index: 1;
+    background: var(--app-primary-soft);
+  }
+  .workspace-sidebar.menu-open .navbar-links {
+    display: flex;
+    position: fixed;
+    inset: var(--app-header-height) auto 0 0;
+    width: min(300px, 85vw);
+    flex-flow: column nowrap;
+    align-items: stretch;
+    overflow-y: auto;
+    padding: var(--app-space-4);
+    border: 0;
+    background: var(--app-sidebar);
+  }
+  .workspace-sidebar.menu-open .nav-group-label { display: block; }
+  .workspace-sidebar .nav-link { color: var(--app-sidebar-text); }
+  .workspace-sidebar .nav-link:hover { background: var(--app-divider); color: white; }
+  .workspace-sidebar .nav-link.active {
+    color: var(--app-sidebar);
+    background: var(--app-accent);
+  }
+  .workspace-sidebar .nav-link:focus-visible { outline-color: var(--app-accent); }
+
   .workspace-sidebar {
     position: relative;
   }

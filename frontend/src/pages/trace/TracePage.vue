@@ -543,13 +543,13 @@ onBeforeUnmount(() => {
 }
 .page-intro h1 {
   margin: 0 0 12px;
-  font-size: clamp(28px, 4vw, 40px);
+  font-size: var(--app-text-title);
   font-weight: 600;
   line-height: 1.3;
   letter-spacing: -0.035em;
 }
 .page-intro.has-lot h1 {
-  font-size: 24px;
+  font-size: var(--app-text-title);
 }
 .page-intro p {
   color: var(--app-muted);
@@ -566,7 +566,7 @@ onBeforeUnmount(() => {
 }
 .trace-card h2,
 .care-heading h2 {
-  font-size: 22px;
+  font-size: var(--app-text-section);
   font-weight: 600;
   line-height: 1.5;
   letter-spacing: -0.025em;
@@ -962,9 +962,9 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 .trip-status {
-  font-size: 12px;
-  padding: 3px 8px;
-  border-radius: 6px;
+  font-size: var(--app-text-xs);
+  padding: var(--app-space-1) var(--app-space-2);
+  border-radius: var(--app-pill-radius);
   background: var(--app-canvas);
   color: var(--app-muted);
 }

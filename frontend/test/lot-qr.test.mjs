@@ -8,7 +8,10 @@ import { createRenderer, h, nextTick, ref } from 'vue'
 // Execute the real SFC; replace only browser routing, API I/O and UI wrappers.
 const dataModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const vueUrl = import.meta.resolve('vue')
+const overlaySource = await readFile(new URL('../src/components/overlay-dismiss.ts', import.meta.url), 'utf8')
+const overlay = dataModule(ts.transpileModule(overlaySource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace("from 'vue'", `from ${JSON.stringify(vueUrl)}`))
 const stubs = {
+  '../../components/overlay-dismiss': overlay,
   'vue-router': dataModule('export const useRouter = () => ({resolve: ({params}) => ({href: `/trace/${params.traceCode}`})})'),
   '../api/client': dataModule('export const api = {get: (...a) => globalThis.qrTestApi.get(...a), post: (...a) => globalThis.qrTestApi.post(...a)}'),
   'vuestic-ui': dataModule(`import {h,defineComponent} from ${JSON.stringify(vueUrl)};
@@ -16,7 +19,7 @@ const stubs = {
       return () => h(tag, {...attrs,onInput:e=>emit('update:modelValue',e.target.value)}, slots.default?.());
     }});
     export const VaButton=component('button'), VaAlert=component('aside'), VaTextarea=component('textarea'),
-      VaBadge=component('span'), VaCard=component('article'), VaCardContent=component('div'), VaInnerLoading=component('section');`),
+      VaBadge=component('span'), VaIcon=component('i'), VaCard=component('article'), VaCardContent=component('div'), VaInnerLoading=component('section');`),
 }
 async function loadSfc(path, extraStubs = {}) {
   const source = await readFile(new URL(path, import.meta.url), 'utf8')
@@ -27,7 +30,7 @@ async function loadSfc(path, extraStubs = {}) {
   return (await import(dataModule(resolved))).default
 }
 const Panel = await loadSfc('../src/components/LotQrPanel.vue')
-const node = (type, text = '') => ({ type, text, props: {}, children: [], parent: null })
+const node = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, get options() { return this.children }, addEventListener() {}, open: false, showModal() { this.open = true }, close() { this.open = false } })
 const renderer = createRenderer({
   createElement: type => node(type), createText: text => node('text', text), createComment: text => node('comment', text),
   setText: (el, text) => { el.text = text }, setElementText: (el, text) => { el.text = text; el.children = [] },
@@ -128,7 +131,17 @@ test('late issue response cannot replace QR or permissions after switching lot',
 })
 test('receipt page enables QR issuance only after successful receipt confirmation', async () => {
   globalThis.qrTestPanel = Panel
+  globalThis.qrTestHeader = await loadSfc('../src/components/PageHeader.vue')
+  globalThis.qrTestEmpty = await loadSfc('../src/components/EmptyState.vue')
+  globalThis.qrTestLoading = await loadSfc('../src/components/LoadingState.vue')
+  globalThis.qrTestReceiptQuery = ref({ trip: 'trip-a' })
   const Receipts = await loadSfc('../src/pages/transports/DistributorReceipts.vue', {
+    '../../stores/auth.store': dataModule('export const useAuthStore = () => ({ organizationName: "Phân phối A" })'),
+    'vue-router': dataModule('export const useRoute = () => ({ get query() { return globalThis.qrTestReceiptQuery.value } }); export const useRouter = () => ({ replace: async ({query}) => { globalThis.qrTestReceiptQuery.value = query } })'),
+    '../../types': dataModule('export const SPECIES_LABELS = {}'),
+    '../../components/PageHeader.vue': dataModule('export default globalThis.qrTestHeader'),
+    '../../components/EmptyState.vue': dataModule('export default globalThis.qrTestEmpty'),
+    '../../components/LoadingState.vue': dataModule('export default globalThis.qrTestLoading'),
     '../../api/client': stubs['../api/client'],
     '../../components/LotQrPanel.vue': dataModule('export default globalThis.qrTestPanel'),
     '../../components/CollectionToolbar.vue': dataModule(`import {h} from ${JSON.stringify(vueUrl)};export default {render:()=>h('nav')}`),
@@ -142,8 +155,8 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
       paths.push(path)
       return path === '/transports/receiving' ? { items: [{
         id: 'trip-a', transport_code: 'TRIP-A', status: confirmed ? 'DELIVERED' : 'IN_TRANSIT',
-        delivery_reported_at: '2026-11-08', quantity: 10, from_location: 'Farm', to_location: 'Shop', events: [],
-        lot: { id: 'lot-a', lot_code: 'LOT-A', provenance: { farm: { name: 'Farm' } } },
+        delivery_reported_at: '2026-11-08', transport_date: '2026-11-08', quantity: 10, from_location: 'Farm', to_location: 'Shop', events: [],
+        lot: { id: 'lot-a', lot_code: 'LOT-A', provenance: { farm: { name: 'Farm' }, batch: { species: 'SHRIMP' }, pond: { name: 'Ao' } } },
       }] } : result(null, true)
     },
     post: async path => { assert.equal(path, '/transports/trip-a/confirm-delivery'); confirmed = true; return {} },
@@ -151,8 +164,94 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
   const root = node('root'), app = renderer.createApp(Receipts); app.mount(root)
   try {
     await settle(); assert.equal(button(root, 'Phát hành'), undefined)
-    await button(root, 'Xác nhận đã nhận hàng').props.onClick(); await settle()
+    await button(root, 'Xác nhận nhận hàng').props.onClick(); await settle()
     assert.ok(button(root, 'Phát hành'))
     assert.ok(paths.includes('/transports/trip-a/qr'))
   } finally { app.unmount() }
+})
+
+test('collection toolbar resets search and status, and bounds pagination controls', async () => {
+  const Toolbar = await loadSfc('../src/components/CollectionToolbar.vue')
+  const query = ref('Ao 1'), status = ref('ACTIVE'), page = ref(2)
+  const root = node('root')
+  const app = renderer.createApp({ render: () => h(Toolbar, {
+    query: query.value, status: status.value, page: page.value, total: 13, pageSize: 9,
+    'onUpdate:query': value => { query.value = value },
+    'onUpdate:status': value => { status.value = value },
+    'onUpdate:page': value => { page.value = value },
+  }) })
+  app.mount(root)
+  try {
+    assert.match(text(root), /10–13 \/ 13/)
+    assert.equal(button(root, 'Sau').props.disabled, true)
+    button(root, 'Trước').props.onClick(); await nextTick()
+    assert.equal(page.value, 1)
+    assert.equal(button(root, 'Trước').props.disabled, true)
+    button(root, 'Xóa bộ lọc').props.onClick(); await nextTick()
+    assert.equal(query.value, '')
+    assert.equal(status.value, '')
+    assert.equal(button(root, 'Xóa bộ lọc'), undefined)
+  } finally { app.unmount() }
+})
+
+test('transport UI distinguishes reported delivery from confirmed receipt', async () => {
+  globalThis.qrTestHeader = await loadSfc('../src/components/PageHeader.vue')
+  globalThis.qrTestEmpty = await loadSfc('../src/components/EmptyState.vue')
+  globalThis.qrTestProgress = await loadSfc('../src/pages/transports/TransportProgress.vue')
+  const Transport = await loadSfc('../src/pages/transports/TransporterDashboard.vue', {
+    '../../api/client': stubs['../api/client'],
+    '../../components/PageHeader.vue': dataModule('export default globalThis.qrTestHeader'),
+    '../../components/EmptyState.vue': dataModule('export default globalThis.qrTestEmpty'),
+    './TransportProgress.vue': dataModule('export default globalThis.qrTestProgress'),
+    '../../stores/auth.store': dataModule("export const useAuthStore = () => ({ fullName: 'Huynh' })"),
+  })
+  const initial = mount({ get: async () => result() }); initial.close()
+  let finishLoad
+  globalThis.qrTestApi = { get: () => new Promise(resolve => { finishLoad = resolve }) }
+  const response = { available: [], assigned: ['IN_TRANSIT', 'DELIVERED'].map((status, index) => ({
+    id: `trip-${index}`, transport_code: `TRIP-${index}`, status, quantity: 10,
+    from_location: 'Farm', to_location: 'Shop', transport_date: '2026-11-08',
+    delivery_reported_at: '2026-11-08', events: [],
+    lot: { lot_code: 'LOT-A', provenance: { farm: { name: 'Farm' }, pond: { name: 'Pond' }, batch: { batch_code: 'BATCH-A' } } },
+  })) }
+  const root = node('root'), app = renderer.createApp(Transport)
+  app.mount(root)
+  try {
+    await nextTick()
+    assert.ok(nodes(root).some(n => n.props['aria-label'] === 'Đang tải chuyến vận chuyển'))
+    finishLoad(response)
+    await settle()
+    button(root, 'Đang thực hiện').props.onClick(); await nextTick()
+    assert.match(text(root), /Chờ xác nhận bàn giao/)
+    button(root, 'Lịch sử').props.onClick(); await nextTick()
+    assert.match(text(root), /Đã bàn giao/)
+    assert.doesNotMatch(text(root), /Chờ xác nhận bàn giao/)
+  } finally { app.unmount() }
+})
+
+test('overlay dismissal compares the current draft with the opening snapshot and blocks while busy', async () => {
+  const { draftDismiss } = await import(overlay)
+  const opened = ref(false), draft = ref({ name: '', enabled: true })
+  let busy = false, prompts = 0, closes = 0, discard = false
+  const confirm = globalThis.window.confirm
+  globalThis.window.confirm = () => { prompts++; return discard }
+  try {
+    const { dismiss, markClean } = draftDismiss(() => draft.value, () => busy, opened)
+    opened.value = true
+    const close = () => { closes++ }
+    dismiss(close)
+    draft.value.enabled = false
+    dismiss(close)
+    assert.deepEqual([prompts, closes], [1, 1])
+    discard = true
+    busy = true
+    dismiss(close)
+    assert.deepEqual([prompts, closes], [1, 1])
+    busy = false
+    dismiss(close)
+    assert.deepEqual([prompts, closes], [2, 2])
+    markClean()
+    dismiss(close)
+    assert.deepEqual([prompts, closes], [2, 3])
+  } finally { globalThis.window.confirm = confirm }
 })

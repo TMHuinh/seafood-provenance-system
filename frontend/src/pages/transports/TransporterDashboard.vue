@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import LoadingState from '../../components/LoadingState.vue'
+import { draftDismiss, dismissOnBackdrop } from '../../components/overlay-dismiss'
+import TransportProgress from './TransportProgress.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { VaAlert, VaButton, VaIcon, VaInnerLoading } from 'vuestic-ui'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { VaAlert, VaButton, VaIcon } from 'vuestic-ui'
+import { useAuthStore } from '../../stores/auth.store'
 import { api } from '../../api/client'
 import type { LotTransport, Species, TransportEvent } from '../../types'
 
 interface TransportJob extends LotTransport {
+  claimed_at?: string | null
+  created_at?: string
+  updated_at?: string
   lot: {
     id: string
     lot_code: string
@@ -17,11 +22,13 @@ interface TransportJob extends LotTransport {
       pond: { code: string; name: string }
       batch: { batch_code: string; species: Species }
     }
-  }
+  } | null
 }
+const props = defineProps<{ overview?: boolean }>()
+const auth = useAuthStore()
 const available = ref<TransportJob[]>([])
 const assigned = ref<TransportJob[]>([])
-const loading = ref(false)
+const loading = ref(true)
 const loadedJobs = ref(false)
 const busyId = ref<string | null>(null)
 const error = ref('')
@@ -32,10 +39,23 @@ const details = ref<Record<string, {
   trackingStatus: string; trackingLocation: string; trackingTemperature: string | number; trackingNote: string
   deliveryProofUrl: string
 }>>({})
-const selectedView = ref<'available' | 'active' | 'history'>('available')
+const selectedView = ref(props.overview ? 'all' : 'available')
 const search = ref('')
-let refreshTimer: number | undefined
-const labels: Record<string, string> = { PLANNING: 'Chờ nhận chuyến', IN_TRANSIT: 'Đang vận chuyển', DELIVERED: 'Đã giao', CANCELLED: 'Đã hủy' }
+const dialog = ref<HTMLDialogElement | null>(null)
+const selectedId = ref('')
+const dialogTrigger = ref<HTMLElement | null>(null)
+const actionError = ref('')
+const statusLabels: Record<string, string> = {
+  available: 'Chờ nhận', planning: 'Chờ khởi hành', moving: 'Đang vận chuyển',
+  reported: 'Chờ xác nhận bàn giao', delivered: 'Đã bàn giao', cancelled: 'Đã hủy',
+}
+
+function stage(job: TransportJob) {
+  if (job.status === 'PLANNING') return job.handler_id ? 'planning' : 'available'
+  if (job.status === 'IN_TRANSIT') return job.delivery_reported_at ? 'reported' : 'moving'
+  return job.status === 'DELIVERED' ? 'delivered' : 'cancelled'
+}
+
 const trackingStatuses = [
   { value: 'PICKED_UP', label: 'Đã lấy hàng' },
   { value: 'IN_TRANSIT', label: 'Đang trên đường' },
@@ -48,17 +68,94 @@ const trackingStatuses = [
 ]
 const trackingStatusLabels = Object.fromEntries(trackingStatuses.map(({ value, label }) => [value, label])) as Record<string, string>
 const eventLabels: Record<string, string> = { REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển', CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Báo đã giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận', TRACKING_UPDATE: 'Cập nhật hành trình', DELIVERED: 'Nhà phân phối xác nhận đã nhận', CANCELLED: 'Hủy chuyến' }
-const activeCount = computed(() => assigned.value.filter((job) => ['PLANNING', 'IN_TRANSIT'].includes(job.status)).length)
-const deliveredCount = computed(() => assigned.value.filter((job) => job.status === 'DELIVERED').length)
+const jobs = computed(() => [...available.value, ...assigned.value])
+const groups = computed(() => ({
+  all: jobs.value,
+  available: available.value,
+  planning: assigned.value.filter((job) => stage(job) === 'planning'),
+  moving: assigned.value.filter((job) => stage(job) === 'moving'),
+  reported: assigned.value.filter((job) => stage(job) === 'reported'),
+  active: assigned.value.filter((job) => ['PLANNING', 'IN_TRANSIT'].includes(job.status)),
+  delivered: assigned.value.filter((job) => stage(job) === 'delivered'),
+  history: assigned.value.filter((job) => ['DELIVERED', 'CANCELLED'].includes(job.status)),
+}))
+type Group = keyof typeof groups.value
+const tabs = computed<{ id: Group; label: string }[]>(() => props.overview
+  ? [{ id: 'all', label: 'Tất cả' }, { id: 'available', label: 'Chờ nhận' }, { id: 'active', label: 'Đang thực hiện' }, { id: 'delivered', label: 'Đã bàn giao' }]
+  : [{ id: 'available', label: 'Yêu cầu mới' }, { id: 'active', label: 'Đang thực hiện' }, { id: 'history', label: 'Lịch sử' }],
+)
+const selectedJob = computed(() => jobs.value.find((job) => job.id === selectedId.value))
+const pending = computed(() => [...groups.value.available, ...groups.value.planning, ...groups.value.moving])
+const recent = computed(() => jobs.value.flatMap((job) => (job.events ?? []).map((event) => ({ job, event })))
+  .sort((a, b) => Date.parse(b.event.occurred_at) - Date.parse(a.event.occurred_at)).slice(0, 3))
+const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' })
+const deliveredToday = computed(() => {
+  const today = day.format()
+  return groups.value.delivered.filter((job) => {
+    const deliveredAt = eventTime(job, 'DELIVERED')
+    return deliveredAt && day.format(new Date(deliveredAt)) === today
+  }).length
+})
+const stats = computed(() => [
+  { label: 'Yêu cầu vận chuyển', value: groups.value.available.length, icon: 'local_shipping', tone: 'teal', hint: 'Chờ nhận' },
+  props.overview
+    ? { label: 'Đang vận chuyển', value: groups.value.moving.length, icon: 'calendar_today', tone: 'blue', hint: 'Đang di chuyển' }
+    : { label: 'Chờ khởi hành', value: groups.value.planning.length, icon: 'schedule', tone: 'amber', hint: 'Đã nhận chuyến' },
+  props.overview
+    ? { label: 'Đã bàn giao hôm nay', value: deliveredToday.value, icon: 'task_alt', tone: 'green', hint: 'Hoàn tất' }
+    : { label: 'Đang vận chuyển', value: groups.value.moving.length, icon: 'local_shipping', tone: 'blue', hint: 'Đang di chuyển' },
+  props.overview
+    ? { label: 'Tổng chuyến hiển thị', value: jobs.value.length, icon: 'inventory_2', tone: 'amber', hint: 'Toàn bộ danh sách' }
+    : { label: 'Đã bàn giao', value: groups.value.delivered.length, icon: 'task_alt', tone: 'green', hint: 'Bên nhận đã xác nhận' },
+])
+const progressTotal = computed(() => jobs.value.length - groups.value.history.length + groups.value.delivered.length)
+const progressPercent = computed(() => progressTotal.value ? groups.value.delivered.length / progressTotal.value * 100 : 0)
 const visibleJobs = computed(() => {
-  const source = selectedView.value === 'available' ? available.value
-    : selectedView.value === 'active' ? assigned.value.filter((job) => ['PLANNING', 'IN_TRANSIT'].includes(job.status))
-      : assigned.value.filter((job) => ['DELIVERED', 'CANCELLED'].includes(job.status))
+  const source = groups.value[selectedView.value as Group]
+  if (props.overview) return (selectedView.value === 'all'
+    ? [...pending.value, ...groups.value.reported, ...groups.value.history]
+    : source).slice(0, 3)
   const query = search.value.trim().toLocaleLowerCase('vi-VN')
   if (!query) return source
-  return source.filter((job) => [job.transport_code, job.from_location, job.to_location, job.lot.lot_code,
-    job.lot.provenance.farm.name, job.lot.provenance.batch.batch_code].some((value) => String(value).toLocaleLowerCase('vi-VN').includes(query)))
+  return source.filter((job) => [job.transport_code, job.from_location, job.to_location, job.lot?.lot_code,
+    job.lot?.provenance.farm.name, job.lot?.provenance.batch.batch_code]
+    .some((value) => value?.toLocaleLowerCase('vi-VN').includes(query)))
 })
+const emptyTitles: Record<string, string> = {
+  available: 'Chưa có yêu cầu mới', active: 'Chưa có chuyến đang thực hiện',
+  history: 'Chưa có lịch sử vận chuyển', delivered: 'Chưa có chuyến đã bàn giao',
+}
+const pendingLabels: Record<string, string> = {
+  available: 'Nhận chuyến', planning: 'Xác nhận khởi hành', moving: 'Cập nhật hành trình',
+}
+
+function eventTime(job: TransportJob, type: string) {
+  return job.events?.find((event) => event.event_type === type)?.occurred_at
+}
+function rowTime(job: TransportJob) {
+  return eventTime(job, 'DELIVERED') ?? job.updated_at ?? job.created_at
+}
+function rowTimeLabel(job: TransportJob) {
+  if (eventTime(job, 'DELIVERED')) return 'Bàn giao'
+  return job.updated_at ? 'Cập nhật' : 'Tạo yêu cầu'
+}
+const detailDismiss = draftDismiss(() => selectedJob.value && formFor(selectedJob.value), () => Boolean(busyId.value))
+function requestCloseDetail() { detailDismiss.dismiss(() => dialog.value?.close()) }
+async function openDetail(job: TransportJob, trigger?: Event) {
+  dialogTrigger.value = trigger?.currentTarget instanceof HTMLElement ? trigger.currentTarget : null
+  selectedId.value = job.id
+  detailDismiss.markClean()
+  actionError.value = ''
+  await nextTick()
+  if (!dialog.value?.open) dialog.value?.showModal()
+}
+function closeDetail() {
+  delete details.value[selectedId.value]
+  selectedId.value = ''
+  actionError.value = ''
+  if (dialogTrigger.value?.isConnected) dialogTrigger.value.focus()
+  else document.getElementById('transport-list-title')?.focus()
+}
 
 function formFor(job: TransportJob) {
   details.value[job.id] ??= {
@@ -70,13 +167,14 @@ function formFor(job: TransportJob) {
   return details.value[job.id]!
 }
 async function uploadDeliveryProof(event: Event, job: TransportJob) {
+  if (busyId.value) return
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
-  error.value = ''
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { error.value = 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.'; return }
-  if (file.size > 10 * 1024 * 1024) { error.value = 'Ảnh không được lớn hơn 10 MB.'; return }
+  actionError.value = ''
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { actionError.value = 'Chỉ hỗ trợ ảnh JPG, PNG hoặc WebP.'; return }
+  if (file.size > 10 * 1024 * 1024) { actionError.value = 'Ảnh không được lớn hơn 10 MB.'; return }
   const payload = new FormData()
   payload.append('image', file)
   busyId.value = job.id
@@ -84,20 +182,20 @@ async function uploadDeliveryProof(event: Event, job: TransportJob) {
     const result = await api.upload<{ imageUrl: string }>(`/transports/${job.id}/delivery-proof`, payload)
     formFor(job).deliveryProofUrl = result.imageUrl
     notice.value = 'Đã tải ảnh bằng chứng lên. Ảnh sẽ được lưu cùng báo cáo khi bạn ghi nhận giao hàng thành công.'
-  } catch (e) { error.value = e instanceof Error ? e.message : 'Không tải được ảnh bằng chứng giao hàng.' }
+  } catch (e) { actionError.value = e instanceof Error ? e.message : 'Không tải được ảnh bằng chứng giao hàng.' }
   finally { busyId.value = null }
 }
 function validText(value: string, label: string, min: number, max: number) {
   const normalized = value.trim()
-  if (normalized.length < min) { error.value = `${label} cần ít nhất ${min} ký tự.`; return false }
-  if (normalized.length > max) { error.value = `${label} không được vượt quá ${max} ký tự.`; return false }
+  if (normalized.length < min) { actionError.value = `${label} cần ít nhất ${min} ký tự.`; return false }
+  if (normalized.length > max) { actionError.value = `${label} không được vượt quá ${max} ký tự.`; return false }
   return true
 }
 function validTemperature(value: string | number) {
   if (value === '') return true
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed < -100 || parsed > 100 || Math.abs(parsed * 100 - Math.round(parsed * 100)) > 0.001) {
-    error.value = 'Nhiệt độ phải từ -100 đến 100 °C, tối đa 2 chữ số thập phân.'
+    actionError.value = 'Nhiệt độ phải từ -100 đến 100 °C, tối đa 2 chữ số thập phân.'
     return false
   }
   return true
@@ -113,18 +211,21 @@ async function load() {
   finally { loading.value = false }
 }
 async function claim(job: TransportJob) {
-  busyId.value = job.id; error.value = ''; notice.value = ''
+  if (busyId.value || !window.confirm(`Nhận chuyến ${job.transport_code}?`)) return
+  busyId.value = job.id; actionError.value = ''; notice.value = ''
   try { await api.post(`/transports/${job.id}/claim`); notice.value = `Đã nhận chuyến ${job.transport_code}.`; await load() }
-  catch (e) { error.value = e instanceof Error ? e.message : 'Không nhận được chuyến' }
+  catch (e) { actionError.value = e instanceof Error ? e.message : 'Không nhận được chuyến' }
   finally { busyId.value = null }
 }
 async function update(job: TransportJob, status: LotTransport['status']) {
-  error.value = ''; notice.value = ''
+  if (busyId.value) return
+  actionError.value = ''; notice.value = ''
   const form = formFor(job)
   if (status === 'IN_TRANSIT' && (!validText(form.vehicle, 'Phương tiện', 1, 255) || !validText(form.driver, 'Tài xế', 1, 255))) return
   if (status === 'CANCELLED' && !validText(form.cancellationReason, 'Lý do hủy', 3, 1000)) return
   if (!validTemperature(form.temperature)) return
   if (status === 'CANCELLED' && !window.confirm(`Hủy chuyến ${job.transport_code}?`)) return
+  if (status === 'IN_TRANSIT' && !window.confirm(`Bắt đầu vận chuyển ${job.transport_code}?`)) return
   busyId.value = job.id
   try {
     await api.patch(`/transports/${job.id}/status`, {
@@ -133,18 +234,21 @@ async function update(job: TransportJob, status: LotTransport['status']) {
       cancellationReason: form.cancellationReason,
     })
     notice.value = status === 'IN_TRANSIT' ? `Đã bắt đầu vận chuyển ${job.transport_code}.` : `Đã hủy chuyến ${job.transport_code}.`
+    detailDismiss.markClean()
     await load()
-  } catch (e) { error.value = e instanceof Error ? e.message : 'Không cập nhật được chuyến' }
+  } catch (e) { actionError.value = e instanceof Error ? e.message : 'Không cập nhật được chuyến' }
   finally { busyId.value = null }
 }
 async function recordTrackingUpdate(job: TransportJob) {
-  error.value = ''; notice.value = ''
+  if (busyId.value) return
+  actionError.value = ''; notice.value = ''
   const form = formFor(job)
   if (!validText(form.trackingLocation, 'Địa điểm cập nhật', 2, 500)) return
   if (!validTemperature(form.trackingTemperature)) return
   if (form.trackingNote.trim() && !validText(form.trackingNote, 'Ghi chú cập nhật', 1, 1000)) return
   if (form.trackingStatus === 'OTHER' && !validText(form.trackingNote, 'Ghi chú khi chọn cập nhật khác', 2, 1000)) return
-  if (form.trackingStatus === 'DELIVERED_REPORTED' && !form.deliveryProofUrl) { error.value = 'Vui lòng tải ảnh bằng chứng giao hàng trước khi báo giao thành công.'; return }
+  if (form.trackingStatus === 'DELIVERED_REPORTED' && !form.deliveryProofUrl) { actionError.value = 'Vui lòng tải ảnh bằng chứng giao hàng trước khi báo giao thành công.'; return }
+  if (form.trackingStatus === 'DELIVERED_REPORTED' && !window.confirm(`Báo giao thành công chuyến ${job.transport_code}?`)) return
   busyId.value = job.id
   try {
     await api.post(`/transports/${job.id}/tracking-updates`, {
@@ -157,11 +261,12 @@ async function recordTrackingUpdate(job: TransportJob) {
       : `Đã cập nhật hành trình chuyến ${job.transport_code}.`
     form.trackingTemperature = ''
     form.trackingNote = ''
+    detailDismiss.markClean()
     await load()
-  } catch (e) { error.value = e instanceof Error ? e.message : 'Không cập nhật được hành trình' }
+  } catch (e) { actionError.value = e instanceof Error ? e.message : 'Không cập nhật được hành trình' }
   finally { busyId.value = null }
 }
-function formatDate(value: string) { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) }
+function formatDate(value: string) { return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) }
 function proofLabel(status?: string) { return status === 'SUCCESS' ? 'Đã xác nhận' : status === 'FAILED' ? 'Cần thử lại' : 'Đang chờ blockchain' }
 function eventSummary(event: TransportEvent) {
   const payload = event.payload
@@ -186,76 +291,187 @@ function deliveryProofForEvent(event: TransportEvent) {
     ? String((report as Record<string, unknown>).proofImageUrl)
     : ''
 }
-function latestTracking(job: TransportJob) {
-  return [...(job.events ?? [])].reverse().find((event) => event.event_type === 'TRACKING_UPDATE') ?? null
-}
-onMounted(() => { void load(); refreshTimer = window.setInterval(() => { if (!loading.value) void load() }, 20000) })
-onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
+onMounted(() => {
+  void load()
+})
 </script>
 
 <template>
-  <main class="transport-page" :aria-busy="loading">
-    <PageHeader title="Điều phối vận chuyển" description="Nhận chuyến, cập nhật tiến độ và báo giao lô hàng cho nhà phân phối.">
+  <main class="transport-workspace-page" :class="{ 'transport-overview': overview }" :aria-busy="loading">
+    <header v-if="overview" class="transport-banner">
+      <h1>Chào {{ auth.fullName }}! <span aria-hidden="true">👋</span></h1>
+      <p>Quản lý các chuyến vận chuyển, nhận hàng và theo dõi giao hàng an toàn, đúng thời gian.</p>
+    </header>
+    <PageHeader v-else title="Quản lý vận chuyển" description="Tiếp nhận yêu cầu, quản lý các chuyến hàng và cập nhật tiến trình vận chuyển.">
       <template #actions>
-        <va-button preset="secondary" icon="refresh" :loading="loading" @click="load">Làm mới dữ liệu</va-button>
+        <label class="search-box"><va-icon name="search" aria-hidden="true" /><input v-model="search" type="search" placeholder="Nhập mã chuyến, mã lô hoặc điểm giao nhận…" aria-label="Tìm chuyến vận chuyển" /></label>
       </template>
     </PageHeader>
 
-    <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }}</va-alert>
+    <div v-if="error" class="load-error">
+      <va-alert color="danger" role="alert">{{ error }}</va-alert>
+      <button class="transport-button" type="button" :disabled="loading || Boolean(busyId)" @click="load">Thử lại</button>
+    </div>
     <va-alert v-if="notice" color="success" class="message" role="status">{{ notice }}</va-alert>
 
-    <section class="summary-grid" aria-label="Tổng quan vận chuyển" :aria-busy="loading">
-      <article class="summary-card new-summary"><span class="summary-icon"><va-icon name="add_task" /></span><span class="summary-label">Yêu cầu mới</span><strong>{{ !loadedJobs ? '—' : available.length }}</strong><small>Đang chờ người nhận</small></article>
-      <article class="summary-card active-summary"><span class="summary-icon"><va-icon name="local_shipping" /></span><span class="summary-label">Đang xử lý</span><strong>{{ !loadedJobs ? '—' : activeCount }}</strong><small>Chuyến bạn đã nhận</small></article>
-      <article class="summary-card done-summary"><span class="summary-icon"><va-icon name="task_alt" /></span><span class="summary-label">Đã giao</span><strong>{{ !loadedJobs ? '—' : deliveredCount }}</strong><small>Hoàn tất bàn giao</small></article>
-      <article class="summary-card total-summary"><span class="summary-icon"><va-icon name="inventory_2" /></span><span class="summary-label">Tổng chuyến của tôi</span><strong>{{ !loadedJobs ? '—' : assigned.length }}</strong><small>Tính từ trước đến nay</small></article>
+    <section class="summary-grid" aria-label="Tổng quan vận chuyển">
+      <article v-for="stat in stats" :key="stat.label" class="summary-card" :data-tone="stat.tone">
+        <span class="summary-icon"><va-icon :name="stat.icon" aria-hidden="true" /></span>
+        <span class="summary-label">{{ stat.label }}</span>
+        <strong v-if="loadedJobs">{{ stat.value }}</strong>
+        <span v-else-if="loading" class="transport-skeleton stat-skeleton" aria-hidden="true"></span>
+        <strong v-else>—</strong>
+        <small>{{ stat.hint }}</small>
+      </article>
     </section>
 
-    <section class="dispatch-board">
-      <div class="board-heading">
-        <div><h2>Quản lý chuyến hàng</h2><p class="board-description">Chọn một yêu cầu để nhận, hoặc mở chuyến đang chạy để cập nhật tiến độ.</p></div>
-        <label class="search-box"><va-icon name="search" aria-hidden="true" /><input v-model="search" type="search" placeholder="Mã chuyến, mã lô hoặc điểm giao nhận…" aria-label="Tìm chuyến vận chuyển" /></label>
-      </div>
+    <div class="transport-columns">
+      <section class="dispatch-board" aria-labelledby="transport-list-title">
+        <div class="board-heading">
+          <h2 id="transport-list-title" tabindex="-1"><va-icon name="local_shipping" aria-hidden="true" /> {{ overview ? 'Chuyến vận chuyển' : 'Danh sách chuyến vận chuyển' }}</h2>
+          <router-link v-if="overview" class="transport-button primary" :to="{ name: 'transports' }"><va-icon name="add" aria-hidden="true" /> Nhận chuyến</router-link>
+          <button v-else type="button" class="transport-button" :disabled="loading || Boolean(busyId)" @click="load"><va-icon name="refresh" aria-hidden="true" /> Làm mới</button>
+        </div>
 
-      <div class="board-tabs" role="group" aria-label="Lọc chuyến vận chuyển">
-        <button type="button" :aria-pressed="selectedView === 'available'" :class="{ selected: selectedView === 'available' }" @click="selectedView = 'available'">Yêu cầu mới <span>{{ available.length }}</span></button>
-        <button type="button" :aria-pressed="selectedView === 'active'" :class="{ selected: selectedView === 'active' }" @click="selectedView = 'active'">Đang xử lý <span>{{ activeCount }}</span></button>
-        <button type="button" :aria-pressed="selectedView === 'history'" :class="{ selected: selectedView === 'history' }" @click="selectedView = 'history'">Lịch sử <span>{{ assigned.length - activeCount }}</span></button>
-      </div>
+        <div class="board-tabs" role="group" aria-label="Lọc chuyến vận chuyển">
+          <button v-for="tab in tabs" :key="tab.id" type="button" :aria-pressed="selectedView === tab.id" :class="{ selected: selectedView === tab.id }" @click="selectedView = tab.id">
+            {{ tab.label }} <span v-if="loadedJobs">{{ groups[tab.id].length }}</span>
+          </button>
+        </div>
 
-      <LoadingState v-if="loading" />
-    <va-inner-loading v-else :loading="false">
-        <div v-if="visibleJobs.length" class="job-grid">
-          <article v-for="job in visibleJobs" :key="job.id" class="job-card" :class="{ 'request-card': selectedView === 'available' }">
-            <div class="job-topline"><div class="job-code"><span class="truck-icon"><va-icon name="local_shipping" /></span><div><small>MÃ CHUYẾN</small><strong>{{ job.transport_code }}</strong></div></div>
-              <span class="status-pill" :class="job.status.toLowerCase()"><i></i>{{ labels[job.status] }}</span>
+        <div v-if="loading && !loadedJobs" class="job-grid" role="status" aria-label="Đang tải chuyến vận chuyển">
+          <div v-for="index in 3" :key="index" class="job-card skeleton-card" aria-hidden="true"><span class="transport-skeleton"></span><span class="transport-skeleton"></span></div>
+        </div>
+        <div v-else-if="visibleJobs.length" class="job-grid">
+          <article v-for="job in visibleJobs" :key="job.id" class="job-card" :class="{ 'compact-job': overview }">
+            <div class="job-topline">
+              <div class="job-code">
+                <span class="truck-icon" :class="stage(job)"><va-icon :name="stage(job) === 'delivered' ? 'task_alt' : stage(job) === 'available' ? 'assignment' : 'local_shipping'" aria-hidden="true" /></span>
+                <div><strong :title="job.transport_code">{{ job.transport_code }}</strong>
+                  <template v-if="overview">
+                    <span>{{ job.from_location }} → {{ job.to_location }}</span>
+                    <small>Lô {{ job.lot?.lot_code ?? '—' }} · {{ Number(job.quantity).toLocaleString('vi-VN') }} kg</small>
+                  </template>
+                </div>
+              </div>
+              <span v-if="!overview" class="status-pill" :class="stage(job)">{{ statusLabels[stage(job)] }}</span>
             </div>
-            <div class="route-line">
-              <div class="route-point"><span class="route-dot origin-dot"></span><div><small>ĐIỂM LẤY HÀNG</small><strong>{{ job.from_location }}</strong></div></div>
-              <div class="route-connector"><span>{{ Number(job.quantity).toLocaleString('vi-VN') }} kg</span></div>
-              <div class="route-point"><span class="route-dot destination-dot"></span><div><small>ĐIỂM GIAO HÀNG</small><strong>{{ job.to_location }}</strong></div></div>
+            <template v-if="!overview">
+              <div class="route-line">
+                <div class="route-point"><span class="route-dot"></span><div><small>Điểm lấy hàng</small><strong>{{ job.from_location }}</strong></div></div>
+                <div class="route-connector" aria-hidden="true"><span>→</span></div>
+                <div class="route-point"><span class="route-dot destination-dot"></span><div><small>Điểm giao hàng</small><strong>{{ job.to_location }}</strong></div></div>
+              </div>
+              <div class="cargo-strip">Lô {{ job.lot?.lot_code ?? '—' }} · {{ Number(job.quantity).toLocaleString('vi-VN') }} kg</div>
+            </template>
+            <TransportProgress v-if="overview || selectedView === 'active'" :job="job" />
+            <div class="row-meta">
+              <span v-if="overview" class="status-pill" :class="stage(job)">{{ statusLabels[stage(job)] }}</span>
+              <small v-if="rowTime(job)">{{ rowTimeLabel(job) }} · <time>{{ formatDate(rowTime(job)!) }}</time></small>
             </div>
-            <div class="cargo-strip"><div class="cargo-icon"><va-icon name="inventory_2" /></div><div class="cargo-copy"><strong>{{ job.lot.lot_code }} <span>·</span> {{ job.lot.provenance.batch.batch_code }}</strong><small>{{ job.lot.provenance.farm.name }} · {{ job.lot.provenance.pond.name }}</small></div><time>{{ formatDate(job.transport_date) }}</time></div>
-            <div v-if="latestTracking(job)" class="latest-tracking">
-              <span class="tracking-pulse"></span>
-              <div><small>CẬP NHẬT HÀNH TRÌNH MỚI NHẤT</small><strong>{{ trackingStatusLabels[String(latestTracking(job)?.payload.trackingStatus)] || String(latestTracking(job)?.payload.trackingStatus) }}</strong><span>{{ String(latestTracking(job)?.payload.location ?? '') }}</span></div>
-              <time>{{ formatDate(latestTracking(job)!.occurred_at) }}</time>
+            <div class="row-actions">
+              <button v-if="!overview && pendingLabels[stage(job)]" type="button" class="transport-button primary" :disabled="Boolean(busyId)" @click="openDetail(job, $event)">{{ pendingLabels[stage(job)] }}</button>
+              <button type="button" class="transport-button" :class="{ 'icon-action': overview }" :aria-label="`Xem chi tiết ${job.transport_code}`" @click="openDetail(job, $event)">
+                <va-icon v-if="overview" name="more_horiz" aria-hidden="true" /><template v-else>Xem chi tiết</template>
+              </button>
             </div>
-            <p v-if="job.note" class="job-note">{{ job.note }}</p>
+          </article>
+        </div>
+        <EmptyState
+          v-else-if="loadedJobs"
+          heading="h3" icon="local_shipping"
+          :title="search.trim() ? 'Không tìm thấy chuyến phù hợp' : emptyTitles[selectedView] ?? 'Chưa có chuyến vận chuyển nào trong danh sách.'"
+          :description="search.trim() ? 'Thử tìm theo mã chuyến, mã lô hoặc điểm giao nhận.' : undefined"
+        />
+        <footer v-if="overview || loadedJobs" class="board-footer">
+          <router-link v-if="overview" :to="{ name: 'transports' }">Xem tất cả chuyến vận chuyển <va-icon name="arrow_forward" aria-hidden="true" /></router-link>
+          <template v-else>Hiển thị {{ visibleJobs.length }} / {{ groups[selectedView as Group].length }} chuyến</template>
+        </footer>
+      </section>
 
-            <template v-if="selectedView === 'available'">
+      <aside v-if="overview" class="transport-aside" aria-label="Tình hình vận chuyển">
+        <section class="side-panel">
+          <h2><va-icon name="assignment" aria-hidden="true" /> Tiến độ giao hàng</h2>
+          <template v-if="loadedJobs">
+            <div class="delivery-progress">
+              <div class="delivery-ring">
+                <svg viewBox="0 0 110 110" aria-hidden="true">
+                  <circle cx="55" cy="55" r="47" pathLength="100" />
+                  <circle v-if="progressPercent" class="ring-fill" cx="55" cy="55" r="47" pathLength="100" :stroke-dasharray="`${progressPercent} 100`" />
+                </svg>
+                <div><strong>{{ groups.delivered.length }}/{{ progressTotal }}</strong><small>chuyến</small></div>
+              </div>
+              <ul class="progress-legend">
+                <li v-for="item in ['delivered', 'moving', 'reported', 'planning', 'available'] as const" :key="item"><span class="legend-dot" :class="item"></span>{{ statusLabels[item] }} <strong>{{ groups[item].length }}</strong></li>
+              </ul>
+            </div>
+            <p class="panel-scope">Phạm vi danh sách đang tải, trừ chuyến đã hủy.</p>
+          </template>
+          <span v-else-if="loading" class="transport-skeleton side-skeleton" aria-hidden="true"></span>
+          <p v-else class="panel-empty">Chưa tải được tiến độ.</p>
+        </section>
+        <section class="side-panel">
+          <h2><va-icon name="fact_check" aria-hidden="true" /> Việc cần xử lý <span v-if="loadedJobs">({{ pending.length }})</span></h2>
+          <ul v-if="pending.length" class="task-list">
+            <li v-for="job in pending.slice(0, 3)" :key="job.id">
+              <span class="mini-icon"><va-icon name="inventory_2" aria-hidden="true" /></span>
+              <div><strong>{{ pendingLabels[stage(job)] }} · {{ job.transport_code }}</strong><small>{{ job.from_location }} → {{ job.to_location }} · {{ Number(job.quantity).toLocaleString('vi-VN') }} kg</small></div>
+              <button type="button" class="transport-button" :aria-label="`Xử lý chuyến ${job.transport_code}`" @click="openDetail(job, $event)">Xử lý</button>
+            </li>
+          </ul>
+          <span v-else-if="loading" class="transport-skeleton side-skeleton" aria-hidden="true"></span>
+          <p v-else-if="loadedJobs" class="panel-empty">Hiện chưa có việc cần xử lý.</p>
+          <p v-else class="panel-empty">Chưa tải được công việc.</p>
+        </section>
+        <section class="side-panel">
+          <h2><va-icon name="history" aria-hidden="true" /> Hoạt động gần đây</h2>
+          <ol v-if="recent.length" class="activity-list">
+            <li v-for="{ event, job } in recent" :key="event.id">
+              <span class="mini-icon"><va-icon :name="event.event_type === 'DELIVERED' ? 'task_alt' : 'history'" aria-hidden="true" /></span>
+              <button type="button" :aria-label="`Xem chi tiết ${job.transport_code}`" @click="openDetail(job, $event)">{{ eventLabels[event.event_type] ?? event.event_type }} <strong>{{ job.transport_code }}</strong></button>
+              <time :datetime="event.occurred_at">{{ formatDate(event.occurred_at) }}</time>
+            </li>
+          </ol>
+          <span v-else-if="loading" class="transport-skeleton side-skeleton" aria-hidden="true"></span>
+          <p v-else-if="loadedJobs" class="panel-empty">Chưa ghi nhận hoạt động nào.</p>
+          <p v-else class="panel-empty">Chưa tải được hoạt động.</p>
+        </section>
+      </aside>
+    </div>
+    <p v-if="loadedJobs" class="page-scope">Dữ liệu gồm tối đa 100 yêu cầu chờ nhận và 100 chuyến được giao cho bạn.</p>
+
+    <dialog ref="dialog" class="transport-dialog" aria-labelledby="transport-detail-title" @close="closeDetail" @cancel.prevent="requestCloseDetail" @click="dismissOnBackdrop($event, requestCloseDetail)">
+      <div v-if="selectedJob" class="detail-content">
+        <template v-for="job in [selectedJob]" :key="job.id">
+          <header class="detail-heading">
+            <div><small>Chi tiết chuyến vận chuyển</small><h2 id="transport-detail-title">{{ job.transport_code }}</h2></div>
+            <button type="button" class="transport-button icon-action" aria-label="Đóng chi tiết" autofocus @click="requestCloseDetail"><va-icon name="close" aria-hidden="true" /></button>
+          </header>
+          <va-alert v-if="actionError || error" color="danger" class="message" role="alert">{{ actionError || error }}</va-alert>
+          <va-alert v-if="notice" color="success" class="message" role="status">{{ notice }}</va-alert>
+          <span class="status-pill" :class="stage(job)">{{ statusLabels[stage(job)] }}</span>
+          <dl class="detail-facts">
+            <div><dt>Điểm lấy hàng</dt><dd>{{ job.from_location }}</dd></div>
+            <div><dt>Điểm giao hàng</dt><dd>{{ job.to_location }}</dd></div>
+            <div><dt>Mã lô</dt><dd>{{ job.lot?.lot_code ?? '—' }}</dd></div>
+            <div><dt>Khối lượng</dt><dd>{{ Number(job.quantity).toLocaleString('vi-VN') }} kg</dd></div>
+            <div v-if="job.lot"><dt>Nguồn gốc</dt><dd>{{ job.lot.provenance.farm.name }} · {{ job.lot.provenance.pond.name }}</dd></div>
+            <div v-if="job.claimed_at"><dt>Nhận chuyến</dt><dd>{{ formatDate(job.claimed_at) }}</dd></div>
+            <div v-if="eventTime(job, 'DELIVERED')"><dt>Bàn giao</dt><dd>{{ formatDate(eventTime(job, 'DELIVERED')!) }}</dd></div>
+            <div v-if="job.vehicle"><dt>Phương tiện</dt><dd>{{ job.vehicle }}</dd></div>
+            <div v-if="job.driver"><dt>Tài xế</dt><dd>{{ job.driver }}</dd></div>
+            <div v-if="job.temperature !== null"><dt>Nhiệt độ</dt><dd>{{ job.temperature }} °C</dd></div>
+          </dl>
+          <TransportProgress :job="job" />
+                      <p v-if="job.note" class="job-note">{{ job.note }}</p>
+
+            <template v-if="stage(job) === 'available'">
               <div class="request-hint"><span>i</span><p>Nhận chuyến để bắt đầu theo dõi và cập nhật phương tiện, tài xế.</p></div>
               <va-button class="primary-action" :loading="busyId === job.id" :disabled="Boolean(busyId)" @click="claim(job)">Nhận chuyến <span aria-hidden="true">→</span></va-button>
             </template>
 
             <template v-else-if="job.status === 'PLANNING' || (job.status === 'IN_TRANSIT' && !job.delivery_reported_at)">
-              <div class="journey-progress" aria-label="Tiến trình chuyến hàng">
-                <div class="progress-step done"><span>✓</span><small>Đã nhận</small></div><div class="progress-track" :class="{ reached: job.status === 'IN_TRANSIT' }"></div>
-                <div class="progress-step" :class="{ done: job.status === 'IN_TRANSIT' }"><span>{{ job.status === 'IN_TRANSIT' ? '✓' : '2' }}</span><small>Đang đi</small></div><div class="progress-track"></div>
-                <div class="progress-step"><span>3</span><small>Báo giao</small></div><div class="progress-track"></div>
-                <div class="progress-step"><span>4</span><small>Bên nhận xác nhận</small></div>
-              </div>
-              <h3 class="job-section-title">Thông tin vận chuyển</h3>
+              <h3 class="job-section-title">Thao tác vận chuyển</h3>
               <div class="driver-form">
                 <label>Phương tiện<input v-model="formFor(job).vehicle" maxlength="255" placeholder="VD: Xe tải lạnh · 51A-12345" /></label>
                 <label>Tài xế<input v-model="formFor(job).driver" maxlength="255" placeholder="Tên người lái xe" /></label>
@@ -288,55 +504,27 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
             </template>
             <div v-else-if="job.delivery_reported_at && job.status === 'IN_TRANSIT'" class="completed-note awaiting-confirmation"><span>…</span>Người vận chuyển đã báo giao thành công. Đang chờ nhà phân phối xác nhận đã nhận hàng.</div>
             <div v-else class="completed-note"><span>{{ job.status === 'DELIVERED' ? '✓' : '!' }}</span>{{ job.status === 'DELIVERED' ? 'Lô hàng đã được bàn giao thành công.' : 'Chuyến vận chuyển đã được hủy.' }}</div>
-            <details v-if="job.events?.length" class="event-disclosure">
+            <details v-if="job.events?.length" open class="event-disclosure">
               <summary>Lịch sử sự kiện <span>{{ job.events.length }} mốc</span></summary>
               <ol class="event-list">
                 <li v-for="event in job.events" :key="event.id" class="event-row">
                   <div class="event-heading"><strong>{{ eventLabels[event.event_type] || event.event_type }}</strong><time>{{ formatDate(event.occurred_at) }}</time></div>
                   <small v-if="eventSummary(event)" class="event-summary">{{ eventSummary(event) }}</small>
                   <div class="proof-line"><span class="proof-dot" :class="event.blockchain_status.toLowerCase()"></span>{{ proofLabel(event.blockchain_status) }} · {{ event.event_id }}</div>
-                  <code v-if="event.data_hash" class="event-hash">Hash: {{ event.data_hash }}</code>
-                  <code v-if="event.previous_hash" class="event-hash">Hash mốc trước: {{ event.previous_hash }}</code>
-                  <code v-if="event.transaction_hash" class="event-transaction">TX: {{ event.transaction_hash }}</code>
                   <small v-if="event.last_error && event.blockchain_status === 'FAILED'" class="event-error">{{ event.last_error }}</small>
                   <a v-if="deliveryProofForEvent(event)" class="delivery-proof-link" :href="deliveryProofForEvent(event)" target="_blank" rel="noopener noreferrer">Xem ảnh bằng chứng giao hàng</a>
                   <img v-if="deliveryProofForEvent(event)" class="delivery-proof-preview" :src="deliveryProofForEvent(event)" alt="Ảnh bằng chứng giao hàng" loading="lazy" />
                 </li>
               </ol>
             </details>
-          </article>
-        </div>
-        <EmptyState
-          v-else-if="!loading && loadedJobs"
-          heading="h3"
-          :icon="selectedView === 'available' ? 'local_shipping' : selectedView === 'active' ? 'inventory_2' : 'task_alt'"
-          :title="search ? 'Không tìm thấy chuyến phù hợp' : selectedView === 'available' ? 'Chưa có yêu cầu mới' : selectedView === 'active' ? 'Bạn chưa có chuyến đang xử lý' : 'Chưa có lịch sử chuyến'"
-          :description="search ? 'Thử tìm theo mã chuyến, mã lô hoặc điểm giao nhận.' : selectedView === 'available' ? 'Yêu cầu vận chuyển mới từ các cơ sở sẽ hiển thị tại đây.' : undefined"
-        />
-      </va-inner-loading>
-      <footer v-if="!loading && loadedJobs" class="board-footer">Hiển thị {{ visibleJobs.length }} / {{ selectedView === 'available' ? available.length : selectedView === 'active' ? activeCount : assigned.length - activeCount }} chuyến</footer>
-    </section>
+
+        </template>
+      </div>
+    </dialog>
   </main>
 </template>
 
 <style scoped>
-.transport-page { --ink:var(--app-ink); --muted:var(--app-muted); --line:var(--app-line); --teal:var(--app-primary); --mint:var(--app-primary-soft); max-width:1240px; width:calc(100% - 2rem); margin:2rem auto 4rem; color:var(--ink); }
-
-.message { margin:1rem 0; }
-.summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:1rem; margin:1.25rem 0 1.5rem; }
-.summary-card { min-width:0; position:relative; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:.1rem .75rem; padding:1.1rem 1.2rem; border:1px solid var(--line); border-radius:15px; background:#fff; box-shadow:none; }
-.summary-icon { grid-column:2; grid-row:1 / span 3; display:grid; place-items:center; width:42px; height:42px; border-radius:13px; color:#0d766b; background:#e9f5f1; font-size:1.35rem; font-weight:700; }
-.active-summary .summary-icon { color:#3e6cbb; background:#edf3ff; }.done-summary .summary-icon { color:#18805b; background:#e9f7ef; }.total-summary .summary-icon { color:#aa771b; background:#fff6df; }
-.summary-label { color:#61797e; font-size:.79rem; font-weight:650; }.summary-card strong { font-size:1.75rem; letter-spacing:-.04em; line-height:1.25; }.summary-card small { color:var(--app-muted); font-size:.72rem; }
-.dispatch-board { overflow:hidden; border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:none; }
-.board-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:1.5rem; padding:1.55rem 1.6rem 1.2rem; }
-.board-heading h2 { margin:0; font-size:1.35rem; letter-spacing:-.025em; }.board-description { margin:.38rem 0 0; color:var(--muted); font-size:.84rem; }
-.search-box { display:flex; align-items:center; gap:.55rem; width:min(360px,40%); height:42px; padding:0 .8rem; border:1px solid #dce8e6; border-radius:10px; color:#759092; background:#fbfdfd; }.search-box span { font-size:1.5rem; line-height:1; }.search-box input { width:100%; border:0; outline:0; background:transparent; color:var(--ink); font:inherit; font-size:.8rem; }.search-box:focus-within { border-color:#63aaa1; box-shadow:0 0 0 3px #0f766e14; }
-.board-tabs { display:flex; gap:.3rem; padding:0 1.6rem; border-bottom:1px solid var(--line); }.board-tabs button { position:relative; display:flex; align-items:center; gap:.55rem; padding:.8rem .85rem .9rem; border:0; background:none; color:var(--app-muted); font:inherit; font-size:.82rem; font-weight:650; cursor:pointer; }.board-tabs button::after { position:absolute; right:.8rem; bottom:-1px; left:.8rem; height:2px; background:transparent; content:""; }.board-tabs button.selected { color:#0d766b; }.board-tabs button.selected::after { background:#0f8376; }.board-tabs button span { padding:.12rem .42rem; border-radius:99px; color:var(--app-muted); background:#f0f5f4; font-size:.7rem; }.board-tabs button.selected span { color:#0e766b; background:#e3f3ef; }
-.job-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:1rem; padding:1.25rem 1.6rem; }.job-card { min-width:0; padding:1.15rem; border:1px solid #e4edeb; border-radius:14px; background:#fff; transition:border-color .18s,box-shadow .18s,transform .18s; }.job-card:hover { border-color:#b8d8d1; box-shadow:none; }.request-card { border-left:3px solid #daae50; }
-.job-topline,.job-code,.route-point,.cargo-strip,.job-actions { display:flex; align-items:center; }.job-topline { justify-content:space-between; gap:.75rem; }.job-code { gap:.65rem; }.truck-icon { display:grid; place-items:center; width:38px; height:38px; border-radius:12px; color:#0e766b; background:#e9f5f1; font-size:1.3rem; font-weight:700; }.job-code div { display:grid; gap:.12rem; }.job-code small,.route-point small { color:var(--app-muted); font-size:.61rem; font-weight:800; letter-spacing:.08em; }.job-code strong { color:#193c41; font-size:.98rem; }.status-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.38rem .65rem; border-radius:99px; color:#8a6a23; background:#fff5dd; font-size:.68rem; font-weight:750; white-space:nowrap; }.status-pill i { width:6px; height:6px; border-radius:50%; background:currentColor; }.status-pill.in_transit { color:#3569a9; background:#edf4ff; }.status-pill.delivered { color:#22815a; background:#eaf7ef; }.status-pill.cancelled { color:#a44c4c; background:#fff0ef; }
-.route-line { display:grid; grid-template-columns:minmax(0,1fr) 55px minmax(0,1fr); align-items:center; margin:1.15rem 0 1rem; }.route-point { min-width:0; gap:.55rem; }.route-point div { min-width:0; display:grid; gap:.25rem; }.route-point strong { overflow-wrap:anywhere; color:var(--app-ink); font-size:.85rem; }.route-dot { flex:none; width:9px; height:9px; border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 2px #2e9b8c; }.destination-dot { box-shadow:0 0 0 2px #d6a13a; }.route-connector { position:relative; border-top:1px dashed #afc6c1; text-align:center; }.route-connector span { position:relative; top:-.57rem; padding:0 .35rem; color:#5d7778; background:#fff; font-size:.64rem; font-weight:750; white-space:nowrap; }
-.cargo-strip { gap:.65rem; min-width:0; padding:.72rem .75rem; border:1px solid #edf2f1; border-radius:10px; background:var(--app-canvas); }.cargo-icon { display:grid; place-items:center; flex:none; width:32px; height:32px; border-radius:9px; color:#358d7d; background:#e6f2ee; }.cargo-copy { display:grid; min-width:0; flex:1; gap:.2rem; }.cargo-copy strong { overflow-wrap:anywhere; color:var(--app-ink); font-size:13px; }.cargo-copy strong span { color:#91aaa4; }.cargo-copy small { overflow-wrap:anywhere; color:var(--app-muted); font-size:.75rem; }.cargo-strip time { color:var(--app-muted); font-size:.66rem; white-space:nowrap; }.job-note { margin:.65rem 0 0; color:var(--app-muted); font-size:.75rem; }
 .driver-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.7rem; margin-top:.9rem; }
 .driver-form label,.cancel-field,.tracking-panel>label,.delivery-proof-field label { display:grid; min-width:0; gap:.35rem; color:#526d70; font-size:13px; font-weight:500; line-height:1.6; }
 .driver-form input,.cancel-field input,.tracking-panel input,.tracking-panel select,.delivery-proof-field input { box-sizing:border-box; width:100%; min-width:0; min-height:44px; padding:8px 12px; border:1px solid var(--app-control-line); border-radius:8px; outline:none; color:#244449; background:#fff; font:inherit; font-size:14px; font-weight:400; }
@@ -356,43 +544,169 @@ onUnmounted(() => { if (refreshTimer) window.clearInterval(refreshTimer) })
 .delivery-proof-field { padding:.75rem; border:1px dashed #bdd6d0; border-radius:9px; background:#fff; }
 .delivery-proof-field input { height:auto; padding:.5rem; }
 .request-hint { display:flex; align-items:center; gap:.55rem; margin:.8rem 0 .65rem; color:var(--app-muted); }.request-hint span { display:grid; place-items:center; flex:none; width:18px; height:18px; border:1px solid #b6cbc6; border-radius:50%; font-size:.65rem; font-weight:800; }.request-hint p { margin:0; font-size:.72rem; line-height:1.45; }.primary-action { min-height:40px; display:flex; justify-content:space-between; width:100%; padding:0 .85rem; border:0; border-radius:9px; color:#fff; background:#107c70; font:inherit; font-size:.79rem; font-weight:750; cursor:pointer; }.primary-action:hover { background:#0b695f; }.primary-action:disabled { opacity:.65; cursor:wait; }.delivered-action { background:#16845d; }.delivered-action:hover { background:#116e4d; }
+.delivery-proof-field { padding:.75rem; border:1px dashed #bdd6d0; border-radius:9px; background:#fff; }
+.delivery-proof-field input { height:auto; padding:.5rem; }
+.request-hint { display:flex; align-items:center; gap:.55rem; margin:.8rem 0 .65rem; color:var(--app-muted); }.request-hint span { display:grid; place-items:center; flex:none; width:18px; height:18px; border:1px solid #b6cbc6; border-radius:50%; font-size:.65rem; font-weight:800; }.request-hint p { margin:0; font-size:.72rem; line-height:1.45; }.primary-action { min-height:40px; display:flex; justify-content:space-between; width:100%; padding:0 .85rem; border:0; border-radius:9px; color:#fff; background:#107c70; font:inherit; font-size:.79rem; font-weight:750; cursor:pointer; }.primary-action:hover { background:#0b695f; }.primary-action:disabled { opacity:.65; cursor:wait; }.delivered-action { background:#16845d; }.delivered-action:hover { background:#116e4d; }
 .journey-progress { display:flex; align-items:center; margin:.9rem 0 .8rem; }.progress-step { display:grid; justify-items:center; gap:.25rem; color:var(--app-muted); }.progress-step span { display:grid; place-items:center; width:22px; height:22px; border:1px solid #d7e2e0; border-radius:50%; background:#fff; font-size:.65rem; font-weight:800; }.progress-step small { font-size:12px; text-align:center; max-width:76px; line-height:1.5; }.progress-step.done { color:var(--app-primary-dark); }.progress-step.done span { border-color:#168779; color:#fff; background:var(--app-primary); }.progress-track { flex:1; height:2px; margin:-1rem .35rem 0; background:#dce7e5; }.progress-track.reached { background:var(--app-primary); }
 .delivery-proof-field { display:grid; grid-column:1/-1; gap:.35rem; color:#627a7e; font-size:.67rem; }.delivery-proof-field label { display:grid; gap:.4rem; }.delivery-proof-field input { height:auto; padding:.4rem; }.delivery-proof-field small { color:var(--app-muted); }.delivery-proof-preview { display:block; width:min(100%,260px); max-height:180px; border:1px solid #dce7e5; border-radius:8px; object-fit:cover; }.delivery-proof-link { display:block; margin-top:.4rem; color:#107c70; font-size:.68rem; }
 .completed-note { display:flex; align-items:center; gap:.55rem; margin-top:.8rem; padding:.65rem .75rem; border-radius:8px; color:#39765d; background:#eff8f2; font-size:.74rem; }.completed-note span { font-weight:900; }
-.event-disclosure { margin-top:.8rem; border-top:1px solid #edf2f1; color:#3c5b5e; }.event-disclosure summary { display:flex; align-items:center; gap:.5rem; padding:.7rem 0 .2rem; color:#39766e; font-size:.72rem; font-weight:750; cursor:pointer; list-style-position:inside; }.event-disclosure summary span { padding:.12rem .45rem; border-radius:99px; color:#607b79; background:#eef5f3; font-size:.63rem; }.event-list { display:grid; gap:.7rem; margin:.5rem 0 0; padding:0 0 0 1.5rem; }.event-row { padding:.15rem 0 .45rem .2rem; color:var(--app-muted); font-size:.68rem; }.event-heading { display:flex; justify-content:space-between; gap:.5rem; }.event-heading strong { color:#365b5e; font-size:.7rem; }.event-heading time { color:var(--app-muted); font-size:.63rem; white-space:nowrap; }.event-summary { display:block; margin-top:.25rem; color:#536f70; font-size:.63rem; }.proof-line { display:flex; align-items:center; gap:.35rem; margin-top:.3rem; color:var(--app-muted); font-size:.62rem; overflow-wrap:anywhere; }.proof-dot { flex:none; width:7px; height:7px; border-radius:50%; background:#d9aa45; }.proof-dot.success { background:#278760; }.proof-dot.failed { background:#c65757; }.event-hash,.event-transaction { display:block; margin-top:.3rem; color:#617d7b; font-size:.59rem; overflow-wrap:anywhere; white-space:normal; }.event-error { display:block; margin-top:.3rem; color:#a94e4e; font-size:.63rem; }
-.board-footer { padding:.75rem 1.6rem; border-top:1px solid #eef3f2; color:var(--app-muted); font-size:.68rem; }
-@media (max-width:900px) { .summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.job-grid { grid-template-columns:1fr; } }
-@media (max-width:760px) { .driver-form { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media (max-width:600px) { .transport-page { width:calc(100% - 1rem); margin:1rem auto 2rem; }.summary-grid { gap:.55rem; margin: .75rem 0 1rem; }.summary-card { padding:.8rem; }.summary-label { max-width:112px; font-size:.7rem; }.summary-card strong { font-size:1.45rem; }.summary-card small { font-size:.63rem; }.summary-icon { width:34px; height:34px; }.board-heading { align-items:stretch; flex-direction:column; padding:1.1rem 1rem .9rem; }.search-box { width:auto; }.board-tabs { gap:0; padding:0 .55rem; }.board-tabs button { gap:.35rem; padding:.75rem .5rem .8rem; font-size:.72rem; }.board-tabs button::after { right:.4rem; left:.4rem; }.job-grid { gap:.7rem; padding:.75rem; }.job-card { padding:.85rem; }.route-line { grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr); }.route-point { gap:.4rem; }.route-point strong { font-size:.73rem; }.route-point small { font-size:.53rem; }.cargo-strip { flex-wrap:wrap; }.cargo-strip time { margin-left:2.55rem; }.driver-form,.tracking-panel { grid-template-columns:1fr; }.tracking-panel-heading,.tracking-panel :deep(.va-button) { grid-column:1; }.board-footer { padding:.7rem 1rem; } }
-.cancellation-panel { border-top: 1px solid var(--app-line); margin-top: 18px; }
-.cancellation-panel summary { min-height: 44px; padding: 12px 0; color: var(--app-danger); cursor: pointer; font-size: 13px; font-weight: 600; }
-.cancellation-panel p { font-size: 13px; color: var(--app-muted); margin: 0 0 12px; }
-.cancellation-panel .cancel-action { margin-top: 12px; min-height: 44px; }
-.board-tabs { flex-wrap: wrap; }
-.board-tabs button { min-height: 44px; }
-.search-box { min-height: 46px; }
-.job-topline { flex-wrap: wrap; }
-.job-code strong { overflow-wrap: anywhere; }
-@media (max-width: 600px) { .search-box input { font-size: 16px; } }
+.event-disclosure { margin-top:.8rem; border-top:1px solid #edf2f1; color:#3c5b5e; }.event-disclosure summary { display:flex; align-items:center; gap:.5rem; padding:.7rem 0 .2rem; color:#39766e; font-size:.72rem; font-weight:750; cursor:pointer; list-style-position:inside; }.event-disclosure summary span { padding:.12rem .45rem; border-radius:99px; color:#607b79; background:#eef5f3; font-size:.63rem; }.event-list { display:grid; gap:.7rem; margin:.5rem 0 0; padding:0 0 0 1.5rem; }.event-row { padding:.15rem 0 .45rem .2rem; color:var(--app-muted); font-size:.68rem; }.event-heading { display:flex; justify-content:space-between; gap:.5rem; }.event-heading strong { color:#365b5e; font-size:.7rem; }.event-heading time { color:var(--app-muted); font-size:.63rem; white-space:nowrap; }.event-summary { display:block; margin-top:.25rem; color:#536f70; font-size:.63rem; }.proof-line { display:flex; align-items:center; gap:.35rem; margin-top:.3rem; color:var(--app-muted); font-size:.62rem; overflow-wrap:anywhere; }.proof-dot { flex:none; width:7px; height:7px; border-radius:50%; background:#d9aa45; }.proof-dot.success { background:#278760; }.proof-dot.failed { background:#c65757; }.event-error { display:block; margin-top:.3rem; color:#a94e4e; font-size:.63rem; }
 
-.summary-card strong, .board-tabs button span { font-variant-numeric: tabular-nums; }
-.status-pill, .route-point small, .job-code small { font-size: 12px; }
-.event-heading time, .event-summary, .proof-line { font-size: 12px; }
-@media (max-width: 600px) {
-  .summary-card small { display: none; }
-  .summary-card .summary-label { font-size: 12px; max-width: none; }
-  .route-line { grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr); }
+.transport-workspace-page {
+  min-width: 0;
 }
-.job-section-title { font-size: 14px; font-weight: 600; margin: 24px 0 12px; }
-.dispatch-board > :deep(.loading-state) { padding: 24px; }
-.job-card, .summary-card, .dispatch-board { border-radius: var(--app-radius); }
-.tracking-panel-heading small, .request-hint p, .event-hash, .event-transaction, .event-disclosure summary, .board-footer, .cargo-strip time { font-size: 12px; line-height: 1.7; }
+.transport-banner, .summary-card, .dispatch-board, .side-panel {
+  min-width: 0;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: white;
+}
+.transport-banner {
+  min-height: 138px;
+  display: grid;
+  align-content: center;
+  padding: 20px 26px;
+  background: linear-gradient(90deg, #eff6fb 35%, #eaf4fad9 43%, transparent 64%),
+    url('../../assets/transport-banner.png') right center / auto 100% no-repeat, #eaf4fa;
+}
+.transport-banner h1 { margin: 0 0 4px; color: #092f42; font-size: var(--app-text-title); letter-spacing: -.04em; overflow-wrap: anywhere; max-width: 46%; }
+.transport-banner p { max-width: min(46%, 535px); margin: 0; color: #25495f; font-size: 15px; line-height: 1.55; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+.summary-card { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: center; align-items: center; gap: 3px 17px; min-height: 124px; padding: 16px 20px; }
+.summary-icon, .truck-icon, .mini-icon { display: grid; place-items: center; flex: none; color: var(--app-primary); background: var(--app-primary-soft); }
+.summary-icon { width: 56px; height: 56px; grid-row: span 3; align-self: start; border-radius: 22px; font-size: 28px; }
+.summary-label { font-weight: 650; }
+.summary-card strong { font-size: 32px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.summary-card small { justify-self: start; padding: 3px 10px; border-radius: 20px; color: var(--app-muted); background: #eff4f7; line-height: 1.4; }
+[data-tone='blue'] :is(.summary-icon, small), .moving:is(.truck-icon, .status-pill) { background: var(--app-info-soft); color: var(--app-info); }
+[data-tone='green'] :is(.summary-icon, small), .delivered:is(.truck-icon, .status-pill) { background: var(--app-success-soft); color: var(--app-success); }
+[data-tone='amber'] .summary-icon, .task-list .mini-icon, :is(.available, .planning, .reported).status-pill { background: var(--app-warning-soft); color: var(--app-warning); }
+.cancelled.status-pill { background: var(--app-danger-soft); color: var(--app-danger); }
+.transport-overview .transport-columns { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); align-items: start; gap: 14px; }
+.transport-aside { display: grid; gap: 10px; min-width: 0; }
+.dispatch-board { box-shadow: 0 14px 30px #18355008; }
+.board-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 19px 23px 8px; }
+.board-heading h2, .side-panel h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-weight: 730; }
+.board-heading h2 { font-size: var(--app-text-section); }
+.board-heading h2 .va-icon, .side-panel h2 .va-icon { color: var(--app-primary); }
+a.transport-button { text-decoration: none; }
+.transport-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--app-control-height); padding: 7px 12px; border: 1px solid var(--app-line); border-radius: var(--app-control-radius); color: var(--app-primary-dark); background: var(--app-surface); font: inherit; font-weight: 680; cursor: pointer; text-align: center; }
+.transport-button:hover { background: var(--app-primary-soft); }
+.transport-button.primary { border-color: var(--app-primary); color: white; background: var(--app-primary); }
+.transport-button.primary:hover { background: var(--app-primary-dark); }
+.transport-button:disabled { opacity: .6; cursor: wait; }
+.icon-action { flex: none; width: var(--app-control-height); padding: 0; color: var(--app-ink); border-radius: 50%; }
+.transport-workspace-page :is(a, button, input, select, summary):focus-visible { outline: var(--app-focus-width) solid var(--app-primary); outline-offset: 2px; }
+.board-tabs { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 0 20px; border-bottom: 1px solid var(--app-line); }
+.board-tabs button { min-height: 46px; padding: 4px 8px; border: 0; border-bottom: 3px solid transparent; color: #34536b; background: transparent; font: inherit; font-weight: 600; cursor: pointer; }
+.board-tabs button.selected { border-color: var(--app-primary); color: var(--app-primary); }
+.board-tabs button span { font-variant-numeric: tabular-nums; margin-left: 3px; }
+.search-box { display: flex; align-items: center; gap: 8px; width: min(370px, 75vw); min-height: 46px; border: 1px solid var(--app-control-line); border-radius: var(--app-control-radius); padding: 0 12px; color: var(--app-muted); background: white; }
+.search-box input { min-width: 0; width: 100%; min-height: var(--app-control-height); border: 0; background: transparent; color: var(--app-ink); font: inherit; }
+.job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: 12px; padding: 13px; }
+.transport-overview .job-grid { grid-template-columns: 1fr; }
+.job-card { min-width: 0; display: grid; align-content: start; gap: 13px; padding: 16px; border: 1px solid var(--app-line); border-radius: var(--app-radius); overflow-wrap: anywhere; background: #fcfdff; }
+.compact-job { min-height: 105px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) minmax(115px, .95fr) auto; align-content: center; align-items: center; gap: 12px; }
+.job-topline, .job-code { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.job-topline { justify-content: space-between; flex-wrap: wrap; }
+.job-code div { display: grid; min-width: 0; gap: 3px; }
+.job-code strong { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-code small, .row-meta small { color: var(--app-muted); font-size: 12px; }
+.truck-icon { width: 44px; height: 44px; border-radius: 14px; font-size: 23px; }
+.status-pill { display: inline-flex; width: fit-content; max-width: 100%; padding: 5px 10px; border-radius: var(--app-pill-radius); font-size: var(--app-text-xs); font-weight: 700; line-height: 1.4; }
+.row-meta { display: grid; gap: 6px; }
+.row-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
+.route-line { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: center; padding-block: 4px; }
+.route-point { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.route-point div { display: grid; gap: 2px; }
+.route-point small { color: var(--app-muted); }
+.route-dot { flex: none; width: 9px; height: 9px; border-radius: 100%; background: var(--app-primary); }
+.route-dot.destination-dot { background: #c48524; }
+.route-connector { color: var(--app-primary); }
+.cargo-strip { border-radius: 10px; padding: 9px 12px; color: #31536b; background: #edf4f8; }
+.board-footer { padding: 11px 23px 19px; color: var(--app-muted); font-size: 13px; }
+.board-footer a { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; color: var(--app-primary); font-weight: 700; }
+.side-panel { padding: 16px 18px; }
+.side-panel h2 { margin-bottom: 10px; font-size: 16px; line-height: 1.4; }
+.delivery-progress { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(0, 1.25fr); align-items: center; gap: 12px; }
+.delivery-ring { position: relative; width: min(100%, 116px); aspect-ratio: 1; justify-self: center; }
+.delivery-ring svg { width: 100%; transform: rotate(-90deg); }
+.delivery-ring circle { fill: none; stroke: #e4eef1; stroke-width: 11; }
+.delivery-ring .ring-fill { stroke: #008a74; stroke-linecap: round; }
+.delivery-ring div { position: absolute; inset: 0; display: grid; align-content: center; text-align: center; line-height: 1.15; }
+.delivery-ring strong { font-size: 25px; }
+.progress-legend, .task-list, .activity-list { display: grid; padding: 0; margin: 0; list-style: none; }
+.progress-legend li { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #e8eff3; }
+.progress-legend strong { margin-left: auto; }
+.legend-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #d39b26; }
+.legend-dot.delivered { background: #008a74; }
+.legend-dot.moving { background: #287ccb; }
+.legend-dot.reported { background: #6973aa; }
+.task-list li, .activity-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 5px 0; overflow-wrap: anywhere; font-size: 12px; }
+.task-list li + li { border-top: 1px solid #e8eff3; }
+.task-list small, .activity-list time { display: block; color: var(--app-muted); font-size: 12px; }
+.task-list .transport-button { min-height: 36px; background: var(--app-primary-soft); }
+.mini-icon { width: 34px; height: 34px; border-radius: 11px; font-size: 17px; }
+.activity-list li { position: relative; }
+.activity-list li:not(:last-child)::before { position: absolute; top: 26px; bottom: -10px; left: 12px; width: 1px; background: var(--app-line); content: ''; }
+.activity-list .mini-icon { z-index: 0; width: 25px; height: 25px; border-radius: 50%; font-size: 14px; }
+.activity-list button { display: block; min-height: 36px; padding: 0; border: 0; color: var(--app-ink); background: transparent; text-align: left; font: inherit; cursor: pointer; }
+.activity-list button:hover { text-decoration: underline; }
+.activity-list time { max-width: 11ch; text-align: right; }
+.panel-scope, .panel-empty, .page-scope { margin: 8px 0 0; color: var(--app-muted); font-size: 12px; }
+.load-error { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; }
+.message { margin: 12px 0; }
+.transport-skeleton { display: block; width: 100%; height: 16px; border-radius: 8px; background: #e7eff4; }
+.stat-skeleton { width: min(46px, 100%); height: 32px; }
+.side-skeleton { height: 68px; }
+.skeleton-card { min-height: 105px; align-content: center; }
+.skeleton-card span:first-child { width: 44%; }
+.skeleton-card span:last-child { width: 78%; }
+.transport-dialog { width: min(calc(100vw - 20px), 680px); max-height: calc(100dvh - 24px); margin: auto; padding: 0; border: 1px solid var(--app-line); border-radius: var(--app-radius); color: var(--app-ink); background: white; overflow: auto; overscroll-behavior: contain; }
+.transport-dialog::backdrop { background: #062f397d; }
+.detail-content { padding: clamp(14px, 4vw, 25px); overflow-wrap: anywhere; }
+.detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.detail-heading h2 { margin: 3px 0 0; font-size: var(--app-text-section); }
+.detail-heading small, .detail-facts dt { color: var(--app-muted); }
+.detail-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 14px; margin: 12px 0 20px; border: 1px solid var(--app-line); border-radius: 12px; background: #f5f9fb; }
+.detail-facts dd { margin: 2px 0 0; font-weight: 650; }
+.job-actions, .cancellation-panel { margin-top: 12px; }
+.job-section-title { margin: 20px 0 6px; font-size: 16px; }
+.cancellation-panel summary { min-height: var(--app-control-height); padding: 12px 0; color: #a2383f; cursor: pointer; font-weight: 650; }
+.cancel-action { min-height: var(--app-control-height); margin-top: 8px; padding: 0 12px; border: 1px solid #e7bdc0; border-radius: 8px; color: #973038; background: #fff0f1; cursor: pointer; }
 .event-heading { flex-wrap: wrap; }
-.transport-page :is(input, select):focus-visible { outline: 2px solid var(--app-primary); outline-offset: 2px; }
-@media (max-width: 600px) {
-  .summary-card { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .summary-icon { grid-column: 1; grid-row: auto; width: 32px; height: 32px; }
-  .transport-page :is(input, select) { font-size: 16px; }
-  .progress-step { max-width: 66px; }
+.event-heading :is(strong, time), .event-summary, .proof-line { font-size: 12px; }
+@media (max-width: 1420px) {
+  .compact-job { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .compact-job .journey-progress { grid-row: 2; grid-column: 1 / -1; }
+}
+@media (max-width: 1279px) {
+  .transport-overview .transport-columns { grid-template-columns: 1fr; }
+  .transport-aside { grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); }
+  .compact-job { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) minmax(115px, .95fr) auto; }
+  .compact-job .journey-progress { grid-row: auto; grid-column: auto; }
+}
+@media (max-width: 1000px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .transport-banner { padding: 16px; background: linear-gradient(100deg, #eaf4fa 32%, #eaf4faf0 66%, #eaf4fa65), url('../../assets/transport-banner.png') right center / auto 100% no-repeat, #eaf4fa; }
+  .transport-banner h1 { max-width: 100%; }
+  .transport-banner p { max-width: 87%; font-size: 14px; }
+  .summary-grid { gap: 8px; }
+  .summary-card { grid-template-columns: minmax(0, 1fr); min-height: 116px; padding: 10px 11px; gap: 5px; }
+  .summary-icon { width: 34px; height: 34px; grid-row: auto; border-radius: 11px; font-size: 19px; }
+  .summary-card strong { font-size: 24px; }
+  .summary-card small { padding: 2px 6px; }
+  .board-heading { padding: 12px 12px 4px; }
+  .board-heading h2 { font-size: 17px; }
+  .board-tabs { gap: 0 5px; padding-inline: 8px; }
+  .board-tabs button { padding-inline: 6px; font-size: 13px; }
+  .job-grid { padding: 8px; }
+  .job-card { padding: 12px; }
+  .compact-job { grid-template-columns: minmax(0, 1fr) auto; }
+  .compact-job .job-topline, .compact-job .journey-progress { grid-column: 1 / -1; }
+  .transport-workspace-page :is(input, select) { font-size: 16px; }
+  .driver-form, .tracking-panel { grid-template-columns: 1fr; }
+  .task-list .transport-button, .transport-button { min-height: var(--app-control-height); }
+  .icon-action { width: 44px; }
 }
 </style>

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import FarmerOverview from './FarmerOverview.vue'
+import DistributorOverview from '../transports/DistributorOverview.vue'
+import LoadingState from '../../components/LoadingState.vue'
 import EmptyState from '../../components/EmptyState.vue'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { VaBadge, VaButton, VaModal, VaInnerLoading, VaAlert, VaIcon } from 'vuestic-ui'
-import { useRouter } from 'vue-router'
 
 import { useAuthStore } from '../../stores/auth.store'
 import { useBatchesStore } from '../../stores/batches.store'
@@ -14,12 +16,14 @@ import {
   STATUS_LABELS,
   ROLE_LABELS,
   type BlockchainRecord,
+  type LotTransport,
+  type FarmListResponse,
   type Role,
 } from '../../types'
 
+const TransporterDashboard = defineAsyncComponent(() => import('../transports/TransporterDashboard.vue'))
 const authStore = useAuthStore()
 const batchesStore = useBatchesStore()
-const router = useRouter()
 
 const {
   batches,
@@ -39,25 +43,10 @@ const {
 } = storeToRefs(batchesStore)
 const { loadBatches, openDetail, closeDetail, setPage, applyFilters } = batchesStore
 const farmCount = ref<number | null>(null)
-const transportOverview = ref<{
-  available: Array<{
-    transport_code: string
-    from_location: string
-    to_location: string
-    quantity: number
-    lot: { lot_code: string }
-  }>
-  assigned: Array<{
-    transport_code: string
-    status: string
-    from_location: string
-    to_location: string
-    quantity: number
-    lot: { lot_code: string }
-  }>
-}>({ available: [], assigned: [] })
-const loadingTransportOverview = ref(false)
-const transportOverviewError = ref('')
+const managedFarms = ref<FarmListResponse['items']>([])
+const receivingTrips = ref<LotTransport[]>([])
+const loadingReceivingOverview = ref(false)
+const receivingOverviewError = ref('')
 
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const roleLabel = computed(() => {
@@ -89,11 +78,9 @@ const roleCopy = computed(
       },
       DISTRIBUTOR: {
         title: 'Tổng quan phân phối',
-        description: 'Xác nhận hàng đến và tra cứu hồ sơ nguồn gốc của các lô được chia sẻ.',
-        action: 'Mở hàng nhận',
+        description: 'Theo dõi chuyến gửi đến và xác nhận khi đã nhận hàng thực tế.',
+        action: 'Xem hàng nhận',
         actionIcon: 'inventory_2',
-        tableTitle: 'Vụ nuôi có thể tra cứu',
-        tableDescription: 'Thông tin truy xuất hiện có trong phạm vi tổ chức.',
       },
       ADMIN: {
         title: 'Tổng quan hoạt động hệ thống',
@@ -108,39 +95,6 @@ const roleCopy = computed(
 )
 
 const homeStats = computed(() => {
-  if (role.value === 'TRANSPORTER')
-    return [
-      {
-        label: 'Yêu cầu mới',
-        value: transportOverview.value.available.length,
-        hint: 'Đang chờ người nhận',
-        icon: 'inbox',
-        tone: 'amber',
-      },
-      {
-        label: 'Đang vận chuyển',
-        value: transportOverview.value.assigned.filter((item) => item.status === 'IN_TRANSIT')
-          .length,
-        hint: 'Chuyến đang thực hiện',
-        icon: 'local_shipping',
-        tone: 'blue',
-      },
-      {
-        label: 'Chờ khởi hành',
-        value: transportOverview.value.assigned.filter((item) => item.status === 'PLANNING').length,
-        hint: 'Chuyến bạn đã nhận',
-        icon: 'schedule',
-        tone: 'teal',
-      },
-      {
-        label: 'Đã bàn giao',
-        value: transportOverview.value.assigned.filter((item) => item.status === 'DELIVERED')
-          .length,
-        hint: 'Chuyến hoàn tất',
-        icon: 'task_alt',
-        tone: 'green',
-      },
-    ]
   if (role.value === 'FARMER')
     return [
       {
@@ -172,37 +126,42 @@ const homeStats = computed(() => {
         tone: 'amber',
       },
     ]
-  if (role.value === 'DISTRIBUTOR')
+  if (role.value === 'DISTRIBUTOR') {
+    const trips = receivingTrips.value
+    const inTransit = trips.filter((trip) => trip.status === 'IN_TRANSIT')
+    const awaitingReceipt = inTransit.filter((trip) => trip.delivery_reported_at).length
+
     return [
       {
-        label: 'Vụ nuôi có thể tra cứu',
-        value: summary.value?.total ?? 0,
-        hint: 'Trong phạm vi tổ chức',
-        icon: 'qr_code_2',
+        label: 'Chuyến gửi đến',
+        value: trips.length,
+        hint: 'Chuyến được gửi đến tổ chức',
+        icon: 'inventory_2',
         tone: 'teal',
       },
       {
-        label: 'Đã thu hoạch',
-        value: summary.value?.byStatus?.HARVESTED ?? 0,
-        hint: 'Có nguồn gốc lô hàng',
-        icon: 'inventory_2',
-        tone: 'green',
-      },
-      {
-        label: 'Đang hoàn thiện',
-        value: summary.value?.byStatus?.GROWING ?? 0,
-        hint: 'Đang trong giai đoạn nuôi',
-        icon: 'schedule',
+        label: 'Đang vận chuyển',
+        value: inTransit.length - awaitingReceipt,
+        hint: 'Chưa báo giao hàng',
+        icon: 'local_shipping',
         tone: 'blue',
       },
       {
-        label: 'Đã hoàn tất',
-        value: summary.value?.byStatus?.COMPLETED ?? 0,
-        hint: 'Hồ sơ vụ đã hoàn thành',
-        icon: 'task_alt',
+        label: 'Chờ xác nhận',
+        value: awaitingReceipt,
+        hint: 'Bên vận chuyển đã báo giao',
+        icon: 'schedule',
         tone: 'amber',
       },
+      {
+        label: 'Đã nhận hàng',
+        value: trips.filter((trip) => trip.status === 'DELIVERED').length,
+        hint: 'Đã xác nhận nhận hàng',
+        icon: 'task_alt',
+        tone: 'green',
+      },
     ]
+  }
   return [
     {
       label: 'Tổng vụ nuôi',
@@ -233,6 +192,16 @@ const homeStats = computed(() => {
       tone: 'green',
     },
   ]
+})
+
+const loadingOverview = computed(() => {
+  if (role.value === 'DISTRIBUTOR') return loadingReceivingOverview.value
+  return loadingBatches.value
+})
+
+const overviewError = computed(() => {
+  if (role.value === 'DISTRIBUTOR') return receivingOverviewError.value
+  return batchesError.value
 })
 
 const greeting = computed(() => {
@@ -275,17 +244,17 @@ function changePage(nextPage: number) {
 
 onUnmounted(() => clearTimeout(searchTimer))
 
-async function loadTransportOverview() {
-  loadingTransportOverview.value = true
-  transportOverviewError.value = ''
+async function loadReceivingOverview() {
+  loadingReceivingOverview.value = true
+  receivingOverviewError.value = ''
   try {
-    transportOverview.value = await api.get<typeof transportOverview.value>('/transports')
+    const result = await api.get<{ items: typeof receivingTrips.value }>('/transports/receiving')
+    receivingTrips.value = result.items
   } catch (error) {
-    transportOverviewError.value =
-      error instanceof Error ? error.message : 'Không tải được dữ liệu vận chuyển.'
-    transportOverview.value = { available: [], assigned: [] }
+    receivingOverviewError.value =
+      error instanceof Error ? error.message : 'Không tải được thống kê hàng nhận.'
   } finally {
-    loadingTransportOverview.value = false
+    loadingReceivingOverview.value = false
   }
 }
 
@@ -367,14 +336,16 @@ onMounted(async () => {
     if (!authStore.user) {
       await authStore.fetchMe()
     }
-    if (role.value === 'TRANSPORTER') {
-      await loadTransportOverview()
+    if (role.value === 'TRANSPORTER') return
+    if (role.value === 'DISTRIBUTOR') {
+      await loadReceivingOverview()
     } else {
       await loadBatches()
       if (role.value === 'FARMER') {
         try {
-          const result = await api.get<{ count: number }>('/farms')
+          const result = await api.get<FarmListResponse>('/farms')
           farmCount.value = result.count
+          managedFarms.value = result.items
         } catch {
           farmCount.value = null
         }
@@ -385,7 +356,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="home-page-promax">
+  <TransporterDashboard v-if="isAuthenticated && role === 'TRANSPORTER'" overview />
+  <main v-else class="home-page-promax">
     <!-- KHU VỰC CHƯA ĐĂNG NHẬP (LANDING PAGE) -->
     <template v-if="!isAuthenticated">
       <section class="hero-promax">
@@ -491,16 +463,20 @@ onMounted(async () => {
             <a v-else class="workspace-action-button" href="#lot-directory">{{
               roleCopy.action
             }}</a>
-            <a v-if="role === 'DISTRIBUTOR'" class="workspace-secondary-link" href="#lot-directory"
-              >Tra cứu vụ nuôi</a
-            >
+            <va-button
+              v-if="role === 'DISTRIBUTOR'"
+              preset="secondary"
+              icon="refresh"
+              :loading="loadingReceivingOverview"
+              @click="loadReceivingOverview"
+            >Làm mới thống kê</va-button>
           </div>
         </header>
 
         <section
           class="home-stats"
           aria-label="Chỉ số tổng quan"
-          :aria-busy="role === 'TRANSPORTER' ? loadingTransportOverview : loadingBatches"
+          :aria-busy="loadingOverview"
         >
           <article v-for="stat in homeStats" :key="stat.label" class="home-stat-card">
             <span class="home-stat-icon" :class="`tone-${stat.tone}`"
@@ -508,98 +484,24 @@ onMounted(async () => {
             /></span>
             <div>
               <p>{{ stat.label }}</p>
-              <strong>{{
-                (
-                  role === 'TRANSPORTER'
-                    ? loadingTransportOverview || transportOverviewError
-                    : loadingBatches || batchesError
-                )
-                  ? '—'
-                  : stat.value
-              }}</strong
+              <strong>{{ loadingOverview || overviewError ? '—' : stat.value }}</strong
               ><small>{{ stat.hint }}</small>
             </div>
           </article>
         </section>
 
-        <section v-if="role === 'TRANSPORTER'" class="transport-overview-card">
-          <div class="overview-card-heading">
-            <div>
-              <h2>{{ roleCopy.tableTitle }}</h2>
-              <p>{{ roleCopy.tableDescription }}</p>
-            </div>
-            <va-button preset="secondary" @click="router.push({ name: 'transports' })"
-              >Mở bảng điều phối<va-icon name="arrow_forward" size="small" class="ml-1"
-            /></va-button>
-          </div>
-          <va-alert v-if="transportOverviewError" color="danger" class="mb-4" role="alert">{{
-            transportOverviewError
-          }}</va-alert>
-          <va-inner-loading :loading="loadingTransportOverview">
-            <div class="transport-preview-grid">
-              <div class="transport-preview-column">
-                <div class="preview-column-title">
-                  <span class="preview-indicator waiting"></span><strong>Đang chờ nhận</strong
-                  ><span>{{ transportOverview.available.length }}</span>
-                </div>
-                <article
-                  v-for="item in transportOverview.available.slice(0, 3)"
-                  :key="item.transport_code"
-                  class="transport-preview-row"
-                >
-                  <span class="preview-code">{{ item.transport_code }}</span
-                  ><span>{{ item.from_location }} → {{ item.to_location }}</span
-                  ><small>{{ item.lot.lot_code }} · {{ formatNumber(item.quantity) }} kg</small>
-                </article>
-                <div
-                  v-if="
-                    !loadingTransportOverview &&
-                    !transportOverviewError &&
-                    !transportOverview.available.length
-                  "
-                  class="preview-empty"
-                >
-                  Chưa có yêu cầu mới.
-                </div>
-              </div>
-              <div class="transport-preview-column">
-                <div class="preview-column-title">
-                  <span class="preview-indicator moving"></span><strong>Chuyến của tôi</strong
-                  ><span>{{ transportOverview.assigned.length }}</span>
-                </div>
-                <article
-                  v-for="item in transportOverview.assigned.slice(0, 3)"
-                  :key="item.transport_code"
-                  class="transport-preview-row"
-                >
-                  <span class="preview-code"
-                    >{{ item.transport_code }}
-                    <em :class="`preview-status-${item.status.toLowerCase()}`">{{
-                      item.status === 'DELIVERED'
-                        ? 'Đã giao'
-                        : item.status === 'IN_TRANSIT'
-                          ? 'Đang đi'
-                          : item.status === 'CANCELLED'
-                            ? 'Đã hủy'
-                            : 'Chờ chạy'
-                    }}</em></span
-                  ><span>{{ item.from_location }} → {{ item.to_location }}</span
-                  ><small>{{ item.lot.lot_code }} · {{ formatNumber(item.quantity) }} kg</small>
-                </article>
-                <div
-                  v-if="
-                    !loadingTransportOverview &&
-                    !transportOverviewError &&
-                    !transportOverview.assigned.length
-                  "
-                  class="preview-empty"
-                >
-                  Bạn chưa nhận chuyến nào.
-                </div>
-              </div>
-            </div>
-          </va-inner-loading>
-        </section>
+        <template v-if="role === 'DISTRIBUTOR'">
+          <va-alert v-if="receivingOverviewError" color="danger" role="alert">
+            {{ receivingOverviewError }}
+          </va-alert>
+          <LoadingState v-else-if="loadingReceivingOverview" />
+          <template v-else>
+            <DistributorOverview :trips="receivingTrips" />
+            <p class="workspace-description distribution-scope">
+              Tổng quan dựa trên tối đa 100 chuyến gửi đến gần nhất.
+            </p>
+          </template>
+        </template>
 
         <section
           v-if="
@@ -633,9 +535,11 @@ onMounted(async () => {
             </div>
           </dl>
         </section>
+        <FarmerOverview v-if="role === 'FARMER'" :farms="managedFarms" :recent="batches" />
+
         <!-- Hồ sơ lô phù hợp theo quyền của vai trò -->
         <section
-          v-if="role !== 'TRANSPORTER'"
+          v-if="role === 'FARMER' || role === 'ADMIN'"
           id="lot-directory"
           class="table-card-promax"
           aria-labelledby="lot-directory-title"
@@ -704,9 +608,7 @@ onMounted(async () => {
                 ? 'Thử đổi từ khóa hoặc trạng thái.'
                 : role === 'FARMER'
                   ? 'Tạo cơ sở và vụ nuôi để bắt đầu xây dựng hồ sơ nguồn gốc.'
-                  : role === 'DISTRIBUTOR'
-                    ? 'Hiện chưa có vụ nuôi nào được chia sẻ với tổ chức của bạn.'
-                    : 'Chưa có hồ sơ nào được ghi nhận trên hệ thống.'
+                  : 'Chưa có hồ sơ nào được ghi nhận trên hệ thống.'
             "
           />
 
@@ -793,7 +695,8 @@ onMounted(async () => {
 
     <!-- MODAL CHI TIẾT & BLOCKCHAIN TIMELINE (Cấu trúc V4 - Trị dứt điểm vỡ layout) -->
     <va-modal
-      title="batch-detail-title"
+      v-if="role === 'FARMER' || role === 'ADMIN'"
+      title="batch-detail-title" :mobile-fullscreen="false"
       :model-value="detailVisible"
       @update:model-value="
         (value: boolean) => {
@@ -1163,11 +1066,8 @@ onMounted(async () => {
 .workspace-action-button:hover {
   background: var(--app-primary-dark);
 }
-.workspace-secondary-link {
-  color: var(--app-primary-dark);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  padding: 8px;
+.distribution-scope {
+  margin-top: 12px;
 }
 .home-stats {
   display: grid;
@@ -1284,8 +1184,7 @@ onMounted(async () => {
   background: var(--app-primary);
   border-radius: 8px;
 }
-.table-card-promax,
-.transport-overview-card {
+.table-card-promax {
   min-width: 0;
   background: var(--app-surface);
   border: 1px solid var(--app-line);
@@ -1392,61 +1291,6 @@ onMounted(async () => {
   gap: 16px;
   padding: 48px 16px;
   color: var(--app-muted);
-}
-.transport-preview-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 32px;
-}
-.preview-column-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  font-size: 13px;
-}
-.preview-column-title > span:last-child {
-  margin-left: auto;
-  color: var(--app-muted);
-}
-.preview-indicator {
-  width: 6px;
-  height: 6px;
-  background: var(--app-warning);
-  border-radius: 50%;
-}
-.preview-indicator.moving {
-  background: var(--app-info);
-}
-.transport-preview-row {
-  display: grid;
-  gap: 6px;
-  padding: 16px 0;
-  border-top: 1px solid var(--app-line);
-  overflow-wrap: anywhere;
-}
-.preview-code {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--app-primary-dark);
-}
-.preview-code em {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--app-canvas);
-  color: var(--app-muted);
-  font-size: 12px;
-  font-style: normal;
-}
-.transport-preview-row small,
-.preview-empty {
-  color: var(--app-muted);
-  font-size: 13px;
-}
-.preview-empty {
-  padding: 24px 0;
 }
 .custom-modal-container {
   display: flex;
@@ -1674,7 +1518,6 @@ onMounted(async () => {
     border-top: 1px solid var(--app-line);
   }
   .production-overview,
-  .transport-preview-grid,
   .detail-grid-promax {
     grid-template-columns: minmax(0, 1fr);
     gap: 24px;
@@ -1755,8 +1598,7 @@ onMounted(async () => {
   .home-stat-card strong {
     font-size: 28px;
   }
-  .table-card-promax,
-  .transport-overview-card {
+  .table-card-promax {
     padding: 16px;
   }
   .table-header-promax,

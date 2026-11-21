@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { draftDismiss } from '../../components/overlay-dismiss'
 import LoadingState from '../../components/LoadingState.vue'
 import DecimalField from '../../components/DecimalField.vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -12,17 +13,32 @@ import {
   VaAlert, VaCard, VaCardContent, VaBadge, VaIcon
 } from 'vuestic-ui'
 import { api } from '../../api/client'
+import { useAuthStore } from '../../stores/auth.store'
 import { usePondsStore } from '../../stores/ponds.store'
-import type { FarmResponse, Pond, PondInput, PondStatus } from '../../types'
+import { usePondBatchesStore } from '../../stores/pond-batches.store'
+import { STATUS_LABELS, type FarmResponse, type Pond, type PondInput, type PondStatus } from '../../types'
 
 const route = useRoute()
 const router = useRouter()
 const store = usePondsStore()
+const batchStore = usePondBatchesStore()
+const auth = useAuthStore()
+const farmer = computed(() => auth.user?.role === 'FARMER')
+const detailId = ref('')
+const detailPond = computed(() => store.items.find((pond) => pond.id === detailId.value))
 
 const { items, loading, saving, error } = storeToRefs(store)
 const farmId = computed(() => String(route.params.farmId))
 const farmName = ref('')
+const activeBatches = computed(() => detailPond.value && batchStore.scope === `/farms/${farmId.value}/ponds/${detailPond.value.id}/batches`
+  ? batchStore.items.filter((batch) => ['PREPARING', 'GROWING', 'READY_FOR_HARVEST'].includes(batch.status))
+  : [])
 let contextVersion = 0
+
+function openDetail(pond: Pond) {
+  detailId.value = pond.id
+  void batchStore.load(farmId.value, pond.id)
+}
 
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
@@ -96,8 +112,8 @@ function openEdit(pond: Pond) {
   showForm.value = true
 }
 
+const formDismiss = draftDismiss(() => form, () => saving.value, showForm).dismiss
 function close() {
-  if (saving.value) return
   showForm.value = false
   reset()
 }
@@ -151,7 +167,7 @@ async function remove(pond: Pond) {
 
 async function loadContext() {
   const version = ++contextVersion; const id = farmId.value
-  showForm.value = false; reset(); success.value = ''; farmName.value = ''; query.value = ''; filterStatus.value = ''
+  detailId.value = ''; showForm.value = false; reset(); success.value = ''; farmName.value = ''; query.value = ''; filterStatus.value = ''
   await store.load(id)
   if (version !== contextVersion) return
   try {
@@ -165,7 +181,7 @@ onUnmounted(() => { ++contextVersion })
 </script>
 
 <template>
-  <main class="ponds-page" :aria-busy="loading">
+  <main class="ponds-page" :class="{ 'farmer-ponds': farmer }" :aria-busy="loading">
 
     <PageHeader title="Ao nuôi" :context="farmName" description="Quản lý thông tin ao và mở từng vụ nuôi tại cơ sở này.">
       <template #actions>
@@ -181,7 +197,7 @@ onUnmounted(() => { ++contextVersion })
       {{ error }} <va-button preset="secondary" size="small" @click="loadContext()">Thử lại</va-button>
     </va-alert>
 
-    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="ao trong danh sách đã tải" />
+    <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage" :statuses="statuses" search-placeholder="Mã ao hoặc tên ao…"  :total="filteredItems.length" :page-size="listPageSize" :loading="loading" label="ao trong danh sách đã tải" />
     <LoadingState v-if="loading" />
     <va-inner-loading v-else :loading="false">
       <!-- Empty State -->
@@ -229,6 +245,7 @@ onUnmounted(() => { ++contextVersion })
               @click="router.push({ name: 'pond-batches', params: { farmId, pondId: pond.id } })">
               Xem vụ nuôi
             </va-button>
+            <va-button v-if="farmer" preset="secondary" icon="info" aria-label="Chi tiết ao" @click="openDetail(pond)" />
             <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(pond)" />
             <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(pond)" />
           </div>
@@ -236,10 +253,44 @@ onUnmounted(() => { ++contextVersion })
       </div>
     </va-inner-loading>
 
+    <va-modal v-if="detailPond" title="pond-detail-title" :mobile-fullscreen="false" :model-value="true" hide-default-actions
+      @update:model-value="(open: boolean) => { if (!open) detailId = '' }">
+      <template #header><h2 id="pond-detail-title">{{ detailPond.pond_name }}</h2></template>
+      <dl class="pond-facts">
+        <div><dt>Mã ao</dt><dd>{{ detailPond.pond_code }}</dd></div>
+        <div><dt>Cơ sở</dt><dd>{{ farmName || '—' }}</dd></div>
+        <div><dt>Trạng thái</dt><dd>{{ statusLabels[detailPond.status] }}</dd></div>
+        <div><dt>Diện tích</dt><dd>{{ detailPond.area === null ? '—' : `${detailPond.area} ha` }}</dd></div>
+        <div><dt>Độ sâu</dt><dd>{{ detailPond.depth === null ? '—' : `${detailPond.depth} m` }}</dd></div>
+        <div><dt>Loại nước</dt><dd>{{ detailPond.water_type || '—' }}</dd></div>
+      </dl>
+      <section class="pond-batches">
+        <h3>Vụ đang hoạt động</h3>
+        <LoadingState v-if="batchStore.loading" />
+        <va-alert v-else-if="batchStore.error" color="danger" role="alert">
+          {{ batchStore.error }}
+          <va-button size="small" preset="secondary" @click="openDetail(detailPond)">Thử lại</va-button>
+        </va-alert>
+        <ul v-else-if="activeBatches.length">
+          <li v-for="batch in activeBatches" :key="batch.id">
+            <span>{{ batch.batch_code }} · {{ STATUS_LABELS[batch.status] }}</span>
+            <RouterLink :to="{ name: 'farming-logs', params: { farmId, pondId: detailPond.id, batchId: batch.id } }">Mở nhật ký</RouterLink>
+          </li>
+        </ul>
+        <p v-else>Ao chưa có vụ đang hoạt động.</p>
+      </section>
+      <div class="form-actions">
+        <va-button preset="secondary" @click="detailId = ''">Đóng</va-button>
+        <va-button @click="router.push({ name: 'pond-batches', params: { farmId, pondId: detailPond.id } })">
+          Xem vụ nuôi và lịch sử
+        </va-button>
+      </div>
+    </va-modal>
+
     <!-- Modal Form -->
-    <va-modal title="pond-form-title" v-model="showForm" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
+    <va-modal title="pond-form-title" :model-value="showForm" @update:model-value="(open: boolean) => { if (!open) close() }" :mobile-fullscreen="false" :before-close="formDismiss" close-button aria-close-label="Đóng biểu mẫu" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">
       <template #header>
-        <h2 id="pond-form-title" class="modal-title">{{ editingId ? 'Cập nhật Ao nuôi' : 'Tạo Ao nuôi mới' }}</h2>
+        <h2 id="pond-form-title" class="modal-title">{{ editingId ? 'Cập nhật ao nuôi' : 'Tạo ao nuôi mới' }}</h2>
       </template>
 
       <form @submit.prevent="submit" class="modern-form">
@@ -263,11 +314,11 @@ onUnmounted(() => { ++contextVersion })
         </va-alert>
 
         <div class="form-actions col-span-2">
-          <va-button preset="secondary" type="button" color="secondary" @click="close">
-            Hủy bỏ
+          <va-button preset="secondary" type="button" color="secondary" :disabled="saving" @click="formDismiss(close)">
+            Hủy
           </va-button>
           <va-button type="submit" :loading="saving" color="primary">
-            {{ editingId ? 'Lưu thay đổi' : 'Hoàn tất tạo' }}
+            {{ editingId ? 'Lưu thay đổi' : 'Tạo mới' }}
           </va-button>
         </div>
       </form>
@@ -276,6 +327,20 @@ onUnmounted(() => { ++contextVersion })
 </template>
 
 <style scoped>
+.workspace-content .farmer-ponds .pond-grid { gap: 14px; }
+.workspace-content .farmer-ponds .pond-card > .va-card__content { padding: 18px; }
+.workspace-content .farmer-ponds .card-actions { padding: 10px 14px; }
+.farmer-ponds .stats-grid { gap: 8px; padding-top: 10px; }
+.farmer-ponds .pond-name { margin-bottom: 12px; }
+.pond-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 16px; overflow-wrap: anywhere; }
+.pond-facts dt { font-size: .8rem; color: var(--app-muted); }
+.pond-facts dd { margin: 4px 0 0; font-weight: 650; }
+.pond-batches { margin-bottom: 16px; padding-top: 12px; border-top: 1px solid var(--app-line); }
+.pond-batches h3 { margin: 0 0 8px; }
+.pond-batches ul { margin: 0; padding: 0; list-style: none; }
+.pond-batches li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+.pond-batches a { display: inline-flex; align-items: center; min-height: 44px; color: var(--app-primary-dark); text-decoration: underline; }
+
 
 .ponds-page {
   width: min(1180px, calc(100% - 2rem));
@@ -401,42 +466,11 @@ onUnmounted(() => { ++contextVersion })
 }
 
 /* Modal & Form */
-.modal-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--app-ink);
-  margin-bottom: 1rem;
-}
 
-.modern-form {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  width: 100%;
-  min-width: 500px;
-}
 
-.generated-code { display: grid; gap: .25rem; padding: .8rem 1rem; border: 1px solid #dbe7e4; border-radius: 10px; background: #f7faf9; }
-.generated-code > span { color: var(--app-muted); font-size: .75rem; }
-.generated-code > strong { color: #1d5149; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.generated-code > small, .generated-code-hint { margin: 0; color: var(--app-muted); font-size: .8rem; }
 
-.col-span-1 {
-  grid-column: span 1;
-}
 
-.col-span-2 {
-  grid-column: 1 / -1;
-}
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 0.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid #f1f5f9;
-}
 
 /* Utilities */
 .mr-1 {
@@ -466,14 +500,6 @@ onUnmounted(() => { ++contextVersion })
     grid-template-columns: 1fr;
   }
 
-  .modern-form {
-    grid-template-columns: 1fr;
-    min-width: 100%;
-  }
 
-  .col-span-1,
-  .col-span-2 {
-    grid-column: 1 / -1;
-  }
 }
 </style>

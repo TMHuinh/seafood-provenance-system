@@ -18,7 +18,8 @@ const transportStatuses = { PLANNING: 'Chờ nhận chuyến', IN_TRANSIT: 'Đan
 function tripStatus(trip: LotTransport) {
   return trip.status === 'IN_TRANSIT' && trip.delivery_reported_at ? 'PENDING' : trip.status
 }
-const loading = ref(false); const saving = ref(false); const error = ref(''); const notice = ref('')
+const loading = ref(false); const saving = ref(false); const error = ref('')
+const savedLot = ref<HarvestLot | null>(null)
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 const form = reactive({ harvestDate: today, quantity: '' as string | number, isFinal: false, note: '' })
 const requestId = ref(crypto.randomUUID())
@@ -91,7 +92,7 @@ async function load() {
 }
 async function submit() {
   if (saving.value || loading.value) return
-  error.value = ''; notice.value = ''
+  error.value = ''; savedLot.value = null
   if (!form.harvestDate || !Number.isFinite(Number(form.quantity)) || Number(form.quantity) <= 0) {
     error.value = 'Vui lòng nhập ngày thu hoạch và khối lượng lớn hơn 0.'; return
   }
@@ -105,7 +106,7 @@ async function submit() {
         status: result.blockchain.status, transaction_hash: result.blockchain.transactionHash, data_hash: result.blockchain.dataHash,
       } }
     lots.value = [lot, ...lots.value.filter((item) => item.id !== lot.id)]
-    notice.value = `Đã lưu thu hoạch và tạo lô ${lot.lot_code}. ${labels[result.blockchain.status]}.`
+    savedLot.value = lot
     requestId.value = crypto.randomUUID(); form.quantity = ''; form.note = ''
     harvestDismiss.markClean()
   } catch (e) { error.value = e instanceof Error ? e.message : 'Không lưu được thu hoạch' }
@@ -196,13 +197,18 @@ onMounted(load)
     <template #header><h2 id="harvest-dialog-title">Thu hoạch và lô hàng — {{ batch.batch_code }}</h2></template>
     <p>Mỗi lần thu hoạch tạo một lô riêng. Tổng sản lượng: {{ batch.yield_quantity ?? 0 }} kg.</p>
     <va-alert v-if="error" color="danger" class="message" role="alert">{{ error }}</va-alert>
-    <va-alert v-if="notice" color="info" class="message">{{ notice }} Không cần gửi lại lần thu hoạch đã lưu.</va-alert>
     <va-button v-if="error && !saving" preset="secondary" size="small" @click="load">Tải lại danh sách lô</va-button>
     <div class="harvest-tabs" role="group" aria-label="Thu hoạch và lô hàng">
       <va-button preset="secondary" :aria-pressed="section === 'harvest'" :disabled="saving" @click="section = 'harvest'">Thu hoạch</va-button>
       <va-button preset="secondary" :aria-pressed="section === 'lots'" :disabled="saving" @click="section = 'lots'">Lô hàng</va-button>
     </div>
     <template v-if="section === 'harvest'">
+    <div v-if="savedLot" class="saved-lot">
+      <p role="status"><strong>Đã tạo lô {{ savedLot.lot_code }}</strong>
+        <span>{{ savedLot.quantity.toLocaleString('vi-VN') }} kg · {{ labels[savedLot.blockchain?.status ?? 'UNKNOWN'] }}</span>
+      </p>
+      <va-button type="button" icon="local_shipping" @click="openTransport(savedLot)">Tạo yêu cầu vận chuyển</va-button>
+    </div>
     <form v-if="['GROWING', 'READY_FOR_HARVEST'].includes(batch.status)" class="harvest-form" @submit.prevent="submit">
       <h3 class="form-section-heading">Ghi nhận lần thu hoạch</h3>
       <va-input v-model="form.harvestDate" type="date" label="Ngày thu hoạch *" :min="batch.stocking_date.slice(0, 10)" :max="today" :disabled="saving" />
@@ -335,6 +341,9 @@ onMounted(load)
 <style scoped>
 .harvest-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .harvest-tabs [aria-pressed="true"] { background: var(--app-primary-soft); color: var(--app-primary-dark); }
+.saved-lot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px; border-radius: var(--app-radius); background: var(--app-success-soft); }
+.saved-lot p { display: grid; gap: 4px; margin: 0; overflow-wrap: anywhere; }
+.saved-lot span { color: var(--app-muted); font-size: .875rem; }
 .harvest-history, .lot-origin { margin: 0; padding: 0; list-style: none; }
 .harvest-history li { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--app-line); }
 .harvest-history span, .lot-origin span { display: block; color: var(--app-muted); font-size: .8rem; }

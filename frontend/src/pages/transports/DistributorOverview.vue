@@ -13,6 +13,7 @@ const incoming = computed(() => props.trips
   .slice(0, 5))
 
 const milestones = {
+  REJECTED: { label: 'Đã từ chối nhận', icon: 'block' },
   DELIVERY_REPORTED: { label: 'Đã báo giao hàng', icon: 'schedule' },
   DELIVERED: { label: 'Đã xác nhận nhận hàng', icon: 'check_circle' },
 } as const

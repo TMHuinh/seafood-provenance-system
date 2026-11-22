@@ -63,6 +63,23 @@ function optionalNumber(value, label, limits) {
   return number(value, label, limits)
 }
 
+function validateReceipt(input, sentQuantity) {
+  const { receiptOutcome, receivedQuantity, note } = only(record(input), ['receiptOutcome', 'receivedQuantity', 'note'])
+  if (!['FULL', 'PARTIAL', 'REJECTED'].includes(receiptOutcome)) invalid('Vui lòng chọn kết quả nhận hàng')
+  const received = number(receivedQuantity, 'Khối lượng thực nhận', { min: 0, max: 999999999999.99 })
+  if (received !== Number(received.toFixed(2))) invalid('Khối lượng thực nhận chỉ được có tối đa 2 chữ số thập phân')
+  const sent = Number(sentQuantity)
+  if (!(sent > 0)) invalid('Chuyến chưa có khối lượng gửi hợp lệ để đối chiếu', 409)
+  if (receiptOutcome === 'FULL' && received !== sent) invalid('Khi nhận đủ, khối lượng thực nhận phải bằng khối lượng gửi')
+  if (receiptOutcome === 'PARTIAL' && (received <= 0 || received >= sent)) {
+    invalid('Khi nhận một phần, khối lượng thực nhận phải lớn hơn 0 và nhỏ hơn khối lượng gửi')
+  }
+  if (receiptOutcome === 'REJECTED' && received !== 0) invalid('Khi từ chối nhận, khối lượng thực nhận phải bằng 0')
+  const reason = optionalText(note, 'Ghi chú xác nhận', 1000)
+  if (receiptOutcome !== 'FULL' && !reason) invalid('Vui lòng ghi lý do nhận một phần hoặc từ chối nhận')
+  return { receiptOutcome, receivedQuantity: received, note: reason }
+}
+
 function timestamp(value, label) {
   const match = typeof value === 'string'
     ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(Z|([+-])(\d{2}):(\d{2}))$/i.exec(value)
@@ -83,4 +100,4 @@ function timestamp(value, label) {
   return parsed.toISOString()
 }
 
-module.exports = { invalid, isRecord, number, only, optionalNumber, optionalText, record, requiredText, timestamp, uuid }
+module.exports = { invalid, isRecord, number, only, optionalNumber, optionalText, record, requiredText, timestamp, uuid, validateReceipt }

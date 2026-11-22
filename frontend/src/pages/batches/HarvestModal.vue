@@ -5,6 +5,7 @@ import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { VaModal, VaButton, VaInput, VaTextarea, VaSelect, VaAlert, VaInnerLoading, VaCard, VaCardContent, VaBadge } from 'vuestic-ui'
 import { api } from '../../api/client'
+import ReceiptSummary from '../transports/ReceiptSummary.vue'
 import LotQrPanel from '../../components/LotQrPanel.vue'
 import { SPECIES_LABELS, type BatchItem, type HarvestLot, type HarvestCreateResponse, type LotTransport, type TransportEvent, type TransportRecipient } from '../../types'
 
@@ -13,7 +14,7 @@ const emit = defineEmits<{ close: []; updated: [batch: BatchItem] }>()
 const lots = ref<HarvestLot[]>([])
 const section = ref<'harvest' | 'lots'>('harvest')
 const tripFilter = ref('')
-const transportStatuses = { PLANNING: 'Chờ nhận chuyến', IN_TRANSIT: 'Đang vận chuyển', PENDING: 'Chờ xác nhận', DELIVERED: 'Đã nhận hàng', CANCELLED: 'Đã hủy' }
+const transportStatuses = { PLANNING: 'Chờ nhận chuyến', IN_TRANSIT: 'Đang vận chuyển', PENDING: 'Chờ xác nhận', DELIVERED: 'Đã nhận hàng', REJECTED: 'Đã từ chối nhận', CANCELLED: 'Đã hủy' }
 function tripStatus(trip: LotTransport) {
   return trip.status === 'IN_TRANSIT' && trip.delivery_reported_at ? 'PENDING' : trip.status
 }
@@ -51,7 +52,7 @@ function closeHarvest() { emit('close') }
 const options = [{ value: false, label: 'Thu hoạch một phần, tiếp tục nuôi' }, { value: true, label: 'Kết thúc thu hoạch vụ này' }]
 const base = `/farms/${props.farmId}/ponds/${props.pondId}/batches/${props.batch.id}/harvests`
 const labels: Record<string, string> = { SUCCESS: 'Đã ghi blockchain', PENDING: 'Chưa gửi blockchain', FAILED: 'Ghi blockchain thất bại', UNKNOWN: 'Chưa xác định kết quả' }
-const transportEventLabels: Record<string, string> = { REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển', CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Người vận chuyển báo giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận', TRACKING_UPDATE: 'Cập nhật hành trình', DELIVERED: 'Nhà phân phối xác nhận đã nhận', CANCELLED: 'Hủy chuyến' }
+const transportEventLabels: Record<string, string> = { REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển', CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Người vận chuyển báo giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận', TRACKING_UPDATE: 'Cập nhật hành trình', DELIVERED: 'Nhà phân phối xác nhận đã nhận', REJECTED: 'Nhà phân phối từ chối nhận', CANCELLED: 'Hủy chuyến' }
 const blockchainStatusLabels: Record<string, string> = { SUCCESS: 'Đã xác nhận trên blockchain', PENDING: 'Đang chờ blockchain', FAILED: 'Sẽ tự động thử lại' }
 const harvestDay = (value: string) => new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value))
 const eventTime = (value: string) => new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
@@ -298,7 +299,7 @@ onMounted(load)
         <div class="trip-heading"><strong>{{ trip.transport_code }}</strong><span>{{ trip.quantity }} kg</span></div>
         <p>{{ trip.from_location }} → {{ trip.to_location }} · {{ trip.vehicle || 'Chưa có phương tiện' }} · {{ trip.temperature ?? '—' }} °C</p>
         <p v-if="trip.recipient_organization_id">Nhà phân phối nhận: {{ recipientName(trip) }}</p>
-        <div v-else-if="!['DELIVERED', 'CANCELLED'].includes(trip.status)" class="recipient-assignment">
+        <div v-else-if="!['DELIVERED', 'REJECTED', 'CANCELLED'].includes(trip.status)" class="recipient-assignment">
           <va-select v-model="recipientAssignments[trip.id]" :options="recipients" value-by="id" text-by="name" label="Gán nhà phân phối nhận chuyến cũ *" />
           <va-button size="small" preset="secondary" :loading="transportSaving" :disabled="!recipientAssignments[trip.id] || transportSaving" @click="assignTripRecipient(trip)">Gán nhà phân phối</va-button>
         </div>
@@ -306,6 +307,7 @@ onMounted(load)
           <span>{{ transportStatuses[tripStatus(trip)] }}</span>
           <va-badge v-if="trip.blockchain" :color="trip.blockchain.status === 'SUCCESS' ? 'success' : trip.blockchain.status === 'FAILED' ? 'danger' : 'warning'" :text="blockchainStatusLabels[trip.blockchain.status] || trip.blockchain.status" />
         </div>
+        <ReceiptSummary :trip="trip" />
         <details v-if="trip.events?.length" class="transport-event-history">
           <summary>Lịch sử xác thực · {{ trip.events.length }} mốc</summary>
           <ol>

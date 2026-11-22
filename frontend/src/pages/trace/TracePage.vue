@@ -68,6 +68,7 @@ const labels: Record<string, string> = {
   IN_TRANSIT: 'Đang vận chuyển',
   DELIVERED: 'Đã xác nhận nhận hàng',
   CANCELLED: 'Đã hủy',
+  REJECTED: 'Đã từ chối nhận',
   REQUESTED: 'Tạo yêu cầu vận chuyển',
   CLAIMED: 'Tiếp nhận chuyến',
   CHECKPOINT: 'Điểm kiểm tra',

@@ -6,10 +6,12 @@ import EmptyState from '../../components/EmptyState.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VaAlert, VaButton } from 'vuestic-ui'
+import ReceiptForm from './ReceiptForm.vue'
+import ReceiptSummary from './ReceiptSummary.vue'
 import LotQrPanel from '../../components/LotQrPanel.vue'
-import { api } from '../../api/client'
+import { api, ApiError } from '../../api/client'
 import { useAuthStore } from '../../stores/auth.store'
-import { SPECIES_LABELS, type LotTransport, type Species, type TransportEvent } from '../../types'
+import { SPECIES_LABELS, RECEIPT_LABELS, type ReceiptInput, type LotTransport, type Species, type TransportEvent } from '../../types'
 
 interface ReceivingTrip extends LotTransport {
   lot: { id: string; lot_code: string; quantity: number; provenance: { farm: { name: string }; batch: { batch_code: string; species?: Species | null } } } | null
@@ -33,6 +35,7 @@ const tabs = [
   { value: 'IN_TRANSIT', label: 'Đang vận chuyển' },
   { value: 'PENDING', label: 'Chờ xác nhận' },
   { value: 'DELIVERED', label: 'Đã nhận hàng' },
+  { value: 'REJECTED', label: 'Từ chối nhận' },
 ] as const
 const statusLabels = {
   IN_TRANSIT: 'Đang vận chuyển',
@@ -40,6 +43,7 @@ const statusLabels = {
   DELIVERED: 'Đã nhận hàng',
   PLANNING: 'Chờ người vận chuyển',
   CANCELLED: 'Đã hủy',
+  REJECTED: 'Đã từ chối nhận',
 }
 
 function shipmentStatus(trip: ReceivingTrip) {
@@ -124,7 +128,7 @@ function eventLabel(event: TransportEvent) {
     REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển',
     CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Người vận chuyển báo giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận',
     TRACKING_UPDATE: 'Cập nhật hành trình',
-    DELIVERED: 'Nhà phân phối xác nhận đã nhận', CANCELLED: 'Hủy chuyến',
+    DELIVERED: 'Nhà phân phối xác nhận đã nhận', CANCELLED: 'Hủy chuyến', REJECTED: 'Nhà phân phối từ chối nhận',
   }
   return labels[event.event_type] ?? event.event_type
 }
@@ -155,20 +159,20 @@ async function load() {
   }
 }
 
-async function confirmReceipt(trip: ReceivingTrip) {
+async function confirmReceipt(trip: ReceivingTrip, receipt: ReceiptInput) {
   if (busyId.value || shipmentStatus(trip) !== 'PENDING') return
-  if (!window.confirm(`Xác nhận đã nhận chuyến ${trip.transport_code} (${number.format(trip.quantity)} kg)?`)) return
   busyId.value = trip.id
   confirmationError.value = ''
   notice.value = undefined
   try {
-    await api.post(`/transports/${trip.id}/confirm-delivery`, {})
+    const result = await api.post<{ transport: LotTransport }>(`/transports/${trip.id}/confirm-delivery`, receipt)
     const savedTrip = trips.value.find((item) => item.id === trip.id)
-    if (savedTrip) savedTrip.status = 'DELIVERED'
-    notice.value = { tripId: trip.id, text: `Đã xác nhận nhận hàng cho chuyến ${trip.transport_code}.` }
+    if (savedTrip) Object.assign(savedTrip, result.transport)
+    notice.value = { tripId: trip.id, text: `Đã lưu phiếu thực nhận cho chuyến ${trip.transport_code}.` }
     await load()
   } catch (cause) {
     confirmationError.value = cause instanceof Error ? cause.message : 'Không xác nhận được đã nhận hàng.'
+    if (cause instanceof ApiError && cause.status === 409) await load()
   } finally {
     busyId.value = null
   }
@@ -234,7 +238,7 @@ onMounted(load)
               <td role="cell"><span class="mobile-label">Nguồn gửi</span>{{ senderName(trip) }}</td>
               <td role="cell"><span class="mobile-label">Số lô</span>{{ trip.lot ? '1' : '—' }}</td>
               <td role="cell"><span class="mobile-label">Khối lượng</span>{{ number.format(trip.quantity) }} kg</td>
-              <td role="cell"><span class="mobile-label">Trạng thái</span><span class="badge" :data-status="shipmentStatus(trip)">{{ statusLabels[shipmentStatus(trip)] }}</span></td>
+              <td role="cell"><span class="mobile-label">Trạng thái</span><span class="badge" :data-status="trip.receipt_outcome || shipmentStatus(trip)">{{ trip.receipt_outcome ? RECEIPT_LABELS[trip.receipt_outcome] : statusLabels[shipmentStatus(trip)] }}</span></td>
               <td role="cell"><span class="mobile-label">Ngày gửi</span><time :datetime="trip.transport_date">{{ eventTime(trip.transport_date) }}</time></td>
               <td role="cell" class="row-action">
                 <RouterLink :to="{ query: { ...route.query, trip: trip.id } }" class="detail-link"
@@ -263,13 +267,12 @@ onMounted(load)
           <div>
             <p class="eyebrow">Chi tiết chuyến hàng</p>
             <h2 id="receipt-detail-title">{{ selectedTrip.transport_code }}</h2>
-            <span class="badge" :data-status="shipmentStatus(selectedTrip)">{{ statusLabels[shipmentStatus(selectedTrip)] }}</span>
+            <span class="badge" :data-status="selectedTrip.receipt_outcome || shipmentStatus(selectedTrip)">{{ selectedTrip.receipt_outcome ? RECEIPT_LABELS[selectedTrip.receipt_outcome] : statusLabels[shipmentStatus(selectedTrip)] }}</span>
           </div>
           <va-button preset="secondary" icon="close" @click="closeDetail">Đóng</va-button>
         </header>
 
         <div class="drawer-body">
-          <va-alert v-if="confirmationError" color="danger" role="alert">{{ confirmationError }}</va-alert>
           <va-alert v-if="notice?.tripId === selectedTrip.id" color="success" role="status">{{ notice.text }}</va-alert>
           <va-alert v-if="loadError" color="danger" role="alert">{{ loadError }}</va-alert>
 
@@ -296,6 +299,11 @@ onMounted(load)
               Xem ảnh giao hàng
             </a>
           </section>
+
+          <ReceiptForm v-if="shipmentStatus(selectedTrip) === 'PENDING'" :key="selectedTrip.id"
+            :trip="selectedTrip" :busy="Boolean(busyId) || loading" :error="confirmationError"
+            @confirm="confirmReceipt(selectedTrip, $event)" />
+          <ReceiptSummary v-else :trip="selectedTrip" />
 
           <section class="detail-card">
             <h3>Lô hàng</h3>
@@ -329,13 +337,6 @@ onMounted(load)
           </section>
         </div>
 
-        <footer v-if="shipmentStatus(selectedTrip) === 'PENDING'" class="drawer-footer">
-          <p>Kiểm tra hàng thực tế trước khi xác nhận.</p>
-          <va-button color="primary" :loading="busyId === selectedTrip.id"
-            :disabled="Boolean(busyId) || loading" @click="confirmReceipt(selectedTrip)">
-            Xác nhận nhận hàng
-          </va-button>
-        </footer>
       </template>
     </dialog>
   </main>
@@ -406,9 +407,9 @@ onMounted(load)
 .mobile-label { display: none; }
 .badge { display: inline-block; border-radius: var(--app-pill-radius); padding: var(--app-space-1) var(--app-space-2); background: var(--app-canvas); color: var(--app-ink); font-size: var(--app-text-xs); font-weight: 650; }
 .badge[data-status="IN_TRANSIT"] { background: var(--app-info-soft); color: var(--app-info); }
-.badge[data-status="PENDING"] { background: var(--app-warning-soft); color: var(--app-warning); }
-.badge[data-status="DELIVERED"] { background: var(--app-success-soft); color: var(--app-success); }
-.badge[data-status="CANCELLED"] { background: var(--app-danger-soft); color: var(--app-danger); }
+.badge[data-status="PARTIAL"], .badge[data-status="PENDING"] { background: var(--app-warning-soft); color: var(--app-warning); }
+.badge[data-status="FULL"], .badge[data-status="DELIVERED"] { background: var(--app-success-soft); color: var(--app-success); }
+.badge[data-status="REJECTED"], .badge[data-status="CANCELLED"] { background: var(--app-danger-soft); color: var(--app-danger); }
 .list-footer { justify-content: space-between; color: var(--app-muted); font-size: .8rem; }
 .list-footer nav { display: flex; align-items: center; gap: 8px; }
 .shipment-drawer {

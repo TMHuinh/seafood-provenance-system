@@ -6,8 +6,8 @@ const { requireOwnedPond } = require('../batches/batches.service')
 const outbox = require('./transports.outbox')
 const cloudinary = require('../../shared/services/cloudinary')
 const { generateRequestCode } = require('../../shared/utils/business-code')
-const { invalid: fail, number, only, optionalNumber, optionalText, record, requiredText, timestamp, uuid } = require('./transports.validation')
-const FIELDS = 'id, batch_id, harvest_lot_id, created_by, recipient_organization_id, handler_id, claimed_at, delivery_reported_at, delivery_reported_by, delivery_report, transport_code, transport_date, vehicle, driver, from_location, to_location, temperature, quantity, status, note, request_id, created_at, updated_at'
+const { invalid: fail, number, only, optionalNumber, optionalText, record, requiredText, timestamp, uuid, validateReceipt } = require('./transports.validation')
+const FIELDS = 'id, batch_id, harvest_lot_id, created_by, recipient_organization_id, handler_id, claimed_at, delivery_reported_at, delivery_reported_by, delivery_report, transport_code, transport_date, vehicle, driver, from_location, to_location, temperature, quantity, received_quantity, receipt_outcome, status, note, request_id, created_at, updated_at'
 const STATUSES = ['IN_TRANSIT', 'CANCELLED']
 const TRACKING_STATUSES = ['PICKED_UP', 'IN_TRANSIT', 'AT_SORTING_FACILITY', 'DEPARTED_FACILITY', 'OUT_FOR_DELIVERY', 'DELIVERY_ATTEMPT_FAILED', 'DELIVERED_REPORTED', 'OTHER']
 const EVENT_FIELDS = 'id, transport_id, batch_id, sequence, event_id, event_type, actor_id, occurred_at, payload, previous_hash, data_hash, blockchain_status, transaction_hash, block_number, contract_address, attempt_count, last_error, recorded_at'
@@ -164,19 +164,19 @@ async function updateTransporterStatus(profile, transportId, input = {}) {
 async function confirmDelivery(profile, transportId, input = {}) {
   if (profile.role !== 'DISTRIBUTOR' || !profile.organization_id) fail('Chỉ nhà phân phối nhận chuyến mới được xác nhận nhận hàng', 403)
   uuid(transportId, 'Mã chuyến vận chuyển')
-  input = only(record(input), ['note'])
   const { data: target, error: targetError } = await supabase.from('transport_logs')
-    .select('id').eq('id', transportId).eq('recipient_organization_id', profile.organization_id).maybeSingle()
+    .select('id, quantity').eq('id', transportId).eq('recipient_organization_id', profile.organization_id).maybeSingle()
   if (targetError) throw targetError
   if (!target) fail('Chuyến này không được gửi tới nhà phân phối của bạn', 404)
-  const note = optionalText(input.note, 'Ghi chú xác nhận', 1000)
+  const receipt = validateReceipt(input, target.quantity)
   const { data, error } = await supabase.rpc('confirm_lot_transport_delivery', {
-    p_transport: transportId, p_actor: profile.id, p_confirmation_note: note,
+    p_transport: transportId, p_actor: profile.id, p_outcome: receipt.receiptOutcome,
+    p_received_quantity: receipt.receivedQuantity, p_confirmation_note: receipt.note,
   })
   if (error?.code === '42501') fail('Chỉ nhà phân phối nhận chuyến mới được xác nhận', 403)
-  if (error?.code === '40001') fail('Chuyến chưa có báo giao đang chờ xác nhận', 409)
+  if (error?.code === '40001') fail('Chuyến chưa được báo giao hoặc đã được kho xử lý.', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy chuyến vận chuyển', 404)
-  if (error?.code === '22023') fail('Ghi chú xác nhận quá dài')
+  if (error?.code === '22023' || error?.code === '23514') fail('Kết quả, khối lượng hoặc lý do nhận hàng không hợp lệ')
   if (error) throw error
   outbox.nudge()
   return { transport: data.transport, event_id: data.event_id }

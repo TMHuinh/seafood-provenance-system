@@ -11,10 +11,10 @@ const steps = computed(() => {
     { label: 'Đã nhận', done: Boolean(job.claimed_at || job.handler_id || hasEvent('CLAIMED')) },
     { label: 'Khởi hành', done: job.status === 'IN_TRANSIT' || job.status === 'DELIVERED' || hasEvent('IN_TRANSIT') },
     { label: 'Báo giao', done: Boolean(job.delivery_reported_at || hasEvent('DELIVERY_REPORTED')) },
-    { label: 'Bàn giao', done: job.status === 'DELIVERED' },
+    { label: job.status === 'REJECTED' ? 'Từ chối nhận' : 'Bàn giao', done: job.status === 'DELIVERED' || job.status === 'REJECTED' },
   ]
 })
-const active = computed(() => props.job.status === 'CANCELLED' || props.job.status === 'DELIVERED'
+const active = computed(() => ['CANCELLED', 'DELIVERED', 'REJECTED'].includes(props.job.status)
   ? -1
   : steps.value.map((step) => step.done).lastIndexOf(true))
 </script>

@@ -199,8 +199,15 @@ export interface HarvestLot {
   }
   blockchain: { status: BlockchainStatus; transaction_hash: string | null; data_hash: string } | null
 }
-export type TransportStatus = 'PLANNING' | 'IN_TRANSIT' | 'DELIVERED' | 'CANCELLED'
-export type TransportEventType = 'REQUESTED' | 'CLAIMED' | 'IN_TRANSIT' | 'CHECKPOINT' | 'DELIVERY_REPORTED' | 'RECIPIENT_ASSIGNED' | 'TRACKING_UPDATE' | 'DELIVERED' | 'CANCELLED'
+export const RECEIPT_LABELS = { FULL: 'Nhận đủ', PARTIAL: 'Nhận một phần', REJECTED: 'Từ chối nhận' } as const
+export type ReceiptOutcome = keyof typeof RECEIPT_LABELS
+export interface ReceiptInput {
+  receiptOutcome: ReceiptOutcome
+  receivedQuantity: number
+  note: string
+}
+export type TransportStatus = 'PLANNING' | 'IN_TRANSIT' | 'DELIVERED' | 'REJECTED' | 'CANCELLED'
+export type TransportEventType = 'REQUESTED' | 'CLAIMED' | 'IN_TRANSIT' | 'CHECKPOINT' | 'DELIVERY_REPORTED' | 'RECIPIENT_ASSIGNED' | 'TRACKING_UPDATE' | 'DELIVERED' | 'REJECTED' | 'CANCELLED'
 export interface TransportEvent {
   id: string
   transport_id: string
@@ -222,6 +229,8 @@ export interface TransportEvent {
   recorded_at: string | null
 }
 export interface LotTransport {
+  receipt_outcome?: ReceiptOutcome | null
+  received_quantity?: number | null
   id: string
   batch_id: string
   harvest_lot_id: string

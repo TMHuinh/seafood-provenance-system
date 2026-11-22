@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { draftDismiss, dismissOnBackdrop } from '../../components/overlay-dismiss'
+import ReceiptSummary from './ReceiptSummary.vue'
 import TransportProgress from './TransportProgress.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import EmptyState from '../../components/EmptyState.vue'
@@ -47,12 +48,13 @@ const dialogTrigger = ref<HTMLElement | null>(null)
 const actionError = ref('')
 const statusLabels: Record<string, string> = {
   available: 'Chờ nhận', planning: 'Chờ khởi hành', moving: 'Đang vận chuyển',
-  reported: 'Chờ xác nhận bàn giao', delivered: 'Đã bàn giao', cancelled: 'Đã hủy',
+  reported: 'Chờ xác nhận bàn giao', delivered: 'Đã bàn giao', rejected: 'Đã từ chối nhận', cancelled: 'Đã hủy',
 }
 
 function stage(job: TransportJob) {
   if (job.status === 'PLANNING') return job.handler_id ? 'planning' : 'available'
   if (job.status === 'IN_TRANSIT') return job.delivery_reported_at ? 'reported' : 'moving'
+  if (job.status === 'REJECTED') return 'rejected'
   return job.status === 'DELIVERED' ? 'delivered' : 'cancelled'
 }
 
@@ -67,7 +69,7 @@ const trackingStatuses = [
   { value: 'OTHER', label: 'Cập nhật khác' },
 ]
 const trackingStatusLabels = Object.fromEntries(trackingStatuses.map(({ value, label }) => [value, label])) as Record<string, string>
-const eventLabels: Record<string, string> = { REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển', CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Báo đã giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận', TRACKING_UPDATE: 'Cập nhật hành trình', DELIVERED: 'Nhà phân phối xác nhận đã nhận', CANCELLED: 'Hủy chuyến' }
+const eventLabels: Record<string, string> = { REQUESTED: 'Tạo yêu cầu', CLAIMED: 'Người vận chuyển nhận chuyến', IN_TRANSIT: 'Bắt đầu vận chuyển', CHECKPOINT: 'Điểm kiểm tra', DELIVERY_REPORTED: 'Báo đã giao', RECIPIENT_ASSIGNED: 'Gán nhà phân phối nhận', TRACKING_UPDATE: 'Cập nhật hành trình', DELIVERED: 'Nhà phân phối xác nhận đã nhận', REJECTED: 'Nhà phân phối từ chối nhận', CANCELLED: 'Hủy chuyến' }
 const jobs = computed(() => [...available.value, ...assigned.value])
 const groups = computed(() => ({
   all: jobs.value,
@@ -77,7 +79,7 @@ const groups = computed(() => ({
   reported: assigned.value.filter((job) => stage(job) === 'reported'),
   active: assigned.value.filter((job) => ['PLANNING', 'IN_TRANSIT'].includes(job.status)),
   delivered: assigned.value.filter((job) => stage(job) === 'delivered'),
-  history: assigned.value.filter((job) => ['DELIVERED', 'CANCELLED'].includes(job.status)),
+  history: assigned.value.filter((job) => ['DELIVERED', 'REJECTED', 'CANCELLED'].includes(job.status)),
 }))
 type Group = keyof typeof groups.value
 const tabs = computed<{ id: Group; label: string }[]>(() => props.overview
@@ -503,7 +505,8 @@ onMounted(() => {
               </details>
             </template>
             <div v-else-if="job.delivery_reported_at && job.status === 'IN_TRANSIT'" class="completed-note awaiting-confirmation"><span>…</span>Người vận chuyển đã báo giao thành công. Đang chờ nhà phân phối xác nhận đã nhận hàng.</div>
-            <div v-else class="completed-note"><span>{{ job.status === 'DELIVERED' ? '✓' : '!' }}</span>{{ job.status === 'DELIVERED' ? 'Lô hàng đã được bàn giao thành công.' : 'Chuyến vận chuyển đã được hủy.' }}</div>
+            <ReceiptSummary v-else-if="job.status === 'DELIVERED' || job.status === 'REJECTED'" :trip="job" />
+            <div v-else class="completed-note">Chuyến vận chuyển đã được hủy.</div>
             <details v-if="job.events?.length" open class="event-disclosure">
               <summary>Lịch sử sự kiện <span>{{ job.events.length }} mốc</span></summary>
               <ol class="event-list">
@@ -581,7 +584,7 @@ onMounted(() => {
 [data-tone='blue'] :is(.summary-icon, small), .moving:is(.truck-icon, .status-pill) { background: var(--app-info-soft); color: var(--app-info); }
 [data-tone='green'] :is(.summary-icon, small), .delivered:is(.truck-icon, .status-pill) { background: var(--app-success-soft); color: var(--app-success); }
 [data-tone='amber'] .summary-icon, .task-list .mini-icon, :is(.available, .planning, .reported).status-pill { background: var(--app-warning-soft); color: var(--app-warning); }
-.cancelled.status-pill { background: var(--app-danger-soft); color: var(--app-danger); }
+.rejected.status-pill, .cancelled.status-pill { background: var(--app-danger-soft); color: var(--app-danger); }
 .transport-overview .transport-columns { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); align-items: start; gap: 14px; }
 .transport-aside { display: grid; gap: 10px; min-width: 0; }
 .dispatch-board { box-shadow: 0 14px 30px #18355008; }

@@ -40,6 +40,16 @@ SUPABASE_ANON_KEY=sb_publishable_YOUR_PUBLISHABLE_KEY
 `SUPABASE_SECRET_KEY` chỉ được dùng ở backend. Không đưa secret key vào
 frontend hoặc commit file `.env` lên Git.
 
+### Khôi phục mật khẩu
+
+Tính năng **Quên mật khẩu** áp dụng cho mọi tài khoản/role. Đặt `FRONTEND_URL`
+đúng với địa chỉ frontend đang triển khai, sau đó thêm URL
+`<FRONTEND_URL>/reset-password` vào danh sách **Redirect URLs** tại Supabase
+Dashboard → Authentication → URL Configuration. Supabase cũng cần bật gửi email
+khôi phục mật khẩu và cấu hình SMTP/email phù hợp. Người dùng yêu cầu email tại
+`/forgot-password`; hệ thống kiểm tra hồ sơ và báo nếu email chưa đăng ký. Nếu đã
+có tài khoản, người dùng mở liên kết trong email để đặt mật khẩu mới.
+
 ## Cấu hình frontend
 
 ```bash

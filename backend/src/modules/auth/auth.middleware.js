@@ -48,4 +48,14 @@ async function requireAuth(request, response, next) {
   }
 }
 
-module.exports = { requireAuth }
+function requireAdmin(request, response, next) {
+  if (request.auth?.profile?.role !== 'ADMIN') {
+    const error = new Error('Chỉ quản trị viên mới được phép thực hiện thao tác này')
+    error.status = 403
+    next(error)
+    return
+  }
+  next()
+}
+
+module.exports = { requireAdmin, requireAuth }

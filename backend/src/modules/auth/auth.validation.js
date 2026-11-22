@@ -32,4 +32,19 @@ function validateLogin({ email, password }) {
   }
 }
 
-module.exports = { validateLogin, validateRegister }
+function validateEmail(email) {
+  if (!email || !EMAIL_PATTERN.test(String(email).trim())) {
+    throw createValidationError('Email không hợp lệ')
+  }
+}
+
+function validatePasswordReset({ accessToken, refreshToken, password }) {
+  if (!accessToken || !refreshToken) {
+    throw createValidationError('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn')
+  }
+  if (!password || String(password).length < 8) {
+    throw createValidationError('Mật khẩu phải có ít nhất 8 ký tự')
+  }
+}
+
+module.exports = { validateEmail, validateLogin, validatePasswordReset, validateRegister }

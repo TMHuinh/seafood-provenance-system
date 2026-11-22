@@ -92,6 +92,17 @@ const navigation = computed(() => [
         },
       ]
     : []),
+  ...(authStore.user?.role === 'ADMIN'
+    ? [
+        {
+          name: 'admin-users',
+          label: 'Quản lý người dùng',
+          icon: 'manage_accounts',
+          group: 'Quản trị hệ thống',
+          active: route.name === 'admin-users',
+        },
+      ]
+    : []),
 ])
 const pageTitles: Record<string, string> = {
   home: 'Tổng quan',
@@ -105,6 +116,7 @@ const pageTitles: Record<string, string> = {
   'farming-logs': 'Nhật ký nuôi',
   transports: 'Vận chuyển',
   receipts: 'Hàng nhận',
+  'admin-users': 'Quản lý người dùng',
 }
 const farmRoutes = ['farms', 'ponds', 'pond-batches', 'farming-logs']
 const breadcrumbs = computed(() => {

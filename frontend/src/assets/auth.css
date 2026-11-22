@@ -118,6 +118,15 @@
   background: var(--app-primary-soft);
   color: var(--app-primary-dark);
 }
+.password-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.password-header .form-label {
+  margin-bottom: 8px;
+}
 .auth-layout .va-input-wrapper__field {
   min-height: 48px;
 }

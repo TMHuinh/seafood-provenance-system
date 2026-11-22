@@ -23,6 +23,22 @@ const router = createRouter({
       meta: { guestOnly: true },
     },
     {
+      path: '/forgot-password',
+      name: 'forgot-password',
+      component: () => import('../pages/auth/ForgotPasswordPage.vue'),
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('../pages/auth/ResetPasswordPage.vue'),
+    },
+    {
+      path: '/admin/users',
+      name: 'admin-users',
+      component: () => import('../pages/admin/UsersPage.vue'),
+      meta: { requiresAuth: true, role: 'ADMIN' },
+    },
+    {
       path: '/register',
       name: 'register',
       component: () => import('../pages/auth/RegisterPage.vue'),

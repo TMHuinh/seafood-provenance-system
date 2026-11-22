@@ -124,6 +124,7 @@ async function handleSubmit(event: SubmitEvent) {
           <div class="input-group mb-5">
             <div class="password-header">
               <span class="form-label" id="login-password-label">Mật khẩu</span>
+              <router-link to="/forgot-password" class="auth-link">Quên mật khẩu?</router-link>
             </div>
             <va-input
               input-aria-labelledby="login-password-label"

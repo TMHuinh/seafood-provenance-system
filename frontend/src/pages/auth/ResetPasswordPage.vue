@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { VaAlert, VaButton, VaInput } from 'vuestic-ui'
-import { useRouter } from 'vue-router'
 
 import { ApiError, api } from '../../api/client'
 
-const router = useRouter()
 const accessToken = ref('')
 const refreshToken = ref('')
 const password = ref('')

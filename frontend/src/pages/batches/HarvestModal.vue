@@ -251,6 +251,7 @@ onMounted(load)
             <p v-if="lot.blockchain?.transaction_hash" class="hash">Giao dịch: {{ lot.blockchain.transaction_hash }}</p>
             </details>
             <va-button size="small" preset="secondary" icon="local_shipping" @click="openTransport(lot)">Vận chuyển lô</va-button>
+            <p><RouterLink :to="{ name: 'lot-report', params: { lotId: lot.id } }">Báo cáo kết quả truy xuất →</RouterLink></p>
             <details class="technical-disclosure"><summary>QR truy xuất nguồn gốc</summary>
             <LotQrPanel :api-path="`/farms/${farmId}/ponds/${pondId}/batches/${batch.id}/lots/${lot.id}/qr`" :lot-code="lot.lot_code" />
             </details>

@@ -70,6 +70,11 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     if (qr.status === 'REVOKED') return { status: 'REVOKED' }
     const lot = await repo.findLot(qr.lot_id)
     if (!lot) fail('Không tìm thấy lô hàng', 404)
+    const trace = await dossier(lot)
+    const last = await repo.findQr(code)
+    return last?.status === 'ACTIVE' ? { status: 'ACTIVE', trace } : { status: 'REVOKED' }
+  }
+  async function dossier(lot) {
     const origin = lot.provenance
     const harvestDate = origin.harvest.harvest_date
     // Harvest input is a calendar day in Vietnam, not the actual time of harvest.
@@ -94,19 +99,14 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
         imageUrl: imageUrl(event.payload?.deliveryReport?.proofImageUrl),
         temperature: scalar(event.payload?.temperature), trackingStatus: text(event.payload?.trackingStatus), blockchainStatus: text(event.blockchain_status) })),
     }))
-    // Re-read publication after assembling data: do not serve a cached active dossier after revocation.
-    const current = await repo.findQr(code)
-    if (!current || current.status === 'REVOKED') return { status: 'REVOKED' }
-    const result = { status: 'ACTIVE', trace: {
+    return {
       lotCode: text(lot.lot_code), species: text(origin.batch.species), quantity: scalar(lot.quantity), harvestDate: text(harvestDate),
       farm: { name: text(origin.farm.name), address: text(origin.farm.address) }, pond: { code: text(origin.pond.code), name: text(origin.pond.name) },
       batch: { code: text(origin.batch.batch_code), seedSource: text(origin.batch.seed_source), stockingDate: text(origin.batch.stocking_date) },
       logs: publicLogs, transports: publicTransports, proof: await proof(lot),
-    } }
-    const last = await repo.findQr(code)
-    return last?.status === 'ACTIVE' ? result : { status: 'REVOKED' }
+    }
   }
-  return { get, issue, revoke, publicTrace,
+  return { get, issue, revoke, publicTrace, dossier,
     getReceiving: (profile, scope) => receiving(profile, scope, 'GET'),
     issueReceiving: (profile, scope) => receiving(profile, scope, 'ISSUE'),
     revokeReceiving: (profile, scope, input) => receiving(profile, scope, 'REVOKE', input),

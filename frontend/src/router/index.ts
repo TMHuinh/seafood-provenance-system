@@ -7,6 +7,29 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/trace/:traceCode/report',
+      name: 'trace-report',
+      component: () => import('../pages/lots/LotReportPage.vue'),
+    },
+    {
+      path: '/lo-hang',
+      name: 'lots',
+      component: () => import('../pages/lots/LotsPage.vue'),
+      meta: { requiresAuth: true, roles: ['FARMER', 'ADMIN'] },
+    },
+    {
+      path: '/thong-ke/san-luong',
+      name: 'production',
+      component: () => import('../pages/lots/ProductionPage.vue'),
+      meta: { requiresAuth: true, roles: ['FARMER', 'ADMIN'] },
+    },
+    {
+      path: '/lo-hang/:lotId/bao-cao',
+      name: 'lot-report',
+      component: () => import('../pages/lots/LotReportPage.vue'),
+      meta: { requiresAuth: true, roles: ['FARMER', 'ADMIN'] },
+    },
+    {
       path: '/trace/:traceCode',
       name: 'trace',
       component: () => import('../pages/trace/TracePage.vue'),
@@ -110,11 +133,12 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 
-  if (to.meta.role && !authStore.user) await authStore.fetchMe()
+  if ((to.meta.role || to.meta.roles) && !authStore.user) await authStore.fetchMe()
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.meta.role && authStore.user?.role !== to.meta.role) return { name: 'home' }
+  if (Array.isArray(to.meta.roles) && !to.meta.roles.includes(authStore.user?.role)) return { name: 'home' }
 
   return true
 })

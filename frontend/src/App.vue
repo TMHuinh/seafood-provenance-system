@@ -8,6 +8,7 @@ import { useAuthStore } from './stores/auth.store'
 
 const router = useRouter()
 const route = useRoute()
+const publicTrace = computed(() => ['trace', 'trace-report'].includes(String(route.name)))
 const authStore = useAuthStore()
 const sidebarCollapsed = ref(false)
 try { sidebarCollapsed.value = localStorage.getItem('seafood_sidebar_collapsed') === 'true' } catch { /* Storage may be unavailable in private browsing. */ }
@@ -15,19 +16,19 @@ watch(sidebarCollapsed, (collapsed) => {
   try { localStorage.setItem('seafood_sidebar_collapsed', String(collapsed)) } catch { /* Keep the toggle usable without persistent storage. */ }
 })
 const transportWorkspace = computed(() => authStore.user?.role === 'TRANSPORTER' && ['home', 'transports'].includes(String(route.name)))
-const workspace = computed(() => authStore.isAuthenticated && !['trace', 'login', 'register'].includes(String(route.name)))
+const workspace = computed(() => authStore.isAuthenticated && !publicTrace.value && !['login', 'register'].includes(String(route.name)))
 
 function handleUnauthorized() {
   const redirect = route.fullPath
   authStore.clearSession()
-  if (route.name === 'trace') return
+  if (publicTrace.value) return
   router.push({ name: 'login', query: { redirect } })
 }
 
 function handleStorage(event: StorageEvent) {
   if (event.storageArea !== localStorage || (event.key !== TOKEN_KEY && event.key !== null)) return
   authStore.syncSession()
-  if (route.name === 'trace') return
+  if (publicTrace.value) return
   void router.replace({ name: authStore.isAuthenticated ? 'home' : 'login' })
 }
 
@@ -35,7 +36,7 @@ onMounted(async () => {
   window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized)
   window.addEventListener('storage', handleStorage)
   await router.isReady()
-  if (route.name !== 'trace' && authStore.token && !authStore.user) {
+  if (!publicTrace.value && authStore.token && !authStore.user) {
     void authStore.fetchMe()
   }
 })
@@ -49,7 +50,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="app-shell" :class="{ 'is-workspace': workspace, 'transport-workspace': transportWorkspace }" :style="{ '--sidebar-width': sidebarCollapsed ? 'var(--app-sidebar-collapsed-width)' : 'var(--app-sidebar-width)' }">
     <a class="skip-link" href="#main-content">Đến nội dung chính</a>
-    <AppNavbar v-if="route.name !== 'trace'" :collapsed="sidebarCollapsed" @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
+    <AppNavbar v-if="!publicTrace" :collapsed="sidebarCollapsed" @toggle-sidebar="sidebarCollapsed = !sidebarCollapsed" />
     <div id="main-content" class="workspace-content" tabindex="-1">
       <RouterView :key="authStore.token ?? 'guest'" />
     </div>

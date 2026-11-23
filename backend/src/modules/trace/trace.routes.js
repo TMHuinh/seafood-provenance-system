@@ -19,4 +19,4 @@ const service = createTraceService(createTraceRepository(db), {
     } finally { provider.destroy() }
   },
 })
-module.exports = { ...createTraceHandlers(service), publicRouter:createPublicRouter(service) }
+module.exports = { ...createTraceHandlers(service), dossier: service.dossier, publicRouter:createPublicRouter(service) }

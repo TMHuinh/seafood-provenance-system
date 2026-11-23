@@ -287,3 +287,42 @@ npm run build-only
 
 Nếu `dist` hiện có thuộc user khác, có thể kiểm tra build vào thư mục scratch bằng
 `npm run build-only -- --outDir /tmp/seafood-qr-build`; không tự thay quyền hệ thống.
+
+## Tìm lô, thống kê sản lượng và báo cáo truy xuất
+
+Menu **Tra cứu và báo cáo** dành cho chủ cơ sở và quản trị viên:
+
+- **Tìm kiếm lô hàng** (`/lo-hang`): tìm mã lô, mã vụ, tên cơ sở/ao, mã ao
+  hoặc nguồn giống; lọc cơ sở, ao, tôm/cua, ngày thu hoạch và trạng thái lô.
+  Kết quả phân trang trên server, có liên kết báo cáo và QR đã phát hành.
+- **Thống kê sản lượng** (`/thong-ke/san-luong`): cộng kg từ từng lần thu hoạch,
+  bao gồm các đợt thu một phần và lần thu cũ chưa có lô. Có bộ lọc cơ sở/ao,
+  loài và khoảng ngày; tổng hợp theo tháng, loài, cơ sở, ao; tải CSV UTF-8
+  để mở bằng Excel. Ngày và tháng tính theo giờ Việt Nam. Loài/tên nguồn gốc
+  lấy từ snapshot lô; lần thu cũ chưa có lô dùng thông tin vụ hiện tại.
+- **Báo cáo kết quả truy xuất** (`/lo-hang/:lotId/bao-cao`): mở từ danh sách
+  lô hoặc màn hình thu hoạch, gồm nguồn gốc, nhật ký đã xác nhận còn hiệu lực,
+  thu hoạch, vận chuyển, lịch sử phiên bản vụ và kết quả đối soát snapshot
+  thu hoạch với Blockchain. Chọn **In / Lưu PDF**, rồi chọn máy in hoặc
+  **Lưu dưới dạng PDF** của trình duyệt để xuất bản A4.
+
+Chủ cơ sở chỉ xem dữ liệu của mình; quản trị viên xem toàn hệ thống.
+Người tiêu dùng mở báo cáo tại `/trace/:traceCode/report` từ trang QR,
+không cần đăng nhập. Báo cáo công khai dùng cùng bộ lọc trường dữ liệu và
+kiểm tra thu hồi QR với trang truy xuất; không chứa lịch sử quản lý nội bộ.
+Báo cáo quản lý dùng được cả khi lô chưa có QR hoặc QR đã thu hồi.
+
+API mới: `GET /api/lots`, `/api/lots/options`, `/api/lots/production`,
+`/api/lots/:id/report` (đăng nhập); `/api/public/trace/:traceCode/report`
+(công khai). Bộ lọc dùng `farmId`, `pondId`, `species`, `from`, `to`;
+danh sách nhận thêm `search`, `status`, `page`, `pageSize` (tối đa 100).
+
+Các tính năng này chỉ đọc schema hiện có, không cần migration mới. Cần đã áp
+dụng các migration lô, phiên bản vụ, vận chuyển và QR của dự án. Thống kê đọc
+đủ các trang dữ liệu, tối đa 20.000 lần thu hoạch trong phạm vi; vượt ngưỡng
+trả lỗi yêu cầu thu hẹp bộ lọc. Báo cáo giữ các giới hạn kích thước hồ sơ
+truy xuất hiện có và tối đa 2.000 phiên bản vụ. Lập báo cáo không gửi giao dịch
+Blockchain; kết quả khớp hash chỉ áp dụng snapshot thu hoạch. Nhật ký và vận
+chuyển hiển thị trạng thái ghi nhận, không tự coi là đã đối soát trực tiếp.
+PDF/CSV là bản tại thời điểm lập, không được lưu như một báo cáo bất biến
+trên server; dữ liệu đã tải xuống không cập nhật khi QR hoặc nhật ký bị thu hồi.

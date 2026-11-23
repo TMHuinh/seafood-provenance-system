@@ -186,6 +186,7 @@ onBeforeUnmount(() => {
       </p>
     </section>
     <template v-else-if="result?.status === 'ACTIVE' && result.trace">
+      <p><RouterLink :to="{ name: 'trace-report', params: { traceCode: route.params.traceCode } }" class="report-link">Báo cáo kết quả truy xuất · In / Lưu PDF →</RouterLink></p>
       <section class="lot-card" aria-labelledby="lot-title">
         <div class="lot-illustration" aria-hidden="true">
           <svg viewBox="0 0 120 120" fill="none">
@@ -486,6 +487,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.report-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--app-primary-dark); text-decoration: underline; }
 .trace-page {
   width: min(100%, 1040px);
   min-height: 100dvh;

@@ -103,6 +103,12 @@ const navigation = computed(() => [
         },
       ]
     : []),
+  ...(['FARMER', 'ADMIN'].includes(authStore.user?.role ?? '')
+    ? [
+        { name: 'lots', label: 'Tìm kiếm lô hàng', icon: 'inventory_2', group: 'Tra cứu và báo cáo', active: ['lots', 'lot-report'].includes(String(route.name)) },
+        { name: 'production', label: 'Thống kê sản lượng', icon: 'bar_chart', active: route.name === 'production' },
+      ]
+    : []),
 ])
 const pageTitles: Record<string, string> = {
   home: 'Tổng quan',
@@ -116,6 +122,9 @@ const pageTitles: Record<string, string> = {
   'farming-logs': 'Nhật ký nuôi',
   transports: 'Vận chuyển',
   receipts: 'Hàng nhận',
+  lots: 'Tìm kiếm lô hàng',
+  production: 'Thống kê sản lượng',
+  'lot-report': 'Báo cáo truy xuất',
   'admin-users': 'Quản lý người dùng',
 }
 const farmRoutes = ['farms', 'ponds', 'pond-batches', 'farming-logs']

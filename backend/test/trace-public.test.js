@@ -1,6 +1,9 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { createTraceService } = require('../src/modules/trace/trace.service')
+const { createPublicRouter } = require('../src/modules/trace/trace.public-routes')
+const express = require('express')
+const { once } = require('node:events')
 const lotId = '00000000-0000-4000-8000-000000000001'
 const traceCode = '00000000-0000-4000-8000-000000000002'
 function setup(findQr) {
@@ -29,4 +32,56 @@ test('revocation during trace assembly prevents returning an active dossier', as
   let reads = 0
   const service = setup(async () => ({ lot_id: lotId, status: ++reads === 1 ? 'ACTIVE' : 'REVOKED' }))
   assert.deepEqual(await service.publicTrace(traceCode), { status: 'REVOKED' })
+})
+
+async function withPublicRouter(service, run) {
+  const app = express()
+  app.use('/api/public/trace', createPublicRouter(service))
+  const server = app.listen(0, '127.0.0.1')
+  try {
+    await once(server, 'listening')
+    await run(`http://127.0.0.1:${server.address().port}/api/public/trace`)
+  } finally {
+    server.closeAllConnections()
+    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  }
+}
+
+test('public report endpoint needs no login, disables caching and adds a generation timestamp', async () => {
+  await withPublicRouter(setup(), async base => {
+    const response = await fetch(`${base}/${traceCode}/report`)
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    const body = await response.json()
+    assert.equal(body.success, true)
+    assert.equal(body.trace.lotCode, 'LOT-A')
+    assert.ok(Number.isFinite(new Date(body.generatedAt).getTime()))
+    assert.doesNotMatch(JSON.stringify(body), /PRIVATE|issued_by|canIssue|canRevoke/)
+  })
+})
+
+test('public report endpoint never includes a dossier after QR revocation', async () => {
+  let reads = 0
+  await withPublicRouter(setup(async () => ({ lot_id: lotId, status: ++reads === 1 ? 'ACTIVE' : 'REVOKED' })), async base => {
+    const response = await fetch(`${base}/${traceCode}/report`)
+    const body = await response.json()
+    assert.equal(response.status, 200)
+    assert.equal(body.status, 'REVOKED')
+    assert.equal(body.trace, undefined)
+    assert.ok(body.generatedAt)
+  })
+})
+
+test('public report endpoint hides internal errors and returns safe status codes', async () => {
+  for (const status of [404, 503, 500]) {
+    await withPublicRouter({ publicTrace: async () => { throw Object.assign(new Error('PRIVATE DATABASE DETAIL'), { status }) } }, async base => {
+      const response = await fetch(`${base}/${traceCode}/report`)
+      assert.equal(response.status, status === 404 ? 404 : 503)
+      assert.equal(response.headers.get('cache-control'), 'no-store')
+      const body = await response.json()
+      assert.equal(body.success, false)
+      assert.equal(body.trace, undefined)
+      assert.doesNotMatch(JSON.stringify(body), /PRIVATE DATABASE DETAIL/)
+    })
+  }
 })

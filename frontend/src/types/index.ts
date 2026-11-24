@@ -319,6 +319,7 @@ export interface BatchDetailResponse {
 export type FarmingLogType = 'FEEDING' | 'MEDICINE' | 'WATER_QUALITY' | 'CARE' | 'ENVIRONMENT' | 'MORTALITY' | 'OTHER'
 
 export interface FarmingLog {
+  validation_issue?: string | null
   id: string
   batch_id: string
   created_by: string

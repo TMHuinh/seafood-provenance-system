@@ -26,6 +26,7 @@ function createTraceRepository(db) {
       P0002: [404, 'Không tìm thấy chuyến hoặc mã QR'],
       '40001': [409, 'Chuyến chưa được nhà phân phối xác nhận nhận hàng hợp lệ'],
       PT409: [409, 'Trạng thái chuyến hoặc mã QR không còn phù hợp. Vui lòng tải lại trước khi tiếp tục.'],
+      PT412: [412, 'Hãy xác nhận đóng gói và kiểm định trước khi phát hành QR'],
       '22023': [400, 'Thao tác hoặc lý do thu hồi không hợp lệ'],
       PGRST202: [503, 'Chưa bật chức năng QR của nhà phân phối. Cần áp dụng migration 202611080001'],
       '42883': [503, 'Chưa bật chức năng QR của nhà phân phối. Cần áp dụng migration 202611080001'],
@@ -56,8 +57,17 @@ function createTraceRepository(db) {
     const events=await bounded(db.from('transport_events').select('transport_id,event_type,occurred_at,payload,blockchain_status').in('transport_id',trips.map(trip=>trip.id)).order('sequence'),500)
     return trips.map(trip=>({...trip,events:events.filter(event=>event.transport_id===trip.id)}))
   }
-  return { ownedLot,findQrByLot,receivingQr,revokeLegacy,logs,transports,
-    findQr: code => result(db.from('lot_trace_codes').select('lot_id,status').eq('trace_code',code).maybeSingle()),
+  async function packaging(lotId, transportId) {
+    let query = db.from('lot_packaging').select('transport_id,snapshot,event_id').eq('lot_id', lotId)
+    if (transportId) query = query.eq('transport_id', transportId)
+    const rows = await bounded(query.order('transport_id'), 100)
+    if (!rows.length) return []
+    const records = await bounded(db.from('blockchain_records').select('event_id,status,transaction_hash,data_hash,contract_address,chain_id').in('event_id', rows.map(row => row.event_id)), 100)
+    const byEvent = new Map(records.map(record => [record.event_id, record]))
+    return rows.map(row => ({ snapshot: row.snapshot, eventId: row.event_id, record: byEvent.get(row.event_id) }))
+  }
+  return { ownedLot,findQrByLot,receivingQr,revokeLegacy,logs,transports,packaging,
+    findQr: code => result(db.from('lot_trace_codes').select('lot_id,status,issuance_transport_id').eq('trace_code',code).maybeSingle()),
     findLot: id => result(db.from('harvest_lots').select('id,batch_id,lot_code,quantity,provenance,blockchain_event_id').eq('id',id).maybeSingle()),
     proof: eventId => result(db.from('blockchain_records').select('status,data_hash,transaction_hash,contract_address,chain_id').eq('event_id',eventId).maybeSingle()),
   }

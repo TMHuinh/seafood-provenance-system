@@ -46,6 +46,19 @@ const filterType = ref('')
 const fromDate = ref('')
 const toDate = ref('')
 const logDay = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
+const invalidLogs = computed(() => items.value.filter(log => log.validation_issue && log.lifecycle_status !== 'REVOKED'))
+const overdueLogs = computed(() => {
+  const batch = batchInfo.value
+  if (!batch || !['GROWING', 'READY_FOR_HARVEST'].includes(batch.status)) return false
+  let latest = logDay.format(new Date(batch.stocking_date))
+  for (const log of items.value) {
+    if (log.lifecycle_status === 'CONFIRMED' && !log.validation_issue) {
+      const day = logDay.format(new Date(log.log_date))
+      if (day > latest) latest = day
+    }
+  }
+  return Date.parse(logDay.format(new Date())) - Date.parse(latest) >= 3 * 86400000
+})
 const filterOptions = [{ value: 'DRAFT', label: 'Bản nháp' }, { value: 'CONFIRMED', label: 'Đã xác nhận' }, { value: 'REVOKED', label: 'Đã thu hồi' }]
 const filteredLogs = computed(() => items.value.filter((log) => {
   if (filterType.value && log.log_type !== filterType.value) return false
@@ -383,6 +396,18 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
 
     <va-alert v-if="success" color="success" class="mb-4" icon="check_circle" outline closeable role="status">{{ success }}</va-alert>
     <va-alert v-if="error" color="danger" class="mb-4" icon="warning" outline closeable role="alert">{{ error }} <va-button size="small" preset="secondary" @click="loadContext">Thử lại</va-button></va-alert>
+    <va-alert v-if="!loading && !error && overdueLogs" color="warning" class="mb-4" role="status">
+      Vụ nuôi đã 3 ngày trở lên chưa có nhật ký hợp lệ được xác nhận.
+    </va-alert>
+    <va-alert v-if="!loading && !error && invalidLogs.length" color="warning" class="mb-4" role="status">
+      Có {{ invalidLogs.length }} nhật ký cần kiểm tra.
+      <ul>
+        <li v-for="log in invalidLogs" :key="log.id">
+          <button type="button" @click="selectedId = log.id">{{ FARMING_LOG_TYPE_LABELS[log.log_type] }} · {{ formatDateTime(log.log_date) }}</button>
+          {{ log.validation_issue }}
+        </li>
+      </ul>
+    </va-alert>
 
     <CollectionToolbar v-model:query="query" v-model:status="filterStatus" v-model:page="listPage"
       :statuses="filterOptions" search-placeholder="Loại nhật ký hoặc nội dung…" :total="filteredLogs.length"

@@ -281,8 +281,10 @@ sau các migration hiện có. Migration bổ sung bảng `lot_trace_codes`, kh�
 bảng QR theo vụ cũ và không tự công khai lô cũ. Không chạy migration nếu chưa xác nhận
 đúng môi trường và có phê duyệt cho database đó.
 
-Nhà phân phối đúng tổ chức nhận phát hành QR sau khi xác nhận nhận chuyến trong
-trang **Nhận hàng**. Chủ cơ sở xem/tải QR trong **Thu hoạch / Lô**. Một vụ thu nhiều đợt có nhiều
+Nhà phân phối đúng tổ chức nhận xác nhận nhận chuyến, nhập hồ sơ đóng gói và kiểm định,
+rồi phát hành QR trong trang **Nhận hàng**. Hồ sơ xác nhận một lần theo chuyến, giới hạn
+khối lượng đóng gói theo khối lượng thực nhận, và được đưa vào hàng đợi Blockchain.
+Chủ cơ sở xem/tải QR trong **Thu hoạch / Lô**. Một vụ thu nhiều đợt có nhiều
 QR. Các gói thuộc cùng lô có thể dùng chung mã đang hoạt động. Thu hồi yêu cầu
 lý do 3–500 ký tự và có hiệu lực với lần đọc tiếp theo. Tổ chức đã phát hành có
 thể tạo mã thay thế sau khi thu hồi. Mã cũ vẫn dẫn đến thông báo thu hồi.
@@ -320,10 +322,13 @@ loại, nội dung và khoảng ngày Việt Nam; mỗi trang 20 bản ghi.
 Việc tổng hợp/lọc/phân trang thực hiện trên trình duyệt từ dữ liệu công khai
 API đã chọn lọc; giới hạn 500 nhật ký của API bên dưới vẫn áp dụng.
 
-Đối soát Blockchain trực tiếp chỉ áp dụng snapshot thu hoạch, phân biệt khớp/lệch,
-chờ ghi và không thể kiểm tra. Nhật ký/vận chuyển hiển thị trạng thái ghi nhận lưu
-trong database, không giả định đã đối soát lại. Không gửi giao dịch khi quét QR.
-Đóng gói/kiểm định/bán lẻ chưa được triển khai nên không suy diễn các bước này.
+Trang QR đối soát trực tiếp hồ sơ thu hoạch và hồ sơ đóng gói, kiểm định của
+chuyến phát hành. Kết quả phân biệt khớp, sai lệch, chờ ghi và chưa thể kiểm tra.
+Nhật ký và vận chuyển hiển thị trạng thái ghi nhận lưu trong database.
+Quét QR chỉ đọc dữ liệu và kết quả kiểm tra.
+QR mới hiển thị hồ sơ đóng gói và kiểm định của chuyến phát hành. Bộ phận nhận hàng
+in QR lên bao bì để khách mua trực tiếp quét tại điểm bán. QR đã phát hành trước migration
+vẫn đọc được. Phát hành thay thế áp dụng điều kiện đóng gói và kiểm định như QR mới.
 QR có thể sao chép, không phải tem chống giả riêng từng gói.
 
 Giới hạn hiện tại: tối đa 500 nhật ký, 100 chuyến và 500 sự kiện vận chuyển mỗi
@@ -380,11 +385,19 @@ Các tính năng này chỉ đọc schema hiện có, không cần migration m�
 dụng các migration lô, phiên bản vụ, vận chuyển và QR của dự án. Thống kê đọc
 đủ các trang dữ liệu, tối đa 20.000 lần thu hoạch trong phạm vi; vượt ngưỡng
 trả lỗi yêu cầu thu hẹp bộ lọc. Báo cáo giữ các giới hạn kích thước hồ sơ
-truy xuất hiện có và tối đa 2.000 phiên bản vụ. Lập báo cáo không gửi giao dịch
-Blockchain; kết quả khớp hash chỉ áp dụng snapshot thu hoạch. Nhật ký và vận
-chuyển hiển thị trạng thái ghi nhận, không tự coi là đã đối soát trực tiếp.
+truy xuất hiện có và tối đa 2.000 phiên bản vụ. Báo cáo công khai đối soát
+hồ sơ thu hoạch và đóng gói, kiểm định như trang QR. Báo cáo quản lý đối soát
+hồ sơ thu hoạch và hiển thị trạng thái ghi nhận của các hồ sơ đóng gói.
+Nhật ký và vận chuyển hiển thị trạng thái ghi nhận.
 PDF/CSV là bản tại thời điểm lập, không được lưu như một báo cáo bất biến
 trên server; dữ liệu đã tải xuống không cập nhật khi QR hoặc nhật ký bị thu hồi.
+
+## Cảnh báo nhật ký nuôi
+
+Màn hình nhật ký của vụ hiển thị các mục có dữ liệu cần sửa và cảnh báo sau
+3 ngày theo lịch Việt Nam chưa có nhật ký hợp lệ đã xác nhận. Quy tắc 3 ngày
+áp dụng cho vụ đang nuôi hoặc sẵn sàng thu hoạch, tính từ ngày thả hoặc nhật
+ký hợp lệ đã xác nhận gần nhất. API kiểm tra dữ liệu khi xác nhận và đính chính.
 
 ## Kiểm thử toàn luồng với môi trường riêng
 

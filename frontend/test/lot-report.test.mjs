@@ -15,6 +15,7 @@ const imports = {
   '../../api/client': moduleUrl('export const api = { get: (...args) => globalThis.reportApi(...args) };'),
   './lot-utils': moduleUrl(transpile(utilSource)),
   '../../components/LoadingState.vue': moduleUrl(`import {h} from ${JSON.stringify(vueUrl)}; export default () => h('p', 'Đang tải…');`),
+  '../../components/LotPackagingDetails.vue': moduleUrl(`import {h} from ${JSON.stringify(vueUrl)}; export default { props: ['items'], render() { return h('p', this.items.map(item => item.inspectionResult).join(', ')); } };`),
   'vuestic-ui': moduleUrl(`import {h,defineComponent} from ${JSON.stringify(vueUrl)}; const wrap = tag => defineComponent({setup(_, {attrs,slots}) { return () => h(tag,attrs,slots.default?.()); }}); export const VaButton=wrap('button'), VaAlert=wrap('aside');`),
 }
 const source = await readFile(new URL('../src/pages/lots/LotReportPage.vue', import.meta.url), 'utf8')
@@ -45,6 +46,7 @@ function fixture() {
       farm: { name: 'Cơ sở A', address: 'Cà Mau' }, pond: { name: 'Ao A', code: 'AO-1' },
       batch: { code: 'VU-A', seedSource: 'Giống A', stockingDate: '2026-01-01' },
       proof: { status: 'UNAVAILABLE', recordedStatus: 'SUCCESS', transactionHash: '0xabc', checkedAt: null },
+      packaging: [{ inspectionResult: 'Cảm quan đạt' }],
       logs: [{ date: '2026-11-01', type: 'FEEDING', details: { feedType: 'Thức ăn A', feedAmount: 2 }, blockchainStatus: 'SUCCESS' }],
       transports: [{ code: 'VC-A', date: '2026-11-21', status: 'DELIVERED', quantity: 12.5, recipientName: 'Phân phối A', events: [] }],
     },
@@ -74,6 +76,7 @@ test('private report renders origin, histories and honest unavailable proof; pri
     assert.match(text(view.root), /Cơ sở A/); assert.match(text(view.root), /Đính chính nguồn giống/)
     assert.match(text(view.root), /Không thể đối soát Blockchain/)
     assert.match(text(view.root), /Phân phối A/); assert.match(text(view.root), /Thức ăn A/)
+    assert.match(text(view.root), /Cảm quan đạt/)
     assert.equal(document.title, 'Bao-cao-truy-xuat-LO-A')
     assert.equal(printButton(view.root).props.disabled, false)
     printButton(view.root).props.onClick()

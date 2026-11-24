@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { VaAlert, VaButton } from 'vuestic-ui'
+import LotPackagingDetails from '../../components/LotPackagingDetails.vue'
 import { api, ApiError } from '../../api/client'
 import { FARMING_LOG_TYPE_LABELS, SPECIES_LABELS } from '../../types'
 import type { PublicTraceResponse } from '../../types/trace'
@@ -89,10 +90,10 @@ const recordedLabels: Record<string, string> = {
   UNKNOWN: 'Chưa xác định',
 }
 const proofLabels = {
-  MATCH: 'Hash snapshot thu hoạch khớp với Blockchain',
-  MISMATCH: 'Hash snapshot thu hoạch không khớp với Blockchain',
-  PENDING: 'Chưa có bản ghi Blockchain để đối soát thu hoạch',
-  UNAVAILABLE: 'Hiện không thể đối soát thu hoạch với Blockchain',
+  MATCH: 'Đã kiểm tra. Thông tin thu hoạch khớp với hồ sơ đã lưu.',
+  MISMATCH: 'Thông tin thu hoạch có sai lệch so với hồ sơ đã lưu. Vui lòng hỏi nhà phân phối.',
+  PENDING: 'Thông tin thu hoạch đang chờ được kiểm tra.',
+  UNAVAILABLE: 'Tạm thời chưa thể kiểm tra thông tin thu hoạch. Vui lòng thử lại sau.',
 }
 const detailLabels: Record<string, string> = {
   feedType: 'Loại thức ăn',
@@ -373,9 +374,8 @@ onBeforeUnmount(() => {
             <h3>{{ labels[log.type] || log.type }}</h3>
             <p>{{ time(log.date) }}</p>
             <p class="muted">
-              Blockchain:
-              {{ recordedLabels[log.blockchainStatus || 'UNKNOWN'] || 'Chưa xác định' }} (trạng thái
-              ghi nhận)
+              Ghi nhận hồ sơ:
+              {{ recordedLabels[log.blockchainStatus || 'UNKNOWN'] || 'Chưa xác định' }}
             </p>
             <dl class="facts">
               <div v-for="detail in technicalDetails(log.details)" :key="detail.key">
@@ -403,8 +403,7 @@ onBeforeUnmount(() => {
         </p>
       </details>
       <section id="verification" class="trace-card proof-card">
-        <p class="eyebrow">BẰNG CHỨNG GHI NHẬN</p>
-        <h2>Đối soát thu hoạch với Blockchain</h2>
+        <h2>Kiểm tra thông tin thu hoạch</h2>
         <va-alert
           :color="
             result.trace.proof.status === 'MATCH'
@@ -415,19 +414,11 @@ onBeforeUnmount(() => {
           "
           >{{ proofLabels[result.trace.proof.status] }}</va-alert
         >
-        <p>
-          Trạng thái ghi nhận:
-          {{ recordedLabels[result.trace.proof.recordedStatus || 'UNKNOWN'] || 'Chưa xác định' }}.
-        </p>
         <p v-if="result.trace.proof.checkedAt">
           Thời điểm kiểm tra: {{ time(result.trace.proof.checkedAt) }}
         </p>
-        <p v-if="result.trace.proof.transactionHash" class="hash">
-          Giao dịch: {{ result.trace.proof.transactionHash }}
-        </p>
         <p class="muted">
-          Kết quả này chỉ đối soát snapshot thu hoạch. Trạng thái ghi nhận nhật ký và vận chuyển
-          không phải kết quả đối soát trực tiếp các mốc đó.
+          Nhật ký nuôi và các mốc vận chuyển hiển thị trạng thái ghi nhận do hệ thống lưu.
         </p>
       </section>
       <section id="journey" class="trace-card journey-card">
@@ -463,9 +454,8 @@ onBeforeUnmount(() => {
               />
               <p v-if="event.temperature != null">Nhiệt độ: {{ event.temperature }} °C</p>
               <p class="muted">
-                Blockchain:
-                {{ recordedLabels[event.blockchainStatus || 'UNKNOWN'] || 'Chưa xác định' }} (trạng
-                thái ghi nhận)
+                Ghi nhận hồ sơ:
+                {{ recordedLabels[event.blockchainStatus || 'UNKNOWN'] || 'Chưa xác định' }}
               </p>
             </li>
           </ol>
@@ -473,10 +463,9 @@ onBeforeUnmount(() => {
         </article>
         <p v-if="!result.trace.transports?.length">Chưa có thông tin vận chuyển cho lô này.</p>
       </section>
-      <section class="trace-card inspection-card">
-        <p class="eyebrow">THÔNG TIN BỔ SUNG</p>
-        <h2>Đóng gói và kiểm định</h2>
-        <p>Chưa có thông tin đóng gói và kiểm định trong hồ sơ này.</p>
+      <section class="trace-card" aria-labelledby="packaging-title">
+        <h2 id="packaging-title">Thông tin đóng gói và kiểm định</h2>
+        <LotPackagingDetails :items="result.trace.packaging ?? []" public-view />
       </section>
       <footer class="trace-footer">
         <span class="footer-brand">≈ Thủy sản Xanh</span>
@@ -969,16 +958,6 @@ onBeforeUnmount(() => {
   padding: var(--app-space-1) var(--app-space-2);
   border-radius: var(--app-pill-radius);
   background: var(--app-canvas);
-  color: var(--app-muted);
-}
-.inspection-card {
-  background: transparent;
-  border-style: dashed;
-}
-.inspection-card h2 {
-  font-size: 18px;
-}
-.inspection-card p:last-child {
   color: var(--app-muted);
 }
 .trace-footer {

@@ -368,17 +368,37 @@ async function main() {
   await api('POST', `/transports/${trip.id}/confirm-delivery`, wrongDistributor.token, {}, 404)
   await api('POST', `/transports/${trip.id}/confirm-delivery`, distributor.token, {}, 400)
   const received = await api('POST', `/transports/${trip.id}/confirm-delivery`, distributor.token, {
-    receiptOutcome: 'FULL', receivedQuantity: 7.5,
+    receiptOutcome: 'PARTIAL', receivedQuantity: 7, note: 'Thiếu 0,5 kg tại điểm giao',
   })
-  assert.equal(received.transport.receipt_outcome, 'FULL')
-  assert.equal(Number(received.transport.received_quantity), 7.5)
+  assert.equal(received.transport.receipt_outcome, 'PARTIAL')
+  assert.equal(Number(received.transport.received_quantity), 7)
   await retry()
   const events = await rows('transport_events', { transport_id: trip.id })
   assert.ok(events.length >= 5)
   assert.ok(events.every((event) => event.blockchain_status === 'SUCCESS'))
   pass('transport claim → departure → tracking → delivery → correct recipient confirmation → ordered chain events')
 
-  const issued = await api('POST', `/transports/${trip.id}/qr`, distributor.token, {})
+  const qrPath = `/transports/${trip.id}/qr`
+  const packagingPath = `/transports/${trip.id}/packaging`
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date())
+  const packagingInput = {
+    packagedDate: today, quantity: 7, specification: 'Túi 500 g',
+    inspectionDate: today, inspectionUnit: 'Phòng kiểm định E2E', inspectionResult: 'Cảm quan đạt',
+  }
+  await api('POST', qrPath, distributor.token, {}, 412)
+  await api('POST', packagingPath, wrongDistributor.token, packagingInput, 404)
+  await api('POST', packagingPath, distributor.token, { ...packagingInput, quantity: 7.01 }, 400)
+  const packaged = await api('POST', packagingPath, distributor.token, packagingInput)
+  assert.deepEqual(await api('POST', packagingPath, distributor.token, packagingInput), packaged)
+  await api('POST', packagingPath, distributor.token, { ...packagingInput, quantity: 6 }, 409)
+  await retry()
+  const [packagingJob] = await rows('blockchain_outbox', { event_id: `QUALITY_INSPECTION_RECORDED:${trip.id}` })
+  assert.equal(packagingJob.status, 'SUCCESS')
+  assert.equal(await contract.getDataHash(packagingJob.event_id),
+    require('../src/modules/blockchain/blockchain.service').hashData(packaged.packaging))
+  const issued = await api('POST', qrPath, distributor.token, {})
   const code = issued.qr.trace_code
   assert.equal((await api('POST', `/transports/${trip.id}/qr`, distributor.token, {})).qr.trace_code, code)
   const trace = await api('GET', `/public/trace/${code}`, null)
@@ -386,6 +406,11 @@ async function main() {
   assert.equal(trace.trace.proof.status, 'MATCH')
   assert.equal(trace.trace.logs.length, 1)
   assert.equal(trace.trace.transports[0].recipientName, distributor.user.organization.name)
+  assert.equal(trace.trace.packaging[0].inspectionResult, packagingInput.inspectionResult)
+  assert.equal(trace.trace.packaging[0].blockchainStatus, 'SUCCESS')
+  assert.equal(trace.trace.packaging[0].verificationStatus, 'MATCH')
+  assert.equal(Object.hasOwn(trace.trace.packaging[0], 'transactionHash'), false)
+  assert.equal(Object.hasOwn(trace.trace.proof, 'transactionHash'), false)
   const privateReport = await api('GET', `/lots/${finalLot.id}/report`, farmer.token)
   assert.ok(privateReport.history.length)
   const publicReport = await api('GET', `/public/trace/${code}/report`, null)
@@ -481,6 +506,7 @@ async function main() {
   publicPage.on('pageerror', (error) => errors.push(error.message))
   await publicPage.goto(`${webUrl}/trace/${code}/report`)
   await publicPage.getByRole('heading', { name: 'Báo cáo kết quả truy xuất' }).waitFor()
+  await publicPage.getByText(packagingInput.inspectionResult, { exact: true }).waitFor()
   pass('browser login → lot search → private report/PDF → production; mobile public report without login')
   await api(
     'POST',
@@ -506,7 +532,7 @@ async function main() {
   await api('POST', `/transports/${trip.id}/qr/revoke`, distributor.token, { traceCode: code, reason: 'Mã cũ đã thu hồi' }, 409)
   await publicPage.goto(`${webUrl}/trace/${replacementCode}/report`)
   await publicPage.getByRole('heading', { name: 'Báo cáo kết quả truy xuất' }).waitFor()
-  await publicPage.getByText('Hash hồ sơ thu hoạch khớp Blockchain', { exact: true }).waitFor()
+  await publicPage.getByText('Đã kiểm tra. Thông tin thu hoạch khớp với hồ sơ đã lưu.', { exact: true }).waitFor()
   assert.deepEqual(errors, [])
   pass('QR reissue keeps the old URL revoked, publishes a new code and rejects stale mutations')
   console.log(`\n${checks.length} system checks passed (real local PostgreSQL/Auth/PostgREST/EVM/browser).`)
@@ -523,7 +549,7 @@ main()
     console.error(error)
     process.exitCode = 1
     try {
-      console.error(docker(['logs', '--tail', '12', 'db', 'rest']))
+      console.error(docker(['logs', '--tail', '12', 'db', 'rest', 'auth', 'chain']))
     } catch {
       /* startup may have failed */
     }

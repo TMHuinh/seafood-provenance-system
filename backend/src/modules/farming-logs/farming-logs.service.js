@@ -1,5 +1,5 @@
 const farmingLogsRepository = require('./farming-logs.repository')
-const { normalizeFarmingLogInput, UUID_PATTERN } = require('./farming-logs.validation')
+const { normalizeFarmingLogInput, validateFarmingLog, farmingLogIssue, UUID_PATTERN } = require('./farming-logs.validation')
 const blockchainService = require('../blockchain/blockchain.service')
 const outbox = require('../blockchain/blockchain.outbox')
 const batchesRepository = require('../batches/batches.repository')
@@ -38,10 +38,10 @@ async function requireAccessibleBatch(profile, batchId) {
 
 async function create(profile, input) {
   const logData = normalizeFarmingLogInput(input)
-  await requireAccessibleBatch(profile, logData.batch_id)
+  const batch = await requireAccessibleBatch(profile, logData.batch_id)
   const log = await farmingLogsRepository.create(profile.id, { ...logData, lifecycle_status: 'DRAFT' })
   await farmingLogsRepository.createAudit(profile.id, log.id, 'CREATE', null, log)
-  return log
+  return { ...log, validation_issue: farmingLogIssue(log, batch) }
 }
 
 async function authorizeImageUpload(profile, batchId) {
@@ -56,7 +56,7 @@ async function update(profile, id, input) {
     throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
   }
 
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const batch = await requireAccessibleBatch(profile, existing.batch_id)
   if (existing.lifecycle_status !== 'DRAFT') throw createHttpError('Nhật ký đã xác nhận; hãy dùng chức năng Đính chính', 409)
 
   const changes = normalizeFarmingLogInput({
@@ -66,7 +66,7 @@ async function update(profile, id, input) {
 
   const log = await farmingLogsRepository.update(id, changes, existing)
   await farmingLogsRepository.createAudit(profile.id, id, 'UPDATE', existing, log)
-  return log
+  return { ...log, validation_issue: farmingLogIssue(log, batch) }
 }
 
 function blockchainPayload(log) {
@@ -99,8 +99,9 @@ async function confirm(profile, id) {
   validateId(id, 'Mã nhật ký')
   const existing = await farmingLogsRepository.findById(id)
   if (!existing) throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const batch = await requireAccessibleBatch(profile, existing.batch_id)
   if (existing.lifecycle_status !== 'DRAFT') throw createHttpError('Chỉ bản nháp mới có thể xác nhận', 409)
+  validateFarmingLog(existing, batch)
   const eventId = blockchainService.buildEventId('FARMING_LOG_RECORDED', id)
   const payload = blockchainPayload(existing)
   const log = await farmingLogsRepository.commitLifecycle(existing, profile.id, 'CONFIRM', {}, null, payload, blockchainService.hashData(payload))
@@ -111,7 +112,7 @@ async function correct(profile, id, input) {
   validateId(id, 'Mã nhật ký')
   const existing = await farmingLogsRepository.findById(id)
   if (!existing) throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const batch = await requireAccessibleBatch(profile, existing.batch_id)
   if (existing.lifecycle_status !== 'CONFIRMED') throw createHttpError('Chỉ nhật ký đã xác nhận mới có thể đính chính', 409)
   if (Number(input?.expectedVersion) !== existing.current_version) throw createHttpError('Nhật ký đã có phiên bản mới hơn', 409)
   const reason = String(input?.correctionReason ?? '').trim()
@@ -119,6 +120,7 @@ async function correct(profile, id, input) {
   const changes = normalizeFarmingLogInput({ ...input, batchId: existing.batch_id })
   const nextVersion = existing.current_version + 1
   const candidate = { ...existing, ...changes, current_version: nextVersion }
+  validateFarmingLog(candidate, batch)
   const eventId = `${blockchainService.buildEventId('FARMING_LOG_RECORDED', id)}:v${nextVersion}`
   const payload = blockchainPayload(candidate)
   const log = await farmingLogsRepository.commitLifecycle(existing, profile.id, 'CORRECT', changes, reason, payload, blockchainService.hashData(payload), input.evidenceUrl ?? null)
@@ -148,9 +150,11 @@ async function history(profile, id) {
 }
 
 async function listByBatch(profile, batchId) {
-  await requireAccessibleBatch(profile, batchId)
+  const batch = await requireAccessibleBatch(profile, batchId)
   const items = await farmingLogsRepository.findAllByBatch(batchId)
-  return { count: items.length, items }
+  return { count: items.length, items: items.map(log => ({
+    ...log, validation_issue: log.lifecycle_status === 'REVOKED' ? null : farmingLogIssue(log, batch),
+  })) }
 }
 
 async function verify(profile, batchId) {

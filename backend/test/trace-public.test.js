@@ -6,7 +6,7 @@ const express = require('express')
 const { once } = require('node:events')
 const lotId = '00000000-0000-4000-8000-000000000001'
 const traceCode = '00000000-0000-4000-8000-000000000002'
-function setup(findQr) {
+function setup(findQr, overrides = {}, chain = {}) {
   const repo = {
     findQr: findQr ?? (async () => ({ lot_id: lotId, status: 'ACTIVE', issued_by: 'PRIVATE' })),
     findLot: async () => ({ id: lotId, batch_id: 'batch', lot_code: 'LOT-A', quantity: 10, provenance: {
@@ -14,9 +14,34 @@ function setup(findQr) {
       pond: { code: 'P1', name: 'Pond 1' }, batch: { species: 'SHRIMP', batch_code: 'B1', seed_source: 'Seed', stocking_date: '2026-01-01' },
     } }),
     logs: async () => [], transports: async () => [], proof: async () => null,
+    ...overrides,
   }
-  return createTraceService(repo, {})
+  return createTraceService(repo, chain)
 }
+test('public packaging distinguishes a match, a difference, a queued write and an unavailable check', async () => {
+  for (const [recorded, onChain, expected] of [
+    ['SUCCESS', 'expected', 'MATCH'],
+    ['SUCCESS', 'different', 'MISMATCH'],
+    ['PENDING', null, 'PENDING'],
+    ['SUCCESS', null, 'UNAVAILABLE'],
+  ]) {
+    const transport = 'transport-a'
+    const service = setup(async () => ({ lot_id: lotId, status: 'ACTIVE', issuance_transport_id: transport }), {
+      packaging: async (id, trip) => {
+        assert.equal(id, lotId)
+        assert.equal(trip, transport)
+        return [{
+          snapshot: { specification: 'Túi 500 g' }, eventId: 'packaging-proof',
+          record: { status: recorded, data_hash: 'expected', contract_address: 'contract', chain_id: 31337, transaction_hash: 'hidden' },
+        }]
+      },
+    }, { hash: () => 'expected', read: async () => onChain })
+    const { trace } = await service.publicTrace(traceCode)
+    assert.equal(trace.packaging[0].verificationStatus, expected)
+    assert.equal(Object.hasOwn(trace.packaging[0], 'transactionHash'), false)
+    assert.equal(Object.hasOwn(trace.proof, 'transactionHash'), false)
+  }
+})
 test('public trace stays readable without identity and does not expose publisher actor or capabilities', async () => {
   const value = await setup().publicTrace(traceCode)
   assert.equal(value.status, 'ACTIVE')

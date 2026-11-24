@@ -9,6 +9,7 @@ import { VaAlert, VaButton } from 'vuestic-ui'
 import ReceiptForm from './ReceiptForm.vue'
 import ReceiptSummary from './ReceiptSummary.vue'
 import LotQrPanel from '../../components/LotQrPanel.vue'
+import PackagingForm from './PackagingForm.vue'
 import { api, ApiError } from '../../api/client'
 import { useAuthStore } from '../../stores/auth.store'
 import { SPECIES_LABELS, RECEIPT_LABELS, type ReceiptInput, type LotTransport, type Species, type TransportEvent } from '../../types'
@@ -22,6 +23,7 @@ const authStore = useAuthStore()
 const selectedId = computed(() => typeof route.query.trip === 'string' ? route.query.trip : null)
 const trips = ref<ReceivingTrip[]>([])
 const selectedTrip = computed(() => trips.value.find((trip) => trip.id === selectedId.value))
+const packagingRevision = ref(0)
 const drawer = ref<HTMLDialogElement | null>(null)
 const loading = ref(true)
 const loadedTrips = ref(false)
@@ -320,9 +322,12 @@ onMounted(load)
                   <div v-if="selectedTrip.lot.provenance.batch.species"><dt>Loại thủy sản</dt><dd>{{ SPECIES_LABELS[selectedTrip.lot.provenance.batch.species] ?? selectedTrip.lot.provenance.batch.species }}</dd></div>
                   <div v-if="selectedTrip.lot.provenance.batch.batch_code"><dt>Mã vụ nuôi</dt><dd>{{ selectedTrip.lot.provenance.batch.batch_code }}</dd></div>
                 </dl>
+                <PackagingForm v-if="selectedTrip.status === 'DELIVERED'" :key="selectedTrip.id"
+                  :transport-id="selectedTrip.id" :received-quantity="Number(selectedTrip.received_quantity ?? selectedTrip.quantity)"
+                  @confirmed="packagingRevision++" />
                 <details v-if="selectedTrip.status === 'DELIVERED'" class="trace-details">
                   <summary>QR truy xuất nguồn gốc</summary>
-                  <LotQrPanel :key="selectedTrip.id" :api-path="`/transports/${selectedTrip.id}/qr`" :lot-code="selectedTrip.lot.lot_code" />
+                  <LotQrPanel :key="`${selectedTrip.id}/${packagingRevision}`" :api-path="`/transports/${selectedTrip.id}/qr`" :lot-code="selectedTrip.lot.lot_code" />
                 </details>
               </li>
             </ul>

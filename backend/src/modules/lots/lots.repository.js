@@ -28,6 +28,10 @@ function createLotsRepository(db) {
   }
   function lotQuery(profile, options = {}) {
     let query = scope(db.from('harvest_lots').select(`id,lot_code,batch_id,quantity,status,created_at,provenance,blockchain_event_id,${PARENTS},harvest:harvests!inner(harvest_date),qr:lot_trace_codes(trace_code,status)`, { count: 'exact' }), profile, options)
+      .order('status', { referencedTable: 'qr' })
+      .order('created_at', { referencedTable: 'qr', ascending: false })
+      .order('trace_code', { referencedTable: 'qr', ascending: false })
+      .limit(1, { referencedTable: 'qr' })
     const bounds = dateBounds(options)
     if (bounds.from) query = query.gte('harvest.harvest_date', bounds.from)
     if (bounds.until) query = query.lt('harvest.harvest_date', bounds.until)

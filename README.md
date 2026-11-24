@@ -159,7 +159,8 @@ database và chưa có bằng chứng on-chain.
 Smart contract nằm trong `backend/contracts/` (Hardhat project). Code backend dùng
 `ethers` để ghi hash dữ liệu lên chain. Backend chỉ kết nối khi **đủ cả 3 biến**
 trong `backend/.env`: `BLOCKCHAIN_RPC_URL`, `BLOCKCHAIN_CONTRACT_ADDRESS`,
-`BLOCKCHAIN_PRIVATE_KEY`. Thiếu một trong ba sẽ chạy **Mock data** (không ghi chain).
+`BLOCKCHAIN_PRIVATE_KEY`. Thiếu một trong ba thì bằng chứng ở trạng thái chờ;
+nghiệp vụ đã lưu được giữ lại và worker tự thử gửi, không giả lập thành công.
 
 ### 1. Khởi động node (node chạy trong Docker, service `chain`)
 
@@ -184,15 +185,68 @@ docker compose exec backend node scripts/deploy.js
 ```
 
 Script `deploy.js` tự ghi địa chỉ contract vào `BLOCKCHAIN_CONTRACT_ADDRESS`
-trong `backend/.env`, sau đó yêu cầu:
+trong `backend/.env`. Tạo lại container backend để Docker nạp lại `env_file`:
 
 ```bash
-docker compose restart backend
+docker compose up -d --force-recreate --no-deps backend
 ```
 
-### 3. Kiểm tra kết nối
+### 3. Cấp quyền ghi và hàng đợi thử lại
 
-- Ghi một nhật ký nuôi từ giao diện → dòng log backend phải **không còn** cảnh báo
+Contract mới chỉ cho các ví trong `writers` gọi `recordData`; ví deploy ban đầu
+là owner và writer. Owner cấp/thu hồi writer, chuyển owner qua hai bước
+`transferOwnership` / `acceptOwnership`. Chuyển owner không tự đổi danh sách writer.
+Đọc hash vẫn công khai, mỗi event chỉ ghi được một lần.
+
+Chạy trong `backend/`, ở môi trường quản trị có khóa owner:
+
+```bash
+node scripts/manage-writer.js <backend-wallet-address> grant
+node scripts/manage-writer.js <backend-wallet-address> revoke
+```
+
+Script dùng `BLOCKCHAIN_OWNER_PRIVATE_KEY` nếu được cung cấp riêng cho tiến trình,
+hoặc `BLOCKCHAIN_PRIVATE_KEY` khi ví cấu hình cũng là owner. Script kiểm tra owner
+và không sửa `.env`. Backend thường trực chỉ cần khóa writer; không đưa khóa thật
+vào Git hoặc câu lệnh lưu trong lịch sử terminal.
+
+Áp dụng migration `202611230001_blockchain_outbox.sql` sau `202611090001` trước
+khi chạy backend mới. Snapshot vụ, thu hoạch và xác nhận/đính chính/thu hồi nhật ký
+được lưu cùng công việc gửi chain trong một transaction. Bản nháp không đưa lên
+chain. Xác nhận nghiệp vụ có thể thành công khi chain đang lỗi; giao diện phân
+biệt trạng thái xác nhận và bằng chứng trên chain. Thu hồi nhật ký có hiệu lực
+ngay với hồ sơ công khai, bằng chứng thu hồi được gửi tiếp khi chain hoạt động.
+Chạy tiếp `202611230002_business_conflicts.sql` để xung đột nghiệp vụ trả 409
+mà không kích hoạt PostgREST tự thử lại transaction.
+Khi dùng luồng nhận hàng/phát hành lại QR mới trên `main`, cần có migration
+`202611220001_transport_receipts.sql`, `202611240001_lot_trace_reissue.sql` và
+`202611240002_qr_business_conflict.sql`. Migration cuối giữ cách trả lỗi 409
+cho RPC QR được tạo lại; không cần chạy lại các migration đã áp dụng.
+Chạy tiếp `202611240003_blockchain_records_access.sql` để bảng chứa giao dịch
+đã ký chỉ được truy cập qua backend. API tiếp tục trả hash và mã giao dịch để đối soát.
+Sau khi triển khai backend có hỗ trợ `batch_version_v1`, chạy
+`202611240004_enqueue_batch_snapshot.sql`. Database lưu snapshot vụ cùng công
+việc trong transaction. Worker backend định dạng payload trước khi băm và gửi.
+
+Worker kiểm tra mỗi 15 giây, thử lại sau 2 phút rồi tăng dần tới tối đa 1 giờ.
+Lease database ngăn hai worker xử lý cùng việc và tuần tự hóa ví ký giữa hàng
+đợi chung và vận chuyển. Sau lỗi/khởi động lại, worker dùng payload đã lưu,
+đối soát event/hash trước khi gửi. Giao dịch đã ký và hash được lưu trước khi
+broadcast; khôi phục chỉ phát lại đúng giao dịch đó khi chưa rõ kết quả, giữ
+nguyên nonce/hash. `SUCCESS` không bị kết quả lỗi
+đến muộn ghi đè. Chain ID và contract được giữ theo từng bằng chứng; worker
+không tự chuyển bằng chứng cũ sang contract/network mới.
+
+Contract cũ không có phân quyền không thể cập nhật tại chỗ: cần triển khai
+contract mới và cấp writer trước khi chuyển cấu hình ghi. Giữ chain/contract cũ
+để đọc bằng chứng đã có; xử lý riêng việc còn chờ gắn contract cũ. Migration chỉ
+khôi phục hàng đợi từ snapshot thu hoạch còn thiếu proof, không dựng lại payload
+vụ/nhật ký cũ. Nếu có event trùng trong `blockchain_records`, migration dừng để
+đối soát thủ công, không tự xóa bằng chứng.
+
+### 4. Kiểm tra kết nối
+
+- Tạo rồi xác nhận một nhật ký từ giao diện → dòng log backend phải **không còn** cảnh báo
   `Thiếu cấu hình Blockchain`, và bản ghi phải có `tx_hash` + trạng thái `SUCCESS`.
 - Đối soát trực tiếp trên chain bằng id nhật ký:
 
@@ -200,9 +254,10 @@ docker compose restart backend
 docker compose exec backend node scripts/check-record.js <id-nhat-ky>
 ```
 
-Lưu ý: node Hardhat lưu trạng thái trong bộ nhớ, éphemeral. Mỗi lần
-`docker compose down` / xóa container `chain` thì phải deploy lại contract
-(`scripts/deploy.js`) rồi restart backend.
+Lưu ý: Hardhat lưu trạng thái trong bộ nhớ; dừng/khởi động lại node có thể mất
+toàn bộ bằng chứng. Chỉ dùng cho phát triển. Deploy lại không khôi phục các hash
+cũ và không làm bằng chứng cũ trở lại hợp lệ. Môi trường cần lưu bằng chứng lâu
+dài phải dùng chain có lưu trữ bền vững.
 
 ## Quản lý dependency
 
@@ -226,11 +281,11 @@ sau các migration hiện có. Migration bổ sung bảng `lot_trace_codes`, kh�
 bảng QR theo vụ cũ và không tự công khai lô cũ. Không chạy migration nếu chưa xác nhận
 đúng môi trường và có phê duyệt cho database đó.
 
-Trong **Thu hoạch / Lô**, chủ cơ sở chọn **Phát hành QR công khai** cho từng lô.
-Sau khi phát hành có thể mở hồ sơ hoặc tải SVG để in. Một vụ thu nhiều đợt có nhiều
-QR; phát hành lặp lại cho cùng lô giữ nguyên mã. Các gói thuộc cùng lô có thể dùng
-chung mã. Thu hồi yêu cầu lý do 3–500 ký tự, có hiệu lực với lần đọc tiếp theo và
-không thể phát hành lại; mã vẫn dẫn đến thông báo thu hồi, không xóa lịch sử.
+Nhà phân phối đúng tổ chức nhận phát hành QR sau khi xác nhận nhận chuyến trong
+trang **Nhận hàng**. Chủ cơ sở xem/tải QR trong **Thu hoạch / Lô**. Một vụ thu nhiều đợt có nhiều
+QR. Các gói thuộc cùng lô có thể dùng chung mã đang hoạt động. Thu hồi yêu cầu
+lý do 3–500 ký tự và có hiệu lực với lần đọc tiếp theo. Tổ chức đã phát hành có
+thể tạo mã thay thế sau khi thu hồi. Mã cũ vẫn dẫn đến thông báo thu hồi.
 Hồ sơ đã được tải/chụp trước đó không thể thu hồi khỏi thiết bị người xem.
 
 QR chứa URL frontend `/trace/:traceCode`, không phải URL API. URL được tạo từ
@@ -242,8 +297,11 @@ Tính năng này không tự deploy hay thay đổi hosting/network.
 
 API chủ cơ sở (đăng nhập, kiểm tra toàn bộ cơ sở/ao/vụ/lô):
 
-- `GET/POST /api/farms/:farmId/ponds/:pondId/batches/:id/lots/:lotId/qr`
-- `POST` cùng đường dẫn thêm `/revoke`, body `{ "reason": "Lý do thu hồi" }`.
+- `GET /api/farms/:farmId/ponds/:pondId/batches/:id/lots/:lotId/qr`.
+- `POST` cùng đường dẫn thêm `/revoke` chỉ cho QR cũ chưa có tổ chức phát hành.
+- Nhà phân phối dùng `GET/POST /api/transports/:transportId/qr` để xem/phát hành.
+  `POST` thêm `/revoke` nhận `traceCode` và `reason`. `POST` thêm `/reissue`
+  nhận `traceCode` của mã đã thu hồi để tạo mã thay thế.
 
 Khách dùng `GET /api/public/trace/:traceCode`, không đăng nhập. API chọn trường
 công khai từ snapshot nguồn gốc lô, nhật ký hiện còn xác nhận đến hết ngày
@@ -274,7 +332,8 @@ hồ sơ; vượt giới hạn trả lỗi tạm thời thay vì âm thầm hi�
 bổ sung giới hạn tại gateway. Không cache hồ sơ công khai, luôn kiểm tra trạng thái
 thu hồi; không xem lỗi chain là hồ sơ đã xác thực.
 
-Kiểm thử không cần database hoặc `.env`:
+Kiểm thử tự động không cần database hoặc `.env` (contract chạy trên EVM nội bộ;
+lần đầu compile cần tải Solidity compiler):
 
 ```bash
 cd backend
@@ -326,3 +385,27 @@ Blockchain; kết quả khớp hash chỉ áp dụng snapshot thu hoạch. Nhậ
 chuyển hiển thị trạng thái ghi nhận, không tự coi là đã đối soát trực tiếp.
 PDF/CSV là bản tại thời điểm lập, không được lưu như một báo cáo bất biến
 trên server; dữ liệu đã tải xuống không cập nhật khi QR hoặc nhật ký bị thu hồi.
+
+## Kiểm thử toàn luồng với môi trường riêng
+
+Cần Node.js phù hợp `frontend/package.json`, Docker và dependency đã cài ở cả
+`backend/`, `frontend/`. Trong `backend/`:
+
+```bash
+npx playwright install chromium
+npm run test:system
+```
+
+Windows có Edge có thể bỏ bước tải Chromium và đặt
+`$env:E2E_BROWSER_CHANNEL='msedge'` trước khi chạy. Test sử dụng các cổng loopback
+6540–6547, project Compose `seafood-isolated-tests`, PostgreSQL/Auth/PostgREST
+thật, contract trên Hardhat và trình duyệt thật. Database test được tạo mới,
+chạy chuỗi migration UP và xóa cùng volume khi kết thúc. Không chạy đồng thời
+hai phiên test trên các cổng này. Không dùng project test này để chứa dữ liệu cần giữ.
+
+Luồng kiểm tra: đăng ký/đăng nhập theo vai trò → cơ sở/ao/vụ → nhật ký → thu
+hoạch một phần/kết thúc → vận chuyển/bên nhận → phát hành QR → truy xuất/báo cáo
+→ tìm lô/thống kê/PDF trên trình duyệt → thu hồi QR. Có kiểm tra ví chưa có quyền,
+RPC lỗi/khôi phục, worker chạy lại, yêu cầu trùng/xung đột và lease database.
+Ảnh bằng chứng giao hàng dùng URL fixture hợp lệ; test này không upload lên
+Cloudinary, không xác nhận tích hợp upload với dịch vụ bên ngoài.

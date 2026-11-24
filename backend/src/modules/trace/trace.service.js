@@ -61,7 +61,7 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     let timer
     try {
       const hash = await Promise.race([
-        chain.read(lot.blockchain_event_id, record.contract_address),
+        chain.read(lot.blockchain_event_id, record.contract_address, record.chain_id),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chain timeout')), timeoutMs) }),
       ])
       return { ...base, checkedAt: new Date().toISOString(), status: hash && hash === chain.hash(lot.provenance) && hash === record.data_hash ? 'MATCH' : 'MISMATCH' }

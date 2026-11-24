@@ -8,12 +8,15 @@ import { createRenderer, h, nextTick, ref } from 'vue'
 // Execute the real SFC; replace only browser routing, API I/O and UI wrappers.
 const dataModule = source => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
 const vueUrl = import.meta.resolve('vue')
+const typesSource = await readFile(new URL('../src/types/index.ts', import.meta.url), 'utf8')
+const typesModule = dataModule(ts.transpileModule(typesSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
 const overlaySource = await readFile(new URL('../src/components/overlay-dismiss.ts', import.meta.url), 'utf8')
 const overlay = dataModule(ts.transpileModule(overlaySource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace("from 'vue'", `from ${JSON.stringify(vueUrl)}`))
 const stubs = {
+  '../../types': typesModule,
   '../../components/overlay-dismiss': overlay,
   'vue-router': dataModule('export const useRouter = () => ({resolve: ({params}) => ({href: `/trace/${params.traceCode}`})})'),
-  '../api/client': dataModule('export const api = {get: (...a) => globalThis.qrTestApi.get(...a), post: (...a) => globalThis.qrTestApi.post(...a)}'),
+  '../api/client': dataModule('export class ApiError extends Error {}; export const api = {get: (...a) => globalThis.qrTestApi.get(...a), post: (...a) => globalThis.qrTestApi.post(...a)}'),
   'vuestic-ui': dataModule(`import {h,defineComponent} from ${JSON.stringify(vueUrl)};
     const component = tag => defineComponent({inheritAttrs:false,emits:['update:modelValue'],setup(_, {attrs,slots,emit}) {
       return () => h(tag, {...attrs,onInput:e=>emit('update:modelValue',e.target.value)}, slots.default?.());
@@ -134,11 +137,15 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
   globalThis.qrTestHeader = await loadSfc('../src/components/PageHeader.vue')
   globalThis.qrTestEmpty = await loadSfc('../src/components/EmptyState.vue')
   globalThis.qrTestLoading = await loadSfc('../src/components/LoadingState.vue')
+  globalThis.qrTestReceiptForm = await loadSfc('../src/pages/transports/ReceiptForm.vue')
+  globalThis.qrTestReceiptSummary = await loadSfc('../src/pages/transports/ReceiptSummary.vue')
   globalThis.qrTestReceiptQuery = ref({ trip: 'trip-a' })
   const Receipts = await loadSfc('../src/pages/transports/DistributorReceipts.vue', {
     '../../stores/auth.store': dataModule('export const useAuthStore = () => ({ organizationName: "Phân phối A" })'),
     'vue-router': dataModule('export const useRoute = () => ({ get query() { return globalThis.qrTestReceiptQuery.value } }); export const useRouter = () => ({ replace: async ({query}) => { globalThis.qrTestReceiptQuery.value = query } })'),
-    '../../types': dataModule('export const SPECIES_LABELS = {}'),
+    '../../types': typesModule,
+    './ReceiptForm.vue': dataModule('export default globalThis.qrTestReceiptForm'),
+    './ReceiptSummary.vue': dataModule('export default globalThis.qrTestReceiptSummary'),
     '../../components/PageHeader.vue': dataModule('export default globalThis.qrTestHeader'),
     '../../components/EmptyState.vue': dataModule('export default globalThis.qrTestEmpty'),
     '../../components/LoadingState.vue': dataModule('export default globalThis.qrTestLoading'),
@@ -155,16 +162,25 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
       paths.push(path)
       return path === '/transports/receiving' ? { items: [{
         id: 'trip-a', transport_code: 'TRIP-A', status: confirmed ? 'DELIVERED' : 'IN_TRANSIT',
+        receipt_outcome: confirmed ? 'FULL' : null, received_quantity: confirmed ? 10 : null,
         delivery_reported_at: '2026-11-08', transport_date: '2026-11-08', quantity: 10, from_location: 'Farm', to_location: 'Shop', events: [],
         lot: { id: 'lot-a', lot_code: 'LOT-A', provenance: { farm: { name: 'Farm' }, batch: { species: 'SHRIMP' }, pond: { name: 'Ao' } } },
       }] } : result(null, true)
     },
-    post: async path => { assert.equal(path, '/transports/trip-a/confirm-delivery'); confirmed = true; return {} },
+    post: async (path, body) => {
+      assert.equal(path, '/transports/trip-a/confirm-delivery')
+      assert.deepEqual(body, { receiptOutcome: 'FULL', receivedQuantity: 10, note: '' })
+      confirmed = true
+      return { transport: { status: 'DELIVERED', receipt_outcome: 'FULL', received_quantity: 10 } }
+    },
   }
   const root = node('root'), app = renderer.createApp(Receipts); app.mount(root)
   try {
     await settle(); assert.equal(button(root, 'Phát hành'), undefined)
-    await button(root, 'Xác nhận nhận hàng').props.onClick(); await settle()
+    const fullReceipt = nodes(root).find(n => n.type === 'input' && n.props.type === 'radio' && n.props.value === 'FULL')
+    assert.ok(fullReceipt)
+    fullReceipt.props['onUpdate:modelValue']('FULL'); await nextTick()
+    await nodes(root).find(n => n.type === 'form' && n.props.class === 'receipt-form').props.onSubmit({ preventDefault() {} }); await settle()
     assert.ok(button(root, 'Phát hành'))
     assert.ok(paths.includes('/transports/trip-a/qr'))
   } finally { app.unmount() }
@@ -198,11 +214,13 @@ test('transport UI distinguishes reported delivery from confirmed receipt', asyn
   globalThis.qrTestHeader = await loadSfc('../src/components/PageHeader.vue')
   globalThis.qrTestEmpty = await loadSfc('../src/components/EmptyState.vue')
   globalThis.qrTestProgress = await loadSfc('../src/pages/transports/TransportProgress.vue')
+  globalThis.qrTestReceiptSummary = await loadSfc('../src/pages/transports/ReceiptSummary.vue')
   const Transport = await loadSfc('../src/pages/transports/TransporterDashboard.vue', {
     '../../api/client': stubs['../api/client'],
     '../../components/PageHeader.vue': dataModule('export default globalThis.qrTestHeader'),
     '../../components/EmptyState.vue': dataModule('export default globalThis.qrTestEmpty'),
     './TransportProgress.vue': dataModule('export default globalThis.qrTestProgress'),
+    './ReceiptSummary.vue': dataModule('export default globalThis.qrTestReceiptSummary'),
     '../../stores/auth.store': dataModule("export const useAuthStore = () => ({ fullName: 'Huynh' })"),
   })
   const initial = mount({ get: async () => result() }); initial.close()

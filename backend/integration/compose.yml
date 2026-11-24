@@ -1,0 +1,48 @@
+name: seafood-isolated-tests
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: local-test-password
+      POSTGRES_DB: seafood_test
+    ports: ["127.0.0.1:6540:5432"]
+    volumes: ["./bootstrap.sql:/docker-entrypoint-initdb.d/bootstrap.sql:ro"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d seafood_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  rest:
+    image: postgrest/postgrest:v12.2.3
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      PGRST_DB_URI: postgres://postgres:local-test-password@db:5432/seafood_test
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: seafood-test-only-jwt-secret-at-least-32-characters
+    ports: ["127.0.0.1:6542:3000"]
+  auth:
+    image: supabase/gotrue:v2.177.0
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://127.0.0.1:6541/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:local-test-password@db:5432/seafood_test?search_path=auth
+      GOTRUE_SITE_URL: http://127.0.0.1:6545
+      GOTRUE_JWT_SECRET: seafood-test-only-jwt-secret-at-least-32-characters
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: 1000
+    ports: ["127.0.0.1:6543:9999"]
+  chain:
+    build: { context: .., dockerfile: Dockerfile }
+    command: ["node", "node_modules/hardhat/internal/cli/cli.js", "node", "--hostname", "0.0.0.0"]
+    ports: ["127.0.0.1:6546:8545"]

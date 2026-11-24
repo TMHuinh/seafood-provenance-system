@@ -1,7 +1,8 @@
 # Supabase Cloud và migration
 
 Thư mục này chỉ lưu cấu hình Supabase CLI và lịch sử schema của ứng dụng.
-Dự án không còn chạy Supabase local bằng Docker Compose.
+Ứng dụng dùng Supabase Cloud. Bộ kiểm thử toàn luồng có stack PostgreSQL/Auth/
+PostgREST dùng riêng trong `backend/integration/`, không thay thế database ứng dụng.
 
 ## Thành phần
 
@@ -48,6 +49,55 @@ supabase db push
 ```
 
 Không chạy `supabase db push` với migration hiện tại khi chưa chuẩn hóa.
+
+## Hàng đợi Blockchain bền vững
+
+Sau toàn bộ migration hiện có đến `202611090001_transport_delivery_proof.sql`,
+áp dụng `202611230001_blockchain_outbox.sql` trước khi khởi động backend mới.
+Sau đó áp dụng `202611230002_business_conflicts.sql` để các RPC nghiệp vụ trả
+`PT409` thay vì mã serialization `40001`, tránh vòng thử lại của PostgREST khi
+điều kiện nghiệp vụ không thể tự thay đổi (như phát hành QR trước khi nhận hàng).
+Sau `202611240002_qr_business_conflict.sql`, chạy
+`202611240003_blockchain_records_access.sql` để chặn truy cập trực tiếp vào
+`blockchain_records` từ vai trò `anon` và `authenticated`. API vẫn trả thông tin
+bằng chứng cần thiết qua backend.
+
+Triển khai backend có hỗ trợ `batch_version_v1` rồi mới áp dụng
+`202611240004_enqueue_batch_snapshot.sql`. Trigger lưu snapshot cùng hàng đợi
+trong transaction. Worker backend định dạng payload và ghi hash lên chain.
+Backend vẫn xử lý được các công việc đã lưu theo định dạng cũ.
+Chỉ áp dụng lên database thật khi đã chọn đúng môi trường và được phê duyệt.
+Migration thêm outbox, lease ví ký, `blockchain_records.chain_id`, giao dịch đã ký, unique event
+và RPC xác nhận/đính chính/thu hồi nhật ký theo transaction.
+
+Kiểm tra event trùng trước khi triển khai:
+
+```sql
+SELECT event_id, count(*)
+FROM public.blockchain_records
+GROUP BY event_id HAVING count(*) > 1;
+```
+
+Nếu có trùng, migration dừng và rollback; cần đối soát từng bằng chứng, không
+xóa tự động. Migration backfill từ snapshot thu hoạch chưa có proof SUCCESS,
+không tái tạo payload batch/nhật ký cũ. Công việc đã gắn contract cũ không tự
+chuyển sang contract mới. Dừng worker khi triển khai migration/đổi cấu hình,
+đối soát công việc đang chờ trước khi mở lại ghi.
+Các proof vụ/nhật ký cũ còn PENDING/FAILED nhưng không có payload gốc trong
+outbox cần đối soát riêng; bản phát hành này không tự khôi phục chúng từ dữ liệu
+hiện tại. Với nhật ký legacy còn DRAFT nhưng đã có version/proof từ một lần xác
+nhận dở dang, cần giải quyết xung đột đó trước khi xác nhận tiếp.
+
+Outbox chỉ dành cho `service_role`, có trigger bảo vệ payload, lease có thời
+hạn và token để từ chối worker cũ. Nghiệp vụ, phiên bản, audit và công việc ghi
+nhật ký được commit cùng nhau. Trạng thái `CONFIRMED` của nhật ký là xác nhận
+nghiệp vụ; trạng thái proof SUCCESS chỉ có sau khi đối soát/giao dịch chain thành
+công. Thu hồi không phải chờ RPC hoạt động. Các công việc lỗi được giữ và thử
+lại với thời gian chờ tăng dần, không bỏ sau một số lần cố định.
+
+Chạy `npm run test:system` từ `backend/` để kiểm tra chuỗi migration và workflow
+trên database Docker riêng, có hủy dữ liệu test sau khi kết thúc. Không trỏ
+stack này vào database staging/production.
 
 ## Thu hoạch và lô hàng
 
@@ -157,6 +207,11 @@ không đủ điều kiện. Không tự gán hay tạo lại bằng chứng xá
 
 Áp dụng `202611240001_lot_trace_reissue.sql` sau
 `202611220001_transport_receipts.sql`, trước khi triển khai luồng phát hành lại.
+Chạy tiếp `202611240002_qr_business_conflict.sql`: migration phát hành lại đã
+tạo lại RPC QR, nên cần giữ mã lỗi nghiệp vụ `PT409` trên phiên bản RPC mới.
+File này không đổi lịch sử QR hoặc các quyền đã cấp; không chạy lại migration
+`202611230002` nếu migration đó đã được áp dụng.
+
 Mỗi lô dùng chung tối đa một mã đang hoạt động. Các tổ chức đã xác nhận nhận
 cùng lô có thể tải mã. Tổ chức đã phát hành có thể thu hồi mã và chủ động phát
 hành mã mới sau khi thu hồi. Bảng `lot_trace_codes` giữ lại lịch sử, nên tem

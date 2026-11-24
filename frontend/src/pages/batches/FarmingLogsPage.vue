@@ -32,7 +32,7 @@ const showForm = ref(false); const formError = ref(''); const success = ref('')
 const imageUploading = ref(false); const imageError = ref('')
 const editingId = ref<string | null>(null)
 const editingMode = ref<'DRAFT' | 'CORRECTION'>('DRAFT'); const historyResult = ref<FarmingLogHistoryResponse | null>(null)
-const verifyResults = ref<FarmingLogVerifyResponse | null>(null); const verifyError = ref(''); const verifiedStatus = ref<Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'>>({})
+const verifyResults = ref<FarmingLogVerifyResponse | null>(null); const verifyError = ref(''); const verifiedStatus = ref<Record<string, FarmingLogVerifyResponse['details'][number]['status']>>({})
 
 const showHistoryModal = computed({ get: () => !!historyResult.value, set: (val) => { if (!val) historyResult.value = null } })
 const showVerifyModal = computed({ get: () => !!verifyResults.value, set: (val) => { if (!val) verifyResults.value = null } })
@@ -46,7 +46,7 @@ const filterType = ref('')
 const fromDate = ref('')
 const toDate = ref('')
 const logDay = new Intl.DateTimeFormat('sv-SE', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
-const filterOptions = [{ value: 'DRAFT', label: 'Bản nháp' }, { value: 'CONFIRMED', label: 'Đã chứng thực' }, { value: 'REVOKED', label: 'Đã thu hồi' }]
+const filterOptions = [{ value: 'DRAFT', label: 'Bản nháp' }, { value: 'CONFIRMED', label: 'Đã xác nhận' }, { value: 'REVOKED', label: 'Đã thu hồi' }]
 const filteredLogs = computed(() => items.value.filter((log) => {
   if (filterType.value && log.log_type !== filterType.value) return false
   if (filterStatus.value && log.lifecycle_status !== filterStatus.value) return false
@@ -242,7 +242,7 @@ async function submit() {
       else await logStore.update(editingId.value, input)
       if (version !== contextVersion) return
       verifiedStatus.value = {}
-      success.value = editingMode.value === 'CORRECTION' ? 'Đã đính chính và chứng thực phiên bản mới' : 'Đã lưu thay đổi bản nháp'
+      success.value = editingMode.value === 'CORRECTION' ? 'Đã lưu phiên bản đính chính. Bằng chứng Blockchain được xử lý riêng và tự thử lại khi cần.' : 'Đã lưu thay đổi bản nháp'
     } else {
       await logStore.create(input)
       if (version !== contextVersion) return
@@ -255,7 +255,13 @@ async function submit() {
 async function confirmLog(log: FarmingLog) {
   if (saving.value || loading.value) return
   const version = contextVersion
-  try { await logStore.confirm(log.id); if (version === contextVersion) success.value = 'Đã xác nhận và chứng thực Blockchain' }
+  try {
+    await logStore.confirm(log.id)
+    if (version === contextVersion) {
+      verifiedStatus.value = {}
+      success.value = 'Đã xác nhận nhật ký. Bằng chứng Blockchain được xử lý riêng và tự thử lại khi cần.'
+    }
+  }
   catch { if (version === contextVersion) error.value = logStore.error }
 }
 const showRevoke = ref(false)
@@ -296,7 +302,7 @@ async function checkSync() {
     const result = await logStore.verify(batchId.value)
     if (context !== contextVersion || version !== verifyVersion) return
     verifyResults.value = result
-    const map: Record<string, 'SYNCED' | 'DESYNCED' | 'PENDING' | 'DRAFT'> = {}
+    const map: Record<string, FarmingLogVerifyResponse['details'][number]['status']> = {}
     for (const item of result.details) map[item.id] = getVerifyStatus(item)
     verifiedStatus.value = map
   } catch { if (context === contextVersion && version === verifyVersion) verifyError.value = logStore.error }
@@ -346,12 +352,12 @@ watch([() => route.query.create, batchInfo, loading, farmer], ([create, batch, p
 
 // Helpers màu sắc
 const lifecycleColors: Record<string, string> = { DRAFT: 'secondary', CONFIRMED: 'success', REVOKED: 'danger' }
-const lifecycleLabels: Record<string, string> = { DRAFT: 'Bản nháp', CONFIRMED: 'Đã chứng thực', REVOKED: 'Đã thu hồi' }
-const verifyColors: Record<string, string> = { SYNCED: 'success', DESYNCED: 'danger', PENDING: 'warning', DRAFT: 'secondary' }
-const verifyLabels: Record<string, string> = { SYNCED: 'Đúng', DESYNCED: 'Dữ liệu không khớp', PENDING: 'Đang chờ xác nhận', DRAFT: 'Chưa chứng thực' }
+const lifecycleLabels: Record<string, string> = { DRAFT: 'Bản nháp', CONFIRMED: 'Đã xác nhận', REVOKED: 'Đã thu hồi' }
+const verifyColors: Record<string, string> = { SYNCED: 'success', DESYNCED: 'danger', PENDING: 'warning', DRAFT: 'secondary', UNAVAILABLE: 'warning', REVOKED: 'secondary' }
+const verifyLabels: Record<string, string> = { SYNCED: 'Khớp dữ liệu', DESYNCED: 'Dữ liệu không khớp', PENDING: 'Đang chờ Blockchain', DRAFT: 'Bản nháp', UNAVAILABLE: 'Chưa thể đối soát', REVOKED: 'Đã thu hồi' }
 
 // Fix lỗi số 1 và số 2 (Undefined Index Type)
-function getVerifyStatus(item: FarmingLogVerifyResponse['details'][number]) { return item.status === 'DRAFT' ? 'DRAFT' : item.record?.status === 'PENDING' ? 'PENDING' : item.status }
+function getVerifyStatus(item: FarmingLogVerifyResponse['details'][number]) { return item.status }
 function getVerifyColor(status?: string) { return status ? verifyColors[status] : 'secondary'; }
 function getVerifyLabel(status?: string) { return status ? verifyLabels[status] : ''; }
 onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
@@ -602,7 +608,10 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
           <div class="stat-box"><strong>{{ verifyResults.summary.total }}</strong><span>Tổng cộng</span></div>
           <div class="stat-box ok"><strong>{{ verifyResults.summary.verified }}</strong><span>Khớp dữ liệu</span></div>
           <div class="stat-box err"><strong>{{ verifyResults.summary.desynced }}</strong><span>Dữ liệu không khớp</span></div>
-          <div class="stat-box"><strong>{{ verifyResults.summary.drafts }}</strong><span>Chưa chứng thực</span></div>
+          <div class="stat-box"><strong>{{ verifyResults.summary.drafts }}</strong><span>Bản nháp</span></div>
+          <div class="stat-box"><strong>{{ verifyResults.summary.pending }}</strong><span>Đang chờ Blockchain</span></div>
+          <div class="stat-box"><strong>{{ verifyResults.summary.unavailable }}</strong><span>Chưa thể đối soát</span></div>
+          <div class="stat-box"><strong>{{ verifyResults.summary.revoked }}</strong><span>Đã thu hồi</span></div>
         </div>
 
         <div class="history-list">

@@ -356,7 +356,7 @@ export interface FarmingLogVerifyRecord {
   logDate: string
   dataHash: string | null
   onChainDataHash: string | null
-  status: 'SYNCED' | 'DESYNCED' | 'DRAFT'
+  status: 'SYNCED' | 'DESYNCED' | 'DRAFT' | 'PENDING' | 'UNAVAILABLE' | 'REVOKED'
   issues: string[]
   record: { eventType: string; status: BlockchainStatus; txHash: string | null; dataHash: string } | null
 }
@@ -365,7 +365,7 @@ export interface FarmingLogVerifyResponse {
   success: boolean
   batchId: string
   checkedAt: string
-  summary: { total: number; verified: number; desynced: number; drafts: number }
+  summary: { total: number; verified: number; desynced: number; drafts: number; pending: number; unavailable: number; revoked: number }
   details: FarmingLogVerifyRecord[]
 }
 

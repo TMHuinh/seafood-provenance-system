@@ -25,7 +25,7 @@ function createTraceRepository(db) {
       '42501': [403, 'Bạn không có quyền quản lý QR của lô này'],
       P0002: [404, 'Không tìm thấy chuyến hoặc mã QR'],
       '40001': [409, 'Chuyến chưa được nhà phân phối xác nhận nhận hàng hợp lệ'],
-      PT409: [409, 'Mã QR đã thay đổi. Vui lòng tải lại trạng thái QR trước khi tiếp tục.'],
+      PT409: [409, 'Trạng thái chuyến hoặc mã QR không còn phù hợp. Vui lòng tải lại trước khi tiếp tục.'],
       '22023': [400, 'Thao tác hoặc lý do thu hồi không hợp lệ'],
       PGRST202: [503, 'Chưa bật chức năng QR của nhà phân phối. Cần áp dụng migration 202611080001'],
       '42883': [503, 'Chưa bật chức năng QR của nhà phân phối. Cần áp dụng migration 202611080001'],
@@ -59,7 +59,7 @@ function createTraceRepository(db) {
   return { ownedLot,findQrByLot,receivingQr,revokeLegacy,logs,transports,
     findQr: code => result(db.from('lot_trace_codes').select('lot_id,status').eq('trace_code',code).maybeSingle()),
     findLot: id => result(db.from('harvest_lots').select('id,batch_id,lot_code,quantity,provenance,blockchain_event_id').eq('id',id).maybeSingle()),
-    proof: eventId => result(db.from('blockchain_records').select('status,data_hash,transaction_hash,contract_address').eq('event_id',eventId).maybeSingle()),
+    proof: eventId => result(db.from('blockchain_records').select('status,data_hash,transaction_hash,contract_address,chain_id').eq('event_id',eventId).maybeSingle()),
   }
 }
 module.exports = { createTraceRepository }

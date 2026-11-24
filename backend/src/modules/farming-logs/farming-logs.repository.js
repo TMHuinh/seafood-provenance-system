@@ -109,6 +109,19 @@ async function createAudit(userId, entityId, action, oldData, newData) {
   if (error) throw error
 }
 
+async function commitLifecycle(log, actor, action, changes, reason, payload, hash, evidence = null) {
+  const { data, error } = await supabase.rpc('commit_farming_log', {
+    p_id: log.id, p_actor: actor, p_action: action,
+    p_expected_version: log.current_version, p_expected_updated: log.updated_at,
+    p_changes: changes, p_reason: reason, p_payload: payload, p_hash: hash, p_evidence: evidence,
+  })
+  if (error) {
+    const status = ['40001', 'PT409', '23505'].includes(error.code) ? 409 : error.code === 'P0002' ? 404 : error.code === '22023' ? 400 : 503
+    throw Object.assign(new Error(status === 409 ? 'Nhật ký đã thay đổi. Vui lòng tải lại trước khi thao tác' : 'Không thể lưu thay đổi nhật ký'), { status })
+  }
+  return data
+}
+
 async function updateHashes(id, dataHash, txHash) {
   const { data, error } = await supabase
     .from('farming_logs')
@@ -132,4 +145,4 @@ async function findAllByBatch(batchId) {
   return data ?? []
 }
 
-module.exports = { findCurrentVersions, create, findById, update, createVersion, updateVersion, findVersions, createAudit, updateHashes, findAllByBatch }
+module.exports = { commitLifecycle, findCurrentVersions, create, findById, update, createVersion, updateVersion, findVersions, createAudit, updateHashes, findAllByBatch }

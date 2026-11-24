@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node --test"
+    "pretest": "hardhat compile",
+    "test": "node --test",
+    "test:system": "hardhat compile && node integration/run-system.js",
+    "contract:writer": "node scripts/manage-writer.js"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +25,7 @@
     "multer": "^2.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "hardhat": "^2.22.17",
     "nodemon": "^3.1.14"
   }

@@ -1,5 +1,6 @@
 const supabase = require('../../config/supabase')
 const blockchain = require('../blockchain/blockchain.service')
+const outbox = require('../blockchain/blockchain.outbox')
 const batches = require('../batches/batches.repository')
 const { requireOwnedPond } = require('../batches/batches.service')
 
@@ -48,13 +49,11 @@ async function create(profile, farmId, pondId, id, input) {
     if (error.code === '22023') fail('Ngày thu hoạch hoặc dữ liệu không hợp lệ', 400)
     throw error
   }
-  let proof = { status: 'UNKNOWN', transactionHash: null, dataHash: blockchain.hashData(data.lot.provenance) }
+  let proof = { status: 'PENDING', transactionHash: null, dataHash: blockchain.hashData(data.lot.provenance) }
   try {
-    // A replay only reads the previous outcome; it must never resubmit an uncertain transaction.
-    const record = data.replayed
-      ? (await blockchain.getRecordsByBatch(id)).find((item) => item.event_id === data.lot.blockchain_event_id)
-      : (await blockchain.createRecord({ batchId: id, entityType: 'HARVEST', entityId: data.harvest.id,
-          eventType: 'HARVEST_RECORDED', eventId: data.lot.blockchain_event_id, payload: data.lot.provenance })).record
+    // The RPC's trigger already queued the immutable snapshot in the same transaction.
+    const result = data.replayed ? null : await outbox.deliver(data.lot.blockchain_event_id)
+    const record = result?.record ?? (await blockchain.getRecordsByBatch(id)).find((item) => item.event_id === data.lot.blockchain_event_id)
     if (record) proof = { status: record.status, transactionHash: record.transaction_hash, dataHash: record.data_hash }
   } catch (error) { console.error('Không thể lưu kết quả blockchain của thu hoạch:', error) }
   return { ...data, blockchain: proof }

@@ -237,7 +237,12 @@ onMounted(load)
               <th scope="row" role="rowheader" class="trip-code">{{ trip.transport_code }}</th>
               <td role="cell"><span class="mobile-label">Nguồn gửi</span>{{ senderName(trip) }}</td>
               <td role="cell"><span class="mobile-label">Số lô</span>{{ trip.lot ? '1' : '—' }}</td>
-              <td role="cell"><span class="mobile-label">Khối lượng</span>{{ number.format(trip.quantity) }} kg</td>
+              <td role="cell">
+                <span class="mobile-label">Khối lượng</span>
+                <span v-if="trip.received_quantity != null">{{ number.format(trip.received_quantity) }} kg thực nhận</span>
+                <span v-else-if="trip.quantity != null">{{ number.format(trip.quantity) }} kg đã gửi</span>
+                <span v-else>—</span>
+              </td>
               <td role="cell"><span class="mobile-label">Trạng thái</span><span class="badge" :data-status="trip.receipt_outcome || shipmentStatus(trip)">{{ trip.receipt_outcome ? RECEIPT_LABELS[trip.receipt_outcome] : statusLabels[shipmentStatus(trip)] }}</span></td>
               <td role="cell"><span class="mobile-label">Ngày gửi</span><time :datetime="trip.transport_date">{{ eventTime(trip.transport_date) }}</time></td>
               <td role="cell" class="row-action">
@@ -284,7 +289,7 @@ onMounted(load)
               <div><dt>Điểm gửi</dt><dd>{{ selectedTrip.from_location }}</dd></div>
               <div><dt>Điểm nhận</dt><dd>{{ selectedTrip.to_location }}</dd></div>
               <div><dt>Ngày gửi</dt><dd>{{ eventTime(selectedTrip.transport_date) }}</dd></div>
-              <div><dt>Khối lượng chuyến</dt><dd>{{ number.format(selectedTrip.quantity) }} kg</dd></div>
+              <div v-if="selectedTrip.quantity != null"><dt>Khối lượng gửi</dt><dd>{{ number.format(selectedTrip.quantity) }} kg</dd></div>
               <div v-if="selectedTrip.driver"><dt>Tài xế</dt><dd>{{ selectedTrip.driver }}</dd></div>
               <div v-if="selectedTrip.vehicle"><dt>Phương tiện</dt><dd>{{ selectedTrip.vehicle }}</dd></div>
             </dl>
@@ -311,7 +316,7 @@ onMounted(load)
               <li>
                 <strong>{{ selectedTrip.lot.lot_code }}</strong>
                 <dl class="facts">
-                  <div><dt>Khối lượng lô</dt><dd>{{ number.format(selectedTrip.lot.quantity) }} kg</dd></div>
+                  <div><dt>Khối lượng lô thu hoạch</dt><dd>{{ number.format(selectedTrip.lot.quantity) }} kg</dd></div>
                   <div v-if="selectedTrip.lot.provenance.batch.species"><dt>Loại thủy sản</dt><dd>{{ SPECIES_LABELS[selectedTrip.lot.provenance.batch.species] ?? selectedTrip.lot.provenance.batch.species }}</dd></div>
                   <div v-if="selectedTrip.lot.provenance.batch.batch_code"><dt>Mã vụ nuôi</dt><dd>{{ selectedTrip.lot.provenance.batch.batch_code }}</dd></div>
                 </dl>

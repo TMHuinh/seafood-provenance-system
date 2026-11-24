@@ -15,7 +15,9 @@ function createTraceRepository(db) {
     if(!batch) return null
     return result(db.from('harvest_lots').select('id').eq('id',scope.lotId).eq('batch_id',scope.id).maybeSingle())
   }
-  const findQrByLot = lotId => result(db.from('lot_trace_codes').select(QR_FIELDS).eq('lot_id',lotId).maybeSingle())
+  const findQrByLot = lotId => result(db.from('lot_trace_codes').select(QR_FIELDS).eq('lot_id', lotId)
+    .order('status').order('created_at', { ascending: false }).order('trace_code', { ascending: false })
+    .limit(1).maybeSingle())
   async function publicationRpc(name, args) {
     const { data, error } = await db.rpc(name, args).abortSignal(AbortSignal.timeout(5000))
     if (!error) return data
@@ -23,6 +25,7 @@ function createTraceRepository(db) {
       '42501': [403, 'Bạn không có quyền quản lý QR của lô này'],
       P0002: [404, 'Không tìm thấy chuyến hoặc mã QR'],
       '40001': [409, 'Chuyến chưa được nhà phân phối xác nhận nhận hàng hợp lệ'],
+      PT409: [409, 'Mã QR đã thay đổi. Vui lòng tải lại trạng thái QR trước khi tiếp tục.'],
       '22023': [400, 'Thao tác hoặc lý do thu hồi không hợp lệ'],
       PGRST202: [503, 'Chưa bật chức năng QR của nhà phân phối. Cần áp dụng migration 202611080001'],
       '42883': [503, 'Chưa bật chức năng QR của nhà phân phối. Cần áp dụng migration 202611080001'],
@@ -30,8 +33,9 @@ function createTraceRepository(db) {
     if (mapped) throw Object.assign(new Error(mapped[1]), { status: mapped[0] })
     throw error
   }
-  const receivingQr = (actor, transport, action, reason) => publicationRpc('manage_received_lot_qr', {
+  const receivingQr = (actor, transport, action, reason, traceCode) => publicationRpc('manage_received_lot_qr', {
     p_actor: actor, p_transport: transport, p_action: action, p_reason: reason,
+    ...(traceCode === undefined ? {} : { p_trace_code: traceCode }),
   })
   const revokeLegacy = (actor, lot, reason) => publicationRpc('revoke_legacy_lot_qr', {
     p_actor: actor, p_lot: lot, p_reason: reason,

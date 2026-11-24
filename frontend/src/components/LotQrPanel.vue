@@ -18,6 +18,7 @@ const reason = ref('')
 const imageUrl = ref('')
 const canIssue = ref(false)
 const canRevoke = ref(false)
+const canReissue = ref<boolean>()
 let requestVersion = 0
 let imageVersion = 0
 const path = computed(() => props.apiPath)
@@ -63,6 +64,7 @@ async function load() {
   reason.value = ''
   canIssue.value = false
   canRevoke.value = false
+  canReissue.value = undefined
   try {
     const result = await api.get<LotQrResponse>(path.value)
     if (version === requestVersion) {
@@ -76,21 +78,30 @@ async function load() {
     if (version === requestVersion) loading.value = false
   }
 }
-async function update(revoke = false) {
+async function update(action: 'issue' | 'revoke' | 'reissue' = 'issue') {
+  const allowed = { issue: canIssue.value, revoke: canRevoke.value, reissue: canReissue.value }
+  const traceCode = qr.value?.trace_code
+  const note = reason.value.trim()
   if (
     saving.value ||
     !loaded.value ||
-    (revoke ? !canRevoke.value : !canIssue.value) ||
-    (revoke && (reason.value.trim().length < 3 || reason.value.trim().length > 500))
+    !allowed[action] ||
+    (action !== 'issue' && !traceCode) ||
+    (action === 'revoke' && (note.length < 3 || note.length > 500))
   )
     return
   saving.value = true
   error.value = ''
   const version = requestVersion
+  // Legacy QR endpoints omit canReissue and accept just the revocation reason.
+  const body = action === 'reissue' ? { traceCode }
+    : action === 'revoke'
+      ? { reason: note, ...(canReissue.value !== undefined ? { traceCode } : {}) }
+      : undefined
   try {
     const result = await api.post<LotQrResponse>(
-      `${path.value}${revoke ? '/revoke' : ''}`,
-      revoke ? { reason: reason.value.trim() } : undefined,
+      action === 'issue' ? path.value : `${path.value}/${action}`,
+      body,
     )
     if (version === requestVersion) {
       applyResult(result)
@@ -107,6 +118,7 @@ function applyResult(result: LotQrResponse) {
   qr.value = result.qr
   canIssue.value = result.canIssue === true
   canRevoke.value = result.canRevoke === true
+  canReissue.value = result.canReissue
 }
 watch(path, load, { immediate: true })
 onBeforeUnmount(() => {
@@ -126,6 +138,9 @@ onBeforeUnmount(() => {
     <p v-if="loading" role="status">Đang tải trạng thái QR…</p>
     <va-alert v-if="error" color="danger" role="alert">{{ error }}</va-alert>
     <va-button v-if="!loading && !loaded" size="small" @click="load">Thử lại</va-button>
+    <va-button v-else-if="error && !saving && !loading" size="small" preset="secondary" @click="load">
+      Tải lại trạng thái QR
+    </va-button>
     <template v-if="loaded">
       <template v-if="!qr">
         <p>
@@ -146,8 +161,14 @@ onBeforeUnmount(() => {
         </p>
       </template>
       <template v-else-if="qr.status === 'REVOKED'">
-        <va-alert color="warning">QR đã thu hồi. Không thể phát hành lại QR cho lô này.</va-alert>
+        <va-alert color="warning">QR đã thu hồi. Tem dùng mã này sẽ báo đã thu hồi khi quét.</va-alert>
         <p v-if="qr.revocation_reason">Lý do thu hồi: {{ qr.revocation_reason }}</p>
+        <template v-if="canReissue">
+          <p>Sau khi xử lý lý do thu hồi, có thể công khai lại hồ sơ bằng một đường dẫn mới.</p>
+          <va-button size="small" :loading="saving" :disabled="saving" @click="update('reissue')">
+            Phát hành mã mới
+          </va-button>
+        </template>
       </template>
       <template v-else>
         <p>QR đang công khai. Đường dẫn giữ nguyên khi hành trình được cập nhật.</p>
@@ -183,10 +204,10 @@ onBeforeUnmount(() => {
             >
           </div>
         </div>
-        <form v-if="canRevoke" class="revoke-form" @submit.prevent="update(true)">
+        <form v-if="canRevoke" class="revoke-form" @submit.prevent="update('revoke')">
           <p>
-            Thu hồi sẽ ngừng công khai hồ sơ của toàn bộ lô, ảnh hưởng mọi sản phẩm và nhà phân phối
-            dùng chung QR, và không thể hoàn tác.
+            Thu hồi vô hiệu hóa đường dẫn này vĩnh viễn, ảnh hưởng mọi sản phẩm và nhà phân phối
+            đang dùng chung mã.
           </p>
           <p v-if="!qr.issuer_organization_id">
             Chủ cơ sở chỉ có quyền thu hồi đối với QR cũ chưa có tổ chức phát hành.

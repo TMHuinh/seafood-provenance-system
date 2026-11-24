@@ -8,7 +8,7 @@ export interface LotQr {
   issuer: { name: string } | null
 }
 
-export interface LotQrResponse { success: boolean; qr: LotQr | null; canIssue: boolean; canRevoke: boolean }
+export interface LotQrResponse { success: boolean; qr: LotQr | null; canIssue: boolean; canRevoke: boolean; canReissue?: boolean }
 
 export interface PublicTrace {
   lotCode: string

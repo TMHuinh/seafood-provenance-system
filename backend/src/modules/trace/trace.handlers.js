@@ -5,7 +5,7 @@ function createTraceHandlers(service) {
       res.set('Cache-Control', 'no-store').json({ success: true, ...result })
     } catch (error) { next(error) }
   }
-  return Object.fromEntries(['get', 'issue', 'revoke', 'getReceiving', 'issueReceiving', 'revokeReceiving']
+  return Object.fromEntries(['get', 'issue', 'revoke', 'getReceiving', 'issueReceiving', 'reissueReceiving', 'revokeReceiving']
     .map(action => [action, handler(action)]))
 }
 module.exports = { createTraceHandlers }

@@ -155,11 +155,15 @@ Nhà phân phối chỉ xem/phát hành QR khi đúng tổ chức nhận, tài k
 tổ chức. Báo giao của người vận chuyển hoặc trạng thái DELIVERED từ luồng cũ
 không đủ điều kiện. Không tự gán hay tạo lại bằng chứng xác nhận cho dữ liệu cũ.
 
-Mỗi lô có một mã dùng chung; tổ chức đầu tiên phát hành được lưu cố định.
-Các tổ chức khác đã xác nhận nhận cùng lô có thể tải mã, nhưng chỉ tổ chức
-phát hành được thu hồi. Thu hồi ảnh hưởng toàn bộ lô và không thể phát hành lại.
-QR cũ giữ nguyên mã/trạng thái và không tự gán tổ chức phát hành; chủ cơ sở
-nguồn vẫn được thu hồi những mã cũ này. Chủ cơ sở không phát hành được mã mới.
+Áp dụng `202611240001_lot_trace_reissue.sql` sau
+`202611220001_transport_receipts.sql`, trước khi triển khai luồng phát hành lại.
+Mỗi lô dùng chung tối đa một mã đang hoạt động. Các tổ chức đã xác nhận nhận
+cùng lô có thể tải mã. Tổ chức đã phát hành có thể thu hồi mã và chủ động phát
+hành mã mới sau khi thu hồi. Bảng `lot_trace_codes` giữ lại lịch sử, nên tem
+dùng mã đã thu hồi vẫn báo đã thu hồi khi quét.
+
+QR đời cũ do chủ cơ sở phát hành giữ nguyên mã và trạng thái. Chủ cơ sở vẫn có
+thể thu hồi QR đời cũ của mình.
 Trang nhận hàng hiển thị chức năng QR sau khi xác nhận; trang thu hoạch giữ
 quyền xem/tải của chủ cơ sở.
 

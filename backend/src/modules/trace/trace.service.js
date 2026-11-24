@@ -46,7 +46,12 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
       fail('Chỉ nhà phân phối nhận hàng đang hoạt động mới được quản lý QR', 403)
     }
     if (!UUID.test(String(scope.transportId))) fail('Không tìm thấy chuyến vận chuyển', 404)
-    return repo.receivingQr(profile.id, scope.transportId, action, action === 'REVOKE' ? reason(input) : null)
+    const args = [profile.id, scope.transportId, action, action === 'REVOKE' ? reason(input) : null]
+    if (action === 'REISSUE' || (action === 'REVOKE' && input?.traceCode !== undefined)) {
+      if (typeof input?.traceCode !== 'string' || !UUID.test(input.traceCode)) fail('Mã QR không hợp lệ', 400)
+      return repo.receivingQr(...args, input.traceCode)
+    }
+    return repo.receivingQr(...args)
   }
   async function proof(lot) {
     const record = await repo.proof(lot.blockchain_event_id)
@@ -109,6 +114,7 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
   return { get, issue, revoke, publicTrace, dossier,
     getReceiving: (profile, scope) => receiving(profile, scope, 'GET'),
     issueReceiving: (profile, scope) => receiving(profile, scope, 'ISSUE'),
+    reissueReceiving: (profile, scope, input) => receiving(profile, scope, 'REISSUE', input),
     revokeReceiving: (profile, scope, input) => receiving(profile, scope, 'REVOKE', input),
   }
 }

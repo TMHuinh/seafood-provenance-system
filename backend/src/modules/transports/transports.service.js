@@ -111,7 +111,7 @@ async function create(profile, farmId, pondId, batchId, lotId, input = {}) {
     p_recipient_organization: recipientOrganizationId,
   })
   if (error?.code === 'P0002') fail('Không tìm thấy lô thu hoạch', 404)
-  if (error?.code === '40001') fail('Mã yêu cầu đã được dùng với dữ liệu khác', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Mã yêu cầu đã được dùng với dữ liệu khác', 409)
   if (error?.code === '23505') fail('Mã chuyến hoặc mã yêu cầu đã được sử dụng', 409)
   if (error?.code === '23514') fail('Nhà phân phối đã chọn không còn tài khoản hoạt động', 409)
   if (error?.code === '22023') fail('Tổng khối lượng các chuyến không được vượt quá khối lượng lô', 409)
@@ -153,7 +153,7 @@ async function updateTransporterStatus(profile, transportId, input = {}) {
     p_evidence: evidence,
   })
   if (error?.code === '42501') fail('Bạn không có quyền cập nhật chuyến này', 403)
-  if (error?.code === '40001') fail('Chuyến đã thay đổi trạng thái hoặc không thể chuyển theo bước này', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Chuyến đã thay đổi trạng thái hoặc không thể chuyển theo bước này', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy chuyến vận chuyển', 404)
   if (error?.code === '22023') fail('Thiếu thông tin bắt buộc hoặc dữ liệu trạng thái chưa hợp lệ')
   if (error) throw error
@@ -174,7 +174,7 @@ async function confirmDelivery(profile, transportId, input = {}) {
     p_received_quantity: receipt.receivedQuantity, p_confirmation_note: receipt.note,
   })
   if (error?.code === '42501') fail('Chỉ nhà phân phối nhận chuyến mới được xác nhận', 403)
-  if (error?.code === '40001') fail('Chuyến chưa được báo giao hoặc đã được kho xử lý.', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Chuyến chưa được báo giao hoặc đã được kho xử lý.', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy chuyến vận chuyển', 404)
   if (error?.code === '22023' || error?.code === '23514') fail('Kết quả, khối lượng hoặc lý do nhận hàng không hợp lệ')
   if (error) throw error
@@ -195,7 +195,7 @@ async function assignRecipient(profile, transportId, input = {}) {
     p_transport: transportId, p_actor: profile.id, p_recipient_organization: recipientOrganizationId,
   })
   if (error?.code === '42501') fail('Chỉ cơ sở tạo yêu cầu có thể gán nhà phân phối nhận hàng', 403)
-  if (error?.code === '40001') fail('Chuyến đã có nhà phân phối nhận hoặc đã kết thúc', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Chuyến đã có nhà phân phối nhận hoặc đã kết thúc', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy chuyến vận chuyển', 404)
   if (error?.code === '23514') fail('Nhà phân phối đã chọn không còn tài khoản hoạt động', 409)
   if (error) throw error
@@ -231,7 +231,7 @@ async function recordCheckpoint(profile, transportId, input = {}) {
     p_location: location, p_note: note,
   })
   if (error?.code === '42501') fail('Bạn không có quyền cập nhật chuyến này', 403)
-  if (error?.code === '40001') fail('Chỉ được ghi nhận kiểm tra khi chuyến đang vận chuyển', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Chỉ được ghi nhận kiểm tra khi chuyến đang vận chuyển', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy chuyến vận chuyển', 404)
   if (error?.code === '22023') fail('Thông tin điểm kiểm tra chưa hợp lệ')
   if (error) throw error
@@ -258,7 +258,7 @@ async function recordTrackingUpdate(profile, transportId, input = {}) {
     p_proof_image_url: deliveryProofUrl,
   })
   if (error?.code === '42501') fail('Chỉ người vận chuyển nhận chuyến mới được cập nhật hành trình', 403)
-  if (error?.code === '40001') fail('Chỉ cập nhật hành trình khi chuyến đang vận chuyển và chưa báo giao', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Chỉ cập nhật hành trình khi chuyến đang vận chuyển và chưa báo giao', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy chuyến vận chuyển', 404)
   if (error?.code === '22023') fail('Trạng thái, địa điểm hoặc ghi chú cập nhật không hợp lệ')
   if (error?.code === 'PGRST202' || error?.code === '42883') {
@@ -314,7 +314,7 @@ async function claim(profile, transportId) {
   uuid(transportId, 'Mã chuyến vận chuyển')
   const { data, error } = await supabase.rpc('claim_lot_transport', { p_transport: transportId, p_actor: profile.id })
   if (error?.code === '42501') fail('Tài khoản không có vai trò người vận chuyển', 403)
-  if (error?.code === '40001') fail('Chuyến vừa được người khác nhận hoặc không còn ở trạng thái chờ', 409)
+  if (['40001', 'PT409'].includes(error?.code)) fail('Chuyến vừa được người khác nhận hoặc không còn ở trạng thái chờ', 409)
   if (error?.code === 'P0002') fail('Không tìm thấy yêu cầu vận chuyển', 404)
   if (error) throw error
   outbox.nudge()

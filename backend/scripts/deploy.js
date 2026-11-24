@@ -57,7 +57,7 @@ async function main() {
   writeContractAddressToEnv(address)
 
   console.log('\nĐã ghi BLOCKCHAIN_CONTRACT_ADDRESS vào backend/.env')
-  console.log('Khởi động lại backend để áp dụng: docker compose restart backend')
+  console.log('Nạp lại env_file: docker compose up -d --force-recreate --no-deps backend')
 }
 
 main().catch((error) => {

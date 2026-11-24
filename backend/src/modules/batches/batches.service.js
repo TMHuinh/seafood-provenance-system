@@ -1,4 +1,5 @@
 const blockchainService = require('../blockchain/blockchain.service')
+const outbox = require('../blockchain/blockchain.outbox')
 const batchesRepository = require('./batches.repository')
 const farmsRepository = require('../farms/farms.repository')
 const pondsRepository = require('../ponds/ponds.repository')
@@ -60,7 +61,7 @@ async function detail(profile, id) {
   }
 
   const [blockchain, farmingLogs, harvests, transports, distributions] = await Promise.all([
-    blockchainService.getRecordsByBatch(id, '*'),
+    blockchainService.getRecordsByBatch(id),
     batchesRepository.countFarmingLogs(id),
     batchesRepository.findHarvests(id),
     batchesRepository.findTransports(id),
@@ -92,35 +93,15 @@ async function createForPond(profile, farmId, pondId, input) {
     }
   }
 
-  // Anchor the initial snapshot. Later edits must not overwrite this event.
-  const payload = {
-    batchId: batch.id,
-    farmId,
-    pondId: batch.pond_id,
-    batchCode: batch.batch_code,
-    species: batch.species,
-    seedSource: batch.seed_source ?? null,
-    seedQuantity: batch.seed_quantity,
-    stockingDate: new Date(batch.stocking_date).toISOString(),
-    expectedHarvestDate: batch.expected_harvest_date
-      ? new Date(batch.expected_harvest_date).toISOString() : null,
-    status: batch.status,
-    note: batch.note ?? null,
-  }
+  // The batch-version trigger commits the exact payload and work item atomically.
   try {
-    const { record } = await blockchainService.createRecord({
-      batchId: batch.id,
-      entityType: 'BATCH',
-      entityId: batch.id,
-      eventType: 'BATCH_CREATED',
-      payload,
-    })
-    return { batch, blockchain: { status: record.status, transactionHash: record.transaction_hash } }
+    const result = await outbox.deliver(`BATCH_CREATED:${batch.id}`)
+    return { batch, blockchain: { status: result?.record.status ?? 'PENDING', transactionHash: result?.record.transaction_hash ?? null } }
   } catch (error) {
     // The batch already exists, and the chain may have accepted the transaction.
     // Do not return a creation error that would encourage a duplicate submission.
     console.error('Không thể lưu kết quả blockchain cho vụ nuôi:', error)
-    return { batch, blockchain: { status: 'UNKNOWN', transactionHash: null } }
+    return { batch, blockchain: { status: 'PENDING', transactionHash: null } }
   }
 }
 async function updateForPond(profile, farmId, pondId, id, input) {
@@ -142,7 +123,7 @@ async function updateForPond(profile, farmId, pondId, id, input) {
   try {
     batch = await batchesRepository.correctByPond(id, pondId, changes, input.expectedVersion, reason, profile.id)
   } catch (error) {
-    if (error.code === '40001') throw httpError('Vụ nuôi đã có phiên bản mới. Vui lòng tải lại danh sách', 409)
+    if (['40001', 'PT409'].includes(error.code)) throw httpError('Vụ nuôi đã có phiên bản mới. Vui lòng tải lại danh sách', 409)
     if (error.code === 'P0002') throw httpError('Không tìm thấy vụ nuôi', 404)
     if (error.code === '22023') throw httpError('Thông tin thu hoạch được quản lý theo các lần thu. Không thể sửa sản lượng, mở lại vụ đã kết thúc hoặc đổi ngày thả sau ngày thu hoạch', 400)
     mapWriteError(error)
@@ -151,15 +132,11 @@ async function updateForPond(profile, farmId, pondId, id, input) {
   // The snapshot is already durable before sending a transaction. Preserve it
   // even if the chain is unavailable so a later reconciliation remains possible.
   try {
-    const { record } = await blockchainService.createRecord({
-      batchId: id, entityType: 'BATCH', entityId: id,
-      eventType: 'BATCH_CORRECTED', eventId,
-      payload: { batch, correctionReason: reason, correctedBy: profile.id },
-    })
-    return { batch, blockchain: { status: record.status, transactionHash: record.transaction_hash } }
+    const result = await outbox.deliver(eventId)
+    return { batch, blockchain: { status: result?.record.status ?? 'PENDING', transactionHash: result?.record.transaction_hash ?? null } }
   } catch (error) {
     console.error('Không thể lưu kết quả blockchain cho đính chính vụ nuôi:', error)
-    return { batch, blockchain: { status: 'UNKNOWN', transactionHash: null } }
+    return { batch, blockchain: { status: 'PENDING', transactionHash: null } }
   }
 }
 

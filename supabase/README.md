@@ -1,5 +1,11 @@
 # Supabase Cloud và migration
 
+Áp dụng `202611240005_lot_packaging.sql` sau `202611240004_enqueue_batch_snapshot.sql`
+trước khi triển khai backend và frontend có chức năng đóng gói. Migration thêm
+hồ sơ đóng gói/kiểm định theo chuyến nhận, xếp hàng ghi hash cùng giao dịch xác
+nhận DB và yêu cầu có hồ sơ trước khi phát hành hoặc cấp lại QR. QR cũ giữ nguyên
+khả năng truy xuất.
+
 Thư mục này chỉ lưu cấu hình Supabase CLI và lịch sử schema của ứng dụng.
 Ứng dụng dùng Supabase Cloud. Bộ kiểm thử toàn luồng có stack PostgreSQL/Auth/
 PostgREST dùng riêng trong `backend/integration/`, không thay thế database ứng dụng.

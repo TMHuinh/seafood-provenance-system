@@ -33,7 +33,7 @@ async function loadSfc(path, extraStubs = {}) {
   return (await import(dataModule(resolved))).default
 }
 const Panel = await loadSfc('../src/components/LotQrPanel.vue')
-const node = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, get options() { return this.children }, addEventListener() {}, open: false, showModal() { this.open = true }, close() { this.open = false } })
+const node = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, get options() { return this.children }, addEventListener() {}, getRootNode() { return this.parent?.getRootNode() ?? this }, open: false, showModal() { this.open = true }, close() { this.open = false } })
 const renderer = createRenderer({
   createElement: type => node(type), createText: text => node('text', text), createComment: text => node('comment', text),
   setText: (el, text) => { el.text = text }, setElementText: (el, text) => { el.text = text; el.children = [] },
@@ -132,13 +132,20 @@ test('late issue response cannot replace QR or permissions after switching lot',
     assert.equal(button(view.root, 'Thu hồi QR'), undefined)
   } finally { view.close() }
 })
-test('receipt page enables QR issuance only after successful receipt confirmation', async () => {
+test('receipt page enables QR issuance only after receipt and packaging confirmation', async () => {
+  const previousDocument = globalThis.Document
+  const previousShadowRoot = globalThis.ShadowRoot
   globalThis.qrTestPanel = Panel
   globalThis.qrTestHeader = await loadSfc('../src/components/PageHeader.vue')
   globalThis.qrTestEmpty = await loadSfc('../src/components/EmptyState.vue')
   globalThis.qrTestLoading = await loadSfc('../src/components/LoadingState.vue')
   globalThis.qrTestReceiptForm = await loadSfc('../src/pages/transports/ReceiptForm.vue')
   globalThis.qrTestReceiptSummary = await loadSfc('../src/pages/transports/ReceiptSummary.vue')
+  globalThis.qrTestPackagingDetails = await loadSfc('../src/components/LotPackagingDetails.vue')
+  globalThis.qrTestPackaging = await loadSfc('../src/pages/transports/PackagingForm.vue', {
+    '../../api/client': stubs['../api/client'],
+    '../../components/LotPackagingDetails.vue': dataModule('export default globalThis.qrTestPackagingDetails'),
+  })
   globalThis.qrTestReceiptQuery = ref({ trip: 'trip-a' })
   const Receipts = await loadSfc('../src/pages/transports/DistributorReceipts.vue', {
     '../../stores/auth.store': dataModule('export const useAuthStore = () => ({ organizationName: "Phân phối A" })'),
@@ -146,6 +153,7 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
     '../../types': typesModule,
     './ReceiptForm.vue': dataModule('export default globalThis.qrTestReceiptForm'),
     './ReceiptSummary.vue': dataModule('export default globalThis.qrTestReceiptSummary'),
+    './PackagingForm.vue': dataModule('export default globalThis.qrTestPackaging'),
     '../../components/PageHeader.vue': dataModule('export default globalThis.qrTestHeader'),
     '../../components/EmptyState.vue': dataModule('export default globalThis.qrTestEmpty'),
     '../../components/LoadingState.vue': dataModule('export default globalThis.qrTestLoading'),
@@ -153,7 +161,7 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
     '../../components/LotQrPanel.vue': dataModule('export default globalThis.qrTestPanel'),
     '../../components/CollectionToolbar.vue': dataModule(`import {h} from ${JSON.stringify(vueUrl)};export default {render:()=>h('nav')}`),
   })
-  let confirmed = false
+  let confirmed = false, packaged = null
   const paths = []
   // Initialize browser boundary without introducing a DOM or network dependency.
   const initial = mount({ get: async () => result() }); initial.close()
@@ -165,15 +173,23 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
         receipt_outcome: confirmed ? 'FULL' : null, received_quantity: confirmed ? 10 : null,
         delivery_reported_at: '2026-11-08', transport_date: '2026-11-08', quantity: 10, from_location: 'Farm', to_location: 'Shop', events: [],
         lot: { id: 'lot-a', lot_code: 'LOT-A', provenance: { farm: { name: 'Farm' }, batch: { species: 'SHRIMP' }, pond: { name: 'Ao' } } },
-      }] } : result(null, true)
+      }] } : path.endsWith('/packaging') ? { packaging: packaged } : result(null, Boolean(packaged))
     },
     post: async (path, body) => {
+      if (path.endsWith('/packaging')) {
+        assert.equal(body.quantity, 10)
+        assert.equal(body.inspectionResult, 'Cảm quan đạt')
+        packaged = { ...body, transportCode: 'TRIP-A', distributorName: 'Phân phối A' }
+        return { packaging: packaged }
+      }
       assert.equal(path, '/transports/trip-a/confirm-delivery')
       assert.deepEqual(body, { receiptOutcome: 'FULL', receivedQuantity: 10, note: '' })
       confirmed = true
       return { transport: { status: 'DELIVERED', receipt_outcome: 'FULL', received_quantity: 10 } }
     },
   }
+  globalThis.Document = class {}
+  globalThis.ShadowRoot = class {}
   const root = node('root'), app = renderer.createApp(Receipts); app.mount(root)
   try {
     await settle(); assert.equal(button(root, 'Phát hành'), undefined)
@@ -181,9 +197,20 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
     assert.ok(fullReceipt)
     fullReceipt.props['onUpdate:modelValue']('FULL'); await nextTick()
     await nodes(root).find(n => n.type === 'form' && n.props.class === 'receipt-form').props.onSubmit({ preventDefault() {} }); await settle()
+    assert.equal(button(root, 'Phát hành'), undefined)
+    const packagingForm = nodes(root).find(n => n.type === 'form')
+    const fields = nodes(packagingForm).filter(n => (n.type === 'input' && n.props.type == null) || n.type === 'textarea')
+    for (const [index, value] of ['Túi 500 g', 'Đơn vị A', 'Cảm quan đạt'].entries()) {
+      fields[index].props['onUpdate:modelValue'](value)
+    }
+    await packagingForm.props.onSubmit({ preventDefault() {} }); await settle()
     assert.ok(button(root, 'Phát hành'))
     assert.ok(paths.includes('/transports/trip-a/qr'))
-  } finally { app.unmount() }
+  } finally {
+    app.unmount()
+    globalThis.Document = previousDocument
+    globalThis.ShadowRoot = previousShadowRoot
+  }
 })
 
 test('collection toolbar resets search and status, and bounds pagination controls', async () => {

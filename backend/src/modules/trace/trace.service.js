@@ -53,18 +53,18 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     }
     return repo.receivingQr(...args)
   }
-  async function proof(lot) {
-    const record = await repo.proof(lot.blockchain_event_id)
+  async function proof(eventId, snapshot, record) {
     const base = { recordedStatus: record?.status ?? null, transactionHash: record?.transaction_hash ?? null, checkedAt: null }
     if (!record || record.status !== 'SUCCESS') return { ...base, status: 'PENDING' }
     if (!record.contract_address) return { ...base, status: 'UNAVAILABLE' }
     let timer
     try {
       const hash = await Promise.race([
-        chain.read(lot.blockchain_event_id, record.contract_address, record.chain_id),
+        chain.read(eventId, record.contract_address, record.chain_id),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chain timeout')), timeoutMs) }),
       ])
-      return { ...base, checkedAt: new Date().toISOString(), status: hash && hash === chain.hash(lot.provenance) && hash === record.data_hash ? 'MATCH' : 'MISMATCH' }
+      return { ...base, checkedAt: new Date().toISOString(),
+        status: !hash ? 'UNAVAILABLE' : hash === chain.hash(snapshot) && hash === record.data_hash ? 'MATCH' : 'MISMATCH' }
     } catch { return { ...base, status: 'UNAVAILABLE' } }
     finally { clearTimeout(timer) }
   }
@@ -75,17 +75,21 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     if (qr.status === 'REVOKED') return { status: 'REVOKED' }
     const lot = await repo.findLot(qr.lot_id)
     if (!lot) fail('Không tìm thấy lô hàng', 404)
-    const trace = await dossier(lot)
+    const trace = await dossier(lot, qr.issuance_transport_id ?? false)
     const last = await repo.findQr(code)
     return last?.status === 'ACTIVE' ? { status: 'ACTIVE', trace } : { status: 'REVOKED' }
   }
-  async function dossier(lot) {
+  async function dossier(lot, packagingTransportId) {
+    const isPublic = packagingTransportId !== undefined
     const origin = lot.provenance
     const harvestDate = origin.harvest.harvest_date
     // Harvest input is a calendar day in Vietnam, not the actual time of harvest.
     const harvestDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(harvestDate))
     const logsBefore = new Date(new Date(`${harvestDay}T00:00:00+07:00`).getTime() + 86400000).toISOString()
-    const [logs, transports] = await Promise.all([repo.logs(lot.batch_id, logsBefore), repo.transports(lot.id)])
+    const [logs, transports, packaging] = await Promise.all([
+      repo.logs(lot.batch_id, logsBefore), repo.transports(lot.id),
+      packagingTransportId === false ? [] : repo.packaging(lot.id, packagingTransportId),
+    ])
     const publicLogs = logs.filter(log => log.batch_id === lot.batch_id && log.lifecycle_status === 'CONFIRMED' &&
       log.version?.id === log.current_version_id && log.version.status === 'ACTIVE' &&
       new Date(log.version.log_date) < new Date(logsBefore)).map(log => {
@@ -104,11 +108,25 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
         imageUrl: imageUrl(event.payload?.deliveryReport?.proofImageUrl),
         temperature: scalar(event.payload?.temperature), trackingStatus: text(event.payload?.trackingStatus), blockchainStatus: text(event.blockchain_status) })),
     }))
+    const [harvestProof, packagingDetails] = await Promise.all([
+      repo.proof(lot.blockchain_event_id).then(record => proof(lot.blockchain_event_id, origin, record)),
+      Promise.all(packaging.map(async ({ snapshot: item, eventId, record }) => ({
+        transportCode: text(item.transportCode), distributorName: text(item.distributorName),
+        packagedDate: text(item.packagedDate), quantity: scalar(item.quantity), specification: text(item.specification),
+        inspectionDate: text(item.inspectionDate), inspectionUnit: text(item.inspectionUnit),
+        inspectionResult: typeof item.inspectionResult === 'string' ? item.inspectionResult.slice(0, 1000) : null,
+        blockchainStatus: record?.status ?? 'PENDING',
+        ...(isPublic
+          ? { verificationStatus: (await proof(eventId, item, record)).status }
+          : { transactionHash: record?.transaction_hash ?? null }),
+      }))),
+    ])
+    if (isPublic) delete harvestProof.transactionHash
     return {
       lotCode: text(lot.lot_code), species: text(origin.batch.species), quantity: scalar(lot.quantity), harvestDate: text(harvestDate),
       farm: { name: text(origin.farm.name), address: text(origin.farm.address) }, pond: { code: text(origin.pond.code), name: text(origin.pond.name) },
       batch: { code: text(origin.batch.batch_code), seedSource: text(origin.batch.seed_source), stockingDate: text(origin.batch.stocking_date) },
-      logs: publicLogs, transports: publicTransports, proof: await proof(lot),
+      logs: publicLogs, transports: publicTransports, packaging: packagingDetails, proof: harvestProof,
     }
   }
   return { get, issue, revoke, publicTrace, dossier,

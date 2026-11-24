@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VaAlert, VaButton } from 'vuestic-ui'
+import LotPackagingDetails from '../../components/LotPackagingDetails.vue'
 import { api } from '../../api/client'
 import LoadingState from '../../components/LoadingState.vue'
 import type { LotReportResponse } from '../../types/lots'
@@ -18,6 +19,12 @@ let version = 0
 const trace = computed(() => report.value?.trace)
 const sourceUrl = computed(() => new URL(router.resolve({ path: route.path }).href, window.location.origin).href)
 const proofLabels: Record<string, string> = { MATCH: 'Hash hồ sơ thu hoạch khớp Blockchain', MISMATCH: 'Hash hồ sơ thu hoạch không khớp Blockchain', PENDING: 'Chưa có bằng chứng thu hoạch được xác nhận để đối soát', UNAVAILABLE: 'Không thể đối soát Blockchain tại thời điểm lập báo cáo' }
+const publicProofLabels = {
+  MATCH: 'Đã kiểm tra. Thông tin thu hoạch khớp với hồ sơ đã lưu.',
+  MISMATCH: 'Thông tin thu hoạch có sai lệch so với hồ sơ đã lưu. Vui lòng hỏi nhà phân phối.',
+  PENDING: 'Thông tin thu hoạch đang chờ được kiểm tra.',
+  UNAVAILABLE: 'Tạm thời chưa thể kiểm tra thông tin thu hoạch. Vui lòng thử lại sau.',
+}
 const chainLabels: Record<string, string> = { SUCCESS: 'Đã ghi nhận', PENDING: 'Đang chờ', FAILED: 'Ghi nhận thất bại' }
 const logLabels: Record<string, string> = { FEEDING: 'Thức ăn', MEDICINE: 'Thuốc / hóa chất', WATER_QUALITY: 'Chất lượng nước', ENVIRONMENT: 'Môi trường', CARE: 'Chăm sóc', MORTALITY: 'Hao hụt', OTHER: 'Khác' }
 const detailLabels: Record<string, string> = { feedType: 'Thức ăn', feedAmount: 'Lượng thức ăn (kg)', medicineName: 'Thuốc / hóa chất', dose: 'Liều lượng', temperature: 'Nhiệt độ (°C)', salinity: 'Độ mặn (‰)', ph: 'pH', dissolvedOxygen: 'Oxy hòa tan (mg/L)', mortalityCount: 'Số con chết' }
@@ -70,22 +77,24 @@ onUnmounted(() => { version++; document.title = previousTitle; delete document.b
         <div><dt>Ngày thả giống</dt><dd>{{ date(trace.batch.stockingDate) }}</dd></div><div><dt>Ngày thu hoạch</dt><dd>{{ date(trace.harvestDate) }}</dd></div>
         <div><dt>Khối lượng lô</dt><dd>{{ quantity(trace.quantity) }} kg</dd></div><div><dt>Quy mô hồ sơ</dt><dd>{{ trace.logs.length }} nhật ký · {{ trace.transports.length }} chuyến vận chuyển</dd></div>
       </dl></section>
-      <section><h2>2. Kết quả đối soát Blockchain</h2><p class="proof-result" :class="{ mismatch: trace.proof.status === 'MISMATCH' }">{{ proofLabels[trace.proof.status] }}</p>
-        <p>Trạng thái ghi nhận thu hoạch: {{ chainLabels[trace.proof.recordedStatus || ''] || 'Chưa xác định' }}.</p><p>Thời điểm đối soát: {{ date(trace.proof.checkedAt, true) }}.</p>
-        <p v-if="trace.proof.transactionHash" class="hash">Mã giao dịch: {{ trace.proof.transactionHash }}</p>
-        <p class="scope-note">Kết quả đối soát áp dụng cho snapshot nguồn gốc tại thời điểm thu hoạch. Trạng thái Blockchain của nhật ký và vận chuyển bên dưới là kết quả ghi nhận lưu trong hệ thống, chưa được đối soát trực tiếp khi lập báo cáo.</p>
+      <section><h2>2. Kiểm tra thông tin thu hoạch</h2><p class="proof-result" :class="{ mismatch: trace.proof.status === 'MISMATCH' }">{{ publicReport ? publicProofLabels[trace.proof.status] : proofLabels[trace.proof.status] }}</p>
+        <p v-if="!publicReport">Trạng thái ghi nhận thu hoạch: {{ chainLabels[trace.proof.recordedStatus || ''] || 'Chưa xác định' }}.</p>
+        <p v-if="trace.proof.checkedAt">Thời điểm kiểm tra: {{ date(trace.proof.checkedAt, true) }}.</p>
+        <p v-if="!publicReport && trace.proof.transactionHash" class="hash">Mã giao dịch: {{ trace.proof.transactionHash }}</p>
+        <p class="scope-note">Nhật ký nuôi và các mốc vận chuyển hiển thị trạng thái ghi nhận do hệ thống lưu.</p>
       </section>
       <section><h2>3. Nhật ký nuôi liên quan</h2><p>Nhật ký đã xác nhận, còn hiệu lực đến hết ngày thu hoạch theo giờ Việt Nam. Nội dung là phiên bản hiện còn hiệu lực tại thời điểm lập báo cáo.</p>
         <p v-if="!trace.logs.length">Chưa có nhật ký đã xác nhận để tổng hợp.</p>
-        <div v-else class="table-scroll"><table><thead><tr><th>Ngày ghi nhận</th><th>Hoạt động</th><th>Nội dung</th><th>Blockchain</th></tr></thead><tbody><tr v-for="(log, index) in trace.logs" :key="index"><td>{{ date(log.date, true) }}</td><td>{{ logLabels[log.type] || log.type }}</td><td>{{ details(log.details) }}</td><td>{{ chainLabels[log.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div>
+        <div v-else class="table-scroll"><table><thead><tr><th>Ngày ghi nhận</th><th>Hoạt động</th><th>Nội dung</th><th>{{ publicReport ? 'Tr?ng th?i ghi nh?n' : 'Blockchain' }}</th></tr></thead><tbody><tr v-for="(log, index) in trace.logs" :key="index"><td>{{ date(log.date, true) }}</td><td>{{ logLabels[log.type] || log.type }}</td><td>{{ details(log.details) }}</td><td>{{ chainLabels[log.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div>
       </section>
       <section><h2>4. Vận chuyển và đơn vị nhận</h2><p v-if="!trace.transports.length">Chưa có thông tin vận chuyển gắn với lô này.</p>
         <article v-for="(trip, index) in trace.transports" :key="index" class="trip-report"><h3>{{ trip.code }}</h3><p>{{ date(trip.date, true) }} · {{ quantity(trip.quantity) }} kg · {{ tripLabels[trip.status] || trip.status }}</p><p>Đơn vị nhận {{ trip.status === 'DELIVERED' ? 'đã xác nhận' : 'dự kiến' }}: {{ trip.recipientName || 'Chưa xác định' }}</p>
-          <div v-if="trip.events.length" class="table-scroll"><table><thead><tr><th>Thời điểm</th><th>Mốc hành trình</th><th>Nhiệt độ</th><th>Blockchain</th></tr></thead><tbody><tr v-for="(event, idx) in trip.events" :key="idx"><td>{{ date(event.date, true) }}</td><td>{{ eventLabels[event.type] || event.type }}<small v-if="event.trackingStatus">{{ trackingLabels[event.trackingStatus] || event.trackingStatus }}</small></td><td>{{ event.temperature == null ? '—' : `${quantity(event.temperature)} °C` }}</td><td>{{ chainLabels[event.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div><p v-else>Chưa có mốc hành trình.</p>
+          <div v-if="trip.events.length" class="table-scroll"><table><thead><tr><th>Thời điểm</th><th>Mốc hành trình</th><th>Nhiệt độ</th><th>{{ publicReport ? 'Tr?ng th?i ghi nh?n' : 'Blockchain' }}</th></tr></thead><tbody><tr v-for="(event, idx) in trip.events" :key="idx"><td>{{ date(event.date, true) }}</td><td>{{ eventLabels[event.type] || event.type }}<small v-if="event.trackingStatus">{{ trackingLabels[event.trackingStatus] || event.trackingStatus }}</small></td><td>{{ event.temperature == null ? '—' : `${quantity(event.temperature)} °C` }}</td><td>{{ chainLabels[event.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div><p v-else>Chưa có mốc hành trình.</p>
         </article>
       </section>
       <section v-if="report.history.length"><h2>5. Lịch sử cập nhật vụ nuôi</h2><div class="table-scroll"><table><thead><tr><th>Phiên bản</th><th>Thời điểm</th><th>Nội dung cập nhật</th></tr></thead><tbody><tr v-for="item in report.history" :key="item.version_number"><td>{{ item.version_number }}</td><td>{{ date(item.created_at, true) }}</td><td>{{ item.correction_reason || 'Khởi tạo vụ nuôi' }}</td></tr></tbody></table></div></section>
-      <footer class="document-footer"><p>Báo cáo phản ánh dữ liệu tại thời điểm lập; nhật ký có thể được đính chính hoặc thu hồi sau đó. Chưa có dữ liệu đóng gói và kiểm định trong hồ sơ. Nội dung này không thay thế chứng nhận chất lượng sản phẩm.</p><p class="hash">Nguồn tra cứu: {{ sourceUrl }}</p><p class="no-print">Chọn “In / Lưu PDF”, sau đó chọn máy in hoặc “Lưu dưới dạng PDF” trong hộp thoại của trình duyệt.</p></footer>
+      <section><h2>Đóng gói và kiểm định</h2><LotPackagingDetails :items="trace.packaging ?? []" :public-view="publicReport" /></section>
+      <footer class="document-footer"><p>Báo cáo phản ánh dữ liệu tại thời điểm lập; nhật ký có thể được đính chính hoặc thu hồi sau đó. Nội dung này không thay thế chứng nhận chất lượng sản phẩm.</p><p class="hash">Nguồn tra cứu: {{ sourceUrl }}</p><p class="no-print">Chọn “In / Lưu PDF”, sau đó chọn máy in hoặc “Lưu dưới dạng PDF” trong hộp thoại của trình duyệt.</p></footer>
     </article>
   </main>
 </template>

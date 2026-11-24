@@ -156,7 +156,7 @@ onBeforeUnmount(() => {
           >Phát hành QR công khai</va-button
         >
         <p v-else>
-          Nhà phân phối phát hành QR sau khi xác nhận nhận hàng. Chủ cơ sở có thể xem và tải mã đã
+          Nhà phân phối phát hành QR sau khi xác nhận nhận hàng, đóng gói và kiểm định. Chủ cơ sở có thể xem và tải mã đã
           phát hành tại đây.
         </p>
       </template>

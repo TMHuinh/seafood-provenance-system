@@ -433,7 +433,13 @@ onBeforeUnmount(() => {
             <h3>{{ trip.code }}</h3>
             <span class="trip-status">{{ labels[trip.status] || trip.status }}</span>
           </div>
-          <p>{{ date(trip.date) }} · {{ Number(trip.quantity).toLocaleString('vi-VN') }} kg</p>
+          <p>{{ date(trip.date) }}</p>
+          <p v-if="trip.quantity != null">Khối lượng gửi <strong>{{ Number(trip.quantity).toLocaleString('vi-VN') }} kg</strong></p>
+          <p v-if="trip.receivedQuantity != null">
+            Khối lượng thực nhận <strong>{{ Number(trip.receivedQuantity).toLocaleString('vi-VN') }} kg</strong>
+            <span v-if="trip.receiptOutcome === 'PARTIAL'"> · Nhận một phần</span>
+          </p>
+          <p v-else-if="trip.status === 'DELIVERED'" class="muted">Chưa ghi khối lượng thực nhận.</p>
           <p v-if="trip.recipientName">
             {{
               trip.status === 'DELIVERED' ? 'Đơn vị đã xác nhận nhận hàng' : 'Đơn vị nhận dự kiến'

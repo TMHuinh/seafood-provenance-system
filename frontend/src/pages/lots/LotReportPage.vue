@@ -88,7 +88,13 @@ onUnmounted(() => { version++; document.title = previousTitle; delete document.b
         <div v-else class="table-scroll"><table><thead><tr><th>Ngày ghi nhận</th><th>Hoạt động</th><th>Nội dung</th><th>{{ publicReport ? 'Tr?ng th?i ghi nh?n' : 'Blockchain' }}</th></tr></thead><tbody><tr v-for="(log, index) in trace.logs" :key="index"><td>{{ date(log.date, true) }}</td><td>{{ logLabels[log.type] || log.type }}</td><td>{{ details(log.details) }}</td><td>{{ chainLabels[log.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div>
       </section>
       <section><h2>4. Vận chuyển và đơn vị nhận</h2><p v-if="!trace.transports.length">Chưa có thông tin vận chuyển gắn với lô này.</p>
-        <article v-for="(trip, index) in trace.transports" :key="index" class="trip-report"><h3>{{ trip.code }}</h3><p>{{ date(trip.date, true) }} · {{ quantity(trip.quantity) }} kg · {{ tripLabels[trip.status] || trip.status }}</p><p>Đơn vị nhận {{ trip.status === 'DELIVERED' ? 'đã xác nhận' : 'dự kiến' }}: {{ trip.recipientName || 'Chưa xác định' }}</p>
+        <article v-for="(trip, index) in trace.transports" :key="index" class="trip-report"><h3>{{ trip.code }}</h3><p>{{ date(trip.date, true) }} · {{ tripLabels[trip.status] || trip.status }}</p>
+          <p v-if="trip.quantity != null">Khối lượng gửi <strong>{{ quantity(trip.quantity) }} kg</strong></p>
+          <p v-if="trip.receivedQuantity != null">
+            Khối lượng thực nhận <strong>{{ quantity(Number(trip.receivedQuantity)) }} kg</strong><span v-if="trip.receiptOutcome === 'PARTIAL'"> · Nhận một phần</span>
+          </p>
+          <p v-else-if="trip.status === 'DELIVERED'">Chưa ghi khối lượng thực nhận.</p>
+          <p>Đơn vị nhận {{ trip.status === 'DELIVERED' ? 'đã xác nhận' : 'dự kiến' }}: {{ trip.recipientName || 'Chưa xác định' }}</p>
           <div v-if="trip.events.length" class="table-scroll"><table><thead><tr><th>Thời điểm</th><th>Mốc hành trình</th><th>Nhiệt độ</th><th>{{ publicReport ? 'Tr?ng th?i ghi nh?n' : 'Blockchain' }}</th></tr></thead><tbody><tr v-for="(event, idx) in trip.events" :key="idx"><td>{{ date(event.date, true) }}</td><td>{{ eventLabels[event.type] || event.type }}<small v-if="event.trackingStatus">{{ trackingLabels[event.trackingStatus] || event.trackingStatus }}</small></td><td>{{ event.temperature == null ? '—' : `${quantity(event.temperature)} °C` }}</td><td>{{ chainLabels[event.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div><p v-else>Chưa có mốc hành trình.</p>
         </article>
       </section>

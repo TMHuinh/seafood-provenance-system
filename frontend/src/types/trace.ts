@@ -38,6 +38,8 @@ export interface PublicTrace {
   logs: { imageUrl: string | null; type: string; date: string; blockchainStatus: string | null; details: Record<string, string | number | null> }[]
   transports: {
     code: string; date: string; status: string; quantity: number; recipientName: string | null
+    receivedQuantity?: number | string | null
+    receiptOutcome?: 'FULL' | 'PARTIAL' | 'REJECTED' | null
     events: { imageUrl: string | null; type: string; date: string; temperature: number | null; trackingStatus: string | null; blockchainStatus: string | null }[]
   }[]
   proof: {

@@ -284,8 +284,9 @@ bảng QR theo vụ cũ và không tự công khai lô cũ. Không chạy migrat
 Nhà phân phối đúng tổ chức nhận xác nhận nhận chuyến, nhập hồ sơ đóng gói và kiểm định,
 rồi phát hành QR trong trang **Nhận hàng**. Hồ sơ xác nhận một lần theo chuyến, giới hạn
 khối lượng đóng gói theo khối lượng thực nhận, và được đưa vào hàng đợi Blockchain.
-Chủ cơ sở xem/tải QR trong **Thu hoạch / Lô**. Một vụ thu nhiều đợt có nhiều
-QR. Các gói thuộc cùng lô có thể dùng chung mã đang hoạt động. Thu hồi yêu cầu
+Chủ cơ sở có thể xem QR từ **Thu hoạch / Lô**. Nhà phân phối dùng **Nhận hàng**
+để lấy đúng mã in bao bì. Một lô có thể giao nhiều chuyến. Mỗi chuyến có tối đa
+một QR hoạt động và các gói từ cùng hồ sơ đóng gói của chuyến dùng chung mã đó. Thu hồi yêu cầu
 lý do 3–500 ký tự và có hiệu lực với lần đọc tiếp theo. Tổ chức đã phát hành có
 thể tạo mã thay thế sau khi thu hồi. Mã cũ vẫn dẫn đến thông báo thu hồi.
 Hồ sơ đã được tải/chụp trước đó không thể thu hồi khỏi thiết bị người xem.
@@ -326,7 +327,9 @@ Trang QR đối soát trực tiếp hồ sơ thu hoạch và hồ sơ đóng gó
 chuyến phát hành. Kết quả phân biệt khớp, sai lệch, chờ ghi và chưa thể kiểm tra.
 Nhật ký và vận chuyển hiển thị trạng thái ghi nhận lưu trong database.
 Quét QR chỉ đọc dữ liệu và kết quả kiểm tra.
-QR mới hiển thị hồ sơ đóng gói và kiểm định của chuyến phát hành. Bộ phận nhận hàng
+QR theo chuyến hiển thị hành trình, khối lượng gửi, khối lượng thực nhận
+và hồ sơ đóng gói, kiểm định của chuyến phát hành. Với chuyến cũ thiếu khối lượng
+thực nhận, trang hiển thị tình trạng thiếu dữ liệu. Bộ phận nhận hàng
 in QR lên bao bì để khách mua trực tiếp quét tại điểm bán. QR đã phát hành trước migration
 vẫn đọc được. Phát hành thay thế áp dụng điều kiện đóng gói và kiểm định như QR mới.
 QR có thể sao chép, không phải tem chống giả riêng từng gói.

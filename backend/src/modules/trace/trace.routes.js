@@ -6,7 +6,8 @@ const { createTraceRepository } = require('./trace.repository')
 const { createTraceHandlers } = require('./trace.handlers')
 const blockchain = require('../blockchain/blockchain.service')
 const db = require('../../config/supabase')
-const service = createTraceService(createTraceRepository(db), {
+const { receivingQr, revokeLegacy } = require('../transports/receiving.service')
+const service = createTraceService({ ...createTraceRepository(db), receivingQr, revokeLegacy }, {
   hash: blockchain.hashData,
   async read(eventId, address, chainId) {
     if (!env.blockchainRpcUrl) throw new Error('Blockchain unavailable')

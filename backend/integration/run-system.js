@@ -331,7 +331,7 @@ async function main() {
       {
         requestId: randomUUID(),
         recipientOrganizationId: distributor.user.organization_id,
-        quantity: 7.5,
+        quantity: 6,
         transportDate: '2026-02-04T01:00:00Z',
         fromLocation: 'Cơ sở E2E',
         toLocation: 'Kho E2E',
@@ -368,10 +368,10 @@ async function main() {
   await api('POST', `/transports/${trip.id}/confirm-delivery`, wrongDistributor.token, {}, 404)
   await api('POST', `/transports/${trip.id}/confirm-delivery`, distributor.token, {}, 400)
   const received = await api('POST', `/transports/${trip.id}/confirm-delivery`, distributor.token, {
-    receiptOutcome: 'PARTIAL', receivedQuantity: 7, note: 'Thiếu 0,5 kg tại điểm giao',
+    receiptOutcome: 'PARTIAL', receivedQuantity: 5.5, note: 'Thiếu 0,5 kg tại điểm giao',
   })
   assert.equal(received.transport.receipt_outcome, 'PARTIAL')
-  assert.equal(Number(received.transport.received_quantity), 7)
+  assert.equal(Number(received.transport.received_quantity), 5.5)
   await retry()
   const events = await rows('transport_events', { transport_id: trip.id })
   assert.ok(events.length >= 5)
@@ -384,15 +384,19 @@ async function main() {
     timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
   }).format(new Date())
   const packagingInput = {
-    packagedDate: today, quantity: 7, specification: 'Túi 500 g',
+    packagedDate: today, quantity: 5, specification: 'Túi 500 g',
     inspectionDate: today, inspectionUnit: 'Phòng kiểm định E2E', inspectionResult: 'Cảm quan đạt',
   }
   await api('POST', qrPath, distributor.token, {}, 412)
   await api('POST', packagingPath, wrongDistributor.token, packagingInput, 404)
-  await api('POST', packagingPath, distributor.token, { ...packagingInput, quantity: 7.01 }, 400)
+  await api('POST', packagingPath, distributor.token, { ...packagingInput, quantity: 5.51 }, 400)
+  sql("ALTER TABLE public.blockchain_outbox ADD CONSTRAINT test_packaging_rollback CHECK (entity_type <> 'LOT_PACKAGING') NOT VALID;")
+  await api('POST', packagingPath, distributor.token, packagingInput, 400)
+  assert.equal((await api('GET', packagingPath, distributor.token)).packaging, null)
+  sql('ALTER TABLE public.blockchain_outbox DROP CONSTRAINT test_packaging_rollback;')
   const packaged = await api('POST', packagingPath, distributor.token, packagingInput)
   assert.deepEqual(await api('POST', packagingPath, distributor.token, packagingInput), packaged)
-  await api('POST', packagingPath, distributor.token, { ...packagingInput, quantity: 6 }, 409)
+  await api('POST', packagingPath, distributor.token, { ...packagingInput, quantity: 4 }, 409)
   await retry()
   const [packagingJob] = await rows('blockchain_outbox', { event_id: `QUALITY_INSPECTION_RECORDED:${trip.id}` })
   assert.equal(packagingJob.status, 'SUCCESS')
@@ -406,11 +410,45 @@ async function main() {
   assert.equal(trace.trace.proof.status, 'MATCH')
   assert.equal(trace.trace.logs.length, 1)
   assert.equal(trace.trace.transports[0].recipientName, distributor.user.organization.name)
+  assert.equal(Number(trace.trace.transports[0].quantity), 6)
+  assert.equal(Number(trace.trace.transports[0].receivedQuantity), 5.5)
+  assert.equal(trace.trace.transports[0].receiptOutcome, 'PARTIAL')
+  assert.equal(Number(trace.trace.packaging[0].quantity), 5)
   assert.equal(trace.trace.packaging[0].inspectionResult, packagingInput.inspectionResult)
   assert.equal(trace.trace.packaging[0].blockchainStatus, 'SUCCESS')
   assert.equal(trace.trace.packaging[0].verificationStatus, 'MATCH')
   assert.equal(Object.hasOwn(trace.trace.packaging[0], 'transactionHash'), false)
   assert.equal(Object.hasOwn(trace.trace.proof, 'transactionHash'), false)
+
+  const secondTrip = (await api('POST', `${batchPath}/${batch.id}/lots/${finalLot.id}/transports`, farmer.token, {
+    requestId: randomUUID(), recipientOrganizationId: wrongDistributor.user.organization_id, quantity: 1.5,
+    transportDate: '2026-02-04T02:00:00Z', fromLocation: 'Cơ sở E2E', toLocation: 'Kho thứ hai',
+  }, 201)).transport
+  const secondPath = `/transports/${secondTrip.id}`
+  await api('POST', `${secondPath}/claim`, transporter.token, {})
+  await api('PATCH', `${secondPath}/status`, transporter.token, { status: 'IN_TRANSIT', vehicle: 'XE-E2E', driver: 'Tài xế E2E' })
+  await api('POST', `${secondPath}/tracking-updates`, transporter.token, {
+    trackingStatus: 'PICKED_UP', location: 'Cơ sở E2E', temperature: 4,
+  }, 201)
+  await api('POST', `${secondPath}/tracking-updates`, transporter.token, {
+    trackingStatus: 'DELIVERED_REPORTED', location: 'Kho thứ hai', temperature: 4,
+    deliveryProofUrl: 'https://res.cloudinary.com/seafood-test/image/upload/v1/evidence.jpg',
+  }, 201)
+  await api('POST', `${secondPath}/confirm-delivery`, wrongDistributor.token, { receiptOutcome: 'FULL', receivedQuantity: 1.5 })
+  assert.equal((await api('GET', `${secondPath}/qr`, wrongDistributor.token)).qr, null)
+  await api('POST', `${secondPath}/packaging`, wrongDistributor.token, { ...packagingInput, quantity: 1.5, specification: 'Hộp 750 g' })
+  const secondIssue = () => api('POST', `${secondPath}/qr`, wrongDistributor.token, {})
+  const [secondIssued, secondReplay] = await Promise.all([secondIssue(), secondIssue()])
+  const secondCode = secondIssued.qr.trace_code
+  assert.notEqual(secondCode, code)
+  assert.equal(secondReplay.qr.trace_code, secondCode)
+  const secondTrace = (await api('GET', `/public/trace/${secondCode}`, null)).trace
+  assert.deepEqual(secondTrace.transports.map(item => item.code), [secondTrip.transport_code])
+  assert.deepEqual(secondTrace.packaging.map(item => item.specification), ['Hộp 750 g'])
+  const firstTrace = (await api('GET', `/public/trace/${code}`, null)).trace
+  assert.deepEqual(firstTrace.transports.map(item => item.code), [trip.transport_code])
+  assert.deepEqual(firstTrace.packaging.map(item => item.specification), ['Túi 500 g'])
+  await api('POST', `${secondPath}/qr/revoke`, wrongDistributor.token, { traceCode: code, reason: 'Mã của chuyến khác' }, 409)
   const privateReport = await api('GET', `/lots/${finalLot.id}/report`, farmer.token)
   assert.ok(privateReport.history.length)
   const publicReport = await api('GET', `/public/trace/${code}/report`, null)
@@ -480,6 +518,7 @@ async function main() {
   await page.getByRole('heading', { name: 'Kết quả đồng bộ Blockchain' }).waitFor()
   await page.getByText('Chưa thể đối soát', { exact: true }).first().waitFor()
   rpcProxy.setOffline(false)
+  await ready(process.env.BLOCKCHAIN_RPC_URL, { jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] })
   pass('browser log verification distinguishes matching evidence from an unavailable RPC')
   await page.goto(`${webUrl}/lo-hang`)
   await page.getByText(finalLot.lot_code, { exact: true }).waitFor()
@@ -507,6 +546,8 @@ async function main() {
   await publicPage.goto(`${webUrl}/trace/${code}/report`)
   await publicPage.getByRole('heading', { name: 'Báo cáo kết quả truy xuất' }).waitFor()
   await publicPage.getByText(packagingInput.inspectionResult, { exact: true }).waitFor()
+  await publicPage.getByText('Khối lượng gửi', { exact: false }).waitFor()
+  await publicPage.getByText('Khối lượng thực nhận', { exact: false }).waitFor()
   pass('browser login → lot search → private report/PDF → production; mobile public report without login')
   await api(
     'POST',
@@ -516,6 +557,7 @@ async function main() {
     404,
   )
   await api('POST', `/transports/${trip.id}/qr/revoke`, distributor.token, { reason: 'Thu hồi thử nghiệm' })
+  assert.equal((await api('GET', `/public/trace/${secondCode}`, null)).status, 'ACTIVE')
   assert.equal((await api('GET', `/public/trace/${code}/report`, null)).trace, undefined)
   await publicPage.reload()
   await publicPage.getByText('QR đã được thu hồi.', { exact: false }).waitFor()

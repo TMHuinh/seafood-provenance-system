@@ -48,7 +48,8 @@ function fixture() {
       proof: { status: 'UNAVAILABLE', recordedStatus: 'SUCCESS', transactionHash: '0xabc', checkedAt: null },
       packaging: [{ inspectionResult: 'Cảm quan đạt' }],
       logs: [{ date: '2026-11-01', type: 'FEEDING', details: { feedType: 'Thức ăn A', feedAmount: 2 }, blockchainStatus: 'SUCCESS' }],
-      transports: [{ code: 'VC-A', date: '2026-11-21', status: 'DELIVERED', quantity: 12.5, recipientName: 'Phân phối A', events: [] }],
+      transports: [{ code: 'VC-A', date: '2026-11-21', status: 'DELIVERED', quantity: 12.5,
+        receivedQuantity: 10, receiptOutcome: 'PARTIAL', recipientName: 'Phân phối A', events: [] }],
     },
   }
 }
@@ -77,6 +78,8 @@ test('private report renders origin, histories and honest unavailable proof; pri
     assert.match(text(view.root), /Không thể đối soát Blockchain/)
     assert.match(text(view.root), /Phân phối A/); assert.match(text(view.root), /Thức ăn A/)
     assert.match(text(view.root), /Cảm quan đạt/)
+    assert.match(text(view.root), /Khối lượng gửi\s+12,5 kg/)
+    assert.match(text(view.root), /Khối lượng thực nhận\s+10 kg.*Nhận một phần/)
     assert.equal(document.title, 'Bao-cao-truy-xuat-LO-A')
     assert.equal(printButton(view.root).props.disabled, false)
     printButton(view.root).props.onClick()

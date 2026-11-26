@@ -36,7 +36,7 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
   async function revoke(profile, scope, input) {
     await owned(profile, scope)
     const value = reason(input)
-    const qr = await repo.findQrByLot(scope.lotId)
+    const qr = await repo.findQrByLot(scope.lotId, { legacyOnly: true })
     if (!qr) fail('Lô chưa phát hành QR', 404)
     if (qr.issuer_organization_id) fail('Chỉ tổ chức phát hành mới được thu hồi QR này', 403)
     return ownerResult(await repo.revokeLegacy(profile.id, scope.lotId, value))
@@ -87,7 +87,7 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     const harvestDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(harvestDate))
     const logsBefore = new Date(new Date(`${harvestDay}T00:00:00+07:00`).getTime() + 86400000).toISOString()
     const [logs, transports, packaging] = await Promise.all([
-      repo.logs(lot.batch_id, logsBefore), repo.transports(lot.id),
+      repo.logs(lot.batch_id, logsBefore), repo.transports(lot.id, packagingTransportId),
       packagingTransportId === false ? [] : repo.packaging(lot.id, packagingTransportId),
     ])
     const publicLogs = logs.filter(log => log.batch_id === lot.batch_id && log.lifecycle_status === 'CONFIRMED' &&
@@ -101,8 +101,11 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
         }
         return { type: text(version.log_type), date: text(version.log_date), imageUrl: imageUrl(version.image_url), details, blockchainStatus: ['SUCCESS', 'PENDING', 'FAILED'].includes(log.recordedStatus) ? log.recordedStatus : null }
       })
-    const publicTransports = transports.filter(trip => trip.harvest_lot_id === lot.id).map(trip => ({
+    const publicTransports = transports.filter(trip => trip.harvest_lot_id === lot.id &&
+      (!packagingTransportId || trip.id === packagingTransportId)).map(trip => ({
       code: text(trip.transport_code), date: text(trip.transport_date), status: text(trip.status), quantity: scalar(trip.quantity),
+      receivedQuantity: scalar(trip.received_quantity),
+      receiptOutcome: ['FULL', 'PARTIAL', 'REJECTED'].includes(trip.receipt_outcome) ? trip.receipt_outcome : null,
       recipientName: text(trip.recipient?.name),
       events: (trip.events ?? []).map(event => ({ type: text(event.event_type), date: text(event.occurred_at),
         imageUrl: imageUrl(event.payload?.deliveryReport?.proofImageUrl),

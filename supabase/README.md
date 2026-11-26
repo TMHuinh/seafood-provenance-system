@@ -6,6 +6,14 @@ hồ sơ đóng gói/kiểm định theo chuyến nhận, xếp hàng ghi hash c
 nhận DB và yêu cầu có hồ sơ trước khi phát hành hoặc cấp lại QR. QR cũ giữ nguyên
 khả năng truy xuất.
 
+Tiếp theo áp dụng `202611250001_qr_per_packaged_transport.sql` để mỗi chuyến đã
+xác nhận đóng gói có thể phát hành QR riêng. Migration giữ nguyên mã đã phát hành
+và áp dụng giới hạn một mã đang hoạt động cho mỗi chuyến. QR cũ cấp theo lô
+chưa gắn chuyến vẫn truy xuất được và chủ cơ sở vẫn có thể thu hồi mã cũ.
+Migration thay các RPC nghiệp vụ cũ bằng hai thao tác ghi nguyên tử dành cho
+backend. Node.js dùng `supabase-js` để kiểm tra quyền và điều kiện nghiệp vụ.
+PostgreSQL lưu hồ sơ cùng hàng đợi và kiểm tra trạng thái khi chèn QR đồng thời.
+
 Thư mục này chỉ lưu cấu hình Supabase CLI và lịch sử schema của ứng dụng.
 Ứng dụng dùng Supabase Cloud. Bộ kiểm thử toàn luồng có stack PostgreSQL/Auth/
 PostgREST dùng riêng trong `backend/integration/`, không thay thế database ứng dụng.

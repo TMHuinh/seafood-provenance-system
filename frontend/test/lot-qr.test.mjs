@@ -96,12 +96,13 @@ test('confirmed distributor issues and downloads real SVG, then revokes with rea
     assert.equal(nodes(view.root).find(n => n.props.download), undefined)
   } finally { view.close() }
 })
-test('other receiving distributor downloads but cannot revoke another publisher QR', async () => {
-  const view = mount({ get: async () => result(code) })
+test('a packaged shipment without its own QR can publish but has no QR to download yet', async () => {
+  const view = mount({ get: async () => result(null, true) })
   try {
     await settle()
     assert.equal(nodes(view.root).find(n => n.type === 'form'), undefined)
-    assert.ok(nodes(view.root).find(n => n.props.download))
+    assert.equal(nodes(view.root).find(n => n.props.download), undefined)
+    assert.ok(button(view.root, 'Phát hành'))
   } finally { view.close() }
 })
 test('legacy farm QR alone permits owner revocation', async () => {

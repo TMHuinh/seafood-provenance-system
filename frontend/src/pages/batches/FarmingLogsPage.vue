@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { draftDismiss, dismissOnBackdrop } from '../../components/overlay-dismiss'
 import { detailsRows } from './farming-log-details'
+import { canEditFarmingLog } from './farming-log-permissions'
 import LoadingState from '../../components/LoadingState.vue'
 import DecimalField from '../../components/DecimalField.vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -27,6 +28,10 @@ const route = useRoute(); const logStore = useFarmingLogsStore(); const pondsSto
 const { items, loading, saving, verifying } = storeToRefs(logStore)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId)); const batchId = computed(() => String(route.params.batchId))
 const farmName = ref(''); const pondName = ref(''); const batchInfo = ref<BatchItem | null>(null); const error = ref('')
+const permissions = ref<string[]>([])
+const canCreateLog = computed(() => permissions.value.includes('LOG_CREATE'))
+const canConfirmLog = computed(() => permissions.value.includes('LOG_CONFIRM'))
+const canEditLog = (log: FarmingLog) => canEditFarmingLog(log.lifecycle_status, permissions.value)
 let contextVersion = 0; let historyVersion = 0; let verifyVersion = 0
 const showForm = ref(false); const formError = ref(''); const success = ref('')
 const imageUploading = ref(false); const imageError = ref('')
@@ -166,9 +171,9 @@ async function uploadImage(event: Event) {
   }
 }
 
-function openCreate() { if (saving.value || loading.value || !batchInfo.value) return; editingId.value = null; reset(); showForm.value = true }
+function openCreate() { if (!canCreateLog.value || saving.value || loading.value || !batchInfo.value) return; editingId.value = null; reset(); showForm.value = true }
 function openEdit(log: FarmingLog) {
-  if (saving.value || loading.value) return
+  if (!canEditLog(log) || saving.value || loading.value) return
   reset()
   editingId.value = log.id
   editingMode.value = log.lifecycle_status === 'DRAFT' ? 'DRAFT' : 'CORRECTION'
@@ -215,6 +220,8 @@ function validate(): string {
 
 async function submit() {
   if (saving.value || loading.value || imageUploading.value) return
+  const editing = items.value.find(item => item.id === editingId.value)
+  if (editingId.value ? !editing || !canEditLog(editing) : !canCreateLog.value) return
   const version = contextVersion
   formError.value = ''; success.value = ''
   if (!form.logDate) { formError.value = 'Vui lòng chọn thời gian ghi nhật ký'; return }
@@ -253,7 +260,7 @@ async function submit() {
 }
 
 async function confirmLog(log: FarmingLog) {
-  if (saving.value || loading.value) return
+  if (!canConfirmLog.value || log.lifecycle_status !== 'DRAFT' || saving.value || loading.value) return
   const version = contextVersion
   try { await logStore.confirm(log.id); if (version === contextVersion) success.value = 'Đã xác nhận và chứng thực Blockchain' }
   catch { if (version === contextVersion) error.value = logStore.error }
@@ -262,13 +269,14 @@ const showRevoke = ref(false)
 const revokeTarget = ref('')
 const revokeReason = ref('')
 function openRevoke(log: FarmingLog) {
+  if (!canConfirmLog.value || log.lifecycle_status !== 'CONFIRMED') return
   revokeTarget.value = log.id
   revokeReason.value = ''
   showRevoke.value = true
 }
 async function revokeLog() {
   const reason = revokeReason.value.trim()
-  if (saving.value || loading.value || !reason) return
+  if (!canConfirmLog.value || saving.value || loading.value || !reason) return
   const version = contextVersion
   try {
     await logStore.revoke(revokeTarget.value, reason)
@@ -309,6 +317,7 @@ async function loadContext() {
   showRevoke.value = false
   query.value = ''; filterStatus.value = ''; filterType.value = ''; fromDate.value = ''; toDate.value = ''; listPage.value = 1
   farmName.value = ''; pondName.value = ''; batchInfo.value = null; historyResult.value = null; verifyResults.value = null; verifiedStatus.value = {}; verifyError.value = ''; error.value = ''; success.value = ''
+  permissions.value = []
   // Hide and invalidate old logs while validating the complete parent chain.
   logStore.requestVersion++; logStore.items = []; logStore.scope = ''; logStore.loading = true
   try {
@@ -317,6 +326,7 @@ async function loadContext() {
     const selectedPond = pondsStore.items.find((item) => item.id === pond)
     if (pondsStore.error || !selectedPond) throw new Error(pondsStore.error || 'Ao nuôi không thuộc cơ sở trong đường dẫn')
     pondName.value = selectedPond.pond_name
+    permissions.value = selectedPond.permissions ?? []
     await batchesStore.load(farm, pond)
     if (version !== contextVersion) return
     const selectedBatch = batchesStore.items.find((item) => item.id === batch)
@@ -337,9 +347,9 @@ async function loadContext() {
 
 }
 watch(() => `${farmId.value}/${pondId.value}/${batchId.value}`, loadContext, { immediate: true })
-watch([() => route.query.create, batchInfo, loading, farmer], ([create, batch, pending, isFarmer]) => {
-  if (create !== 'log' || !batch || pending || !isFarmer || error.value) return
-  openCreate()
+watch([() => route.query.create, batchInfo, loading, canCreateLog], ([create, batch, pending, mayCreate]) => {
+  if (create !== 'log' || !batch || pending || error.value) return
+  if (mayCreate) openCreate()
   const { create: requested, ...query } = route.query
   if (requested) void router.replace({ query })
 })
@@ -371,7 +381,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     <PageHeader :context="batchInfo ? SPECIES_LABELS[batchInfo.species] : undefined" title="Nhật ký nuôi" description="Theo dõi và ghi nhận các hoạt động trong quá trình nuôi trồng.">
       <template #actions>
         <va-button preset="secondary" icon="sync" :loading="verifying" :disabled="loading || !batchInfo" @click="checkSync">Kiểm tra Blockchain</va-button>
-        <va-button icon="add" :disabled="loading || saving || !batchInfo" @click="openCreate">Ghi nhật ký</va-button>
+        <va-button v-if="canCreateLog" icon="add" :disabled="loading || saving || !batchInfo" @click="openCreate">Ghi nhật ký</va-button>
       </template>
     </PageHeader>
 
@@ -402,8 +412,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
     </CollectionToolbar>
 
     <LoadingState v-if="loading" />
-    <EmptyState v-else-if="!error && !items.length" title="Chưa có nhật ký nuôi" description="Hãy ghi lại hoạt động đầu tiên cho vụ nuôi này." icon="edit_document">
-      <va-button icon="add" @click="openCreate">Ghi nhật ký</va-button>
+    <EmptyState v-else-if="!error && !items.length" title="Chưa có nhật ký nuôi" :description="canCreateLog ? 'Hãy ghi lại hoạt động đầu tiên cho vụ nuôi này.' : undefined" icon="edit_document">
+      <va-button v-if="canCreateLog" icon="add" @click="openCreate">Ghi nhật ký</va-button>
     </EmptyState>
     <EmptyState v-else-if="!error && !filteredLogs.length" title="Không có nhật ký phù hợp" description="Thử đổi từ khóa hoặc bộ lọc." />
 
@@ -422,17 +432,17 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
             <td class="record-actions" role="cell">
               <div class="log-actions">
                 <va-button size="small" preset="secondary" @click="openDetail(log)">Xem</va-button>
-                <details v-if="log.lifecycle_status !== 'REVOKED' || log.current_version_id"
+                <details v-if="log.current_version_id || canEditLog(log) || (canConfirmLog && log.lifecycle_status !== 'REVOKED')"
                   class="log-actions-menu" name="log-actions" @keydown.esc.stop="runAction($event)">
                   <summary aria-label="Thao tác nhật ký" title="Thao tác nhật ký"><va-icon name="more_horiz" aria-hidden="true" /></summary>
                   <div class="log-menu-panel">
                     <template v-if="log.lifecycle_status === 'DRAFT'">
-                      <button type="button" :disabled="saving" @click="runAction($event, () => openEdit(log))">Chỉnh sửa</button>
-                      <button type="button" :disabled="saving" @click="runAction($event, () => confirmLog(log))">Xác nhận</button>
+                      <button v-if="canEditLog(log)" type="button" :disabled="saving" @click="runAction($event, () => openEdit(log))">Chỉnh sửa</button>
+                      <button v-if="canConfirmLog" type="button" :disabled="saving" @click="runAction($event, () => confirmLog(log))">Xác nhận</button>
                     </template>
                     <template v-if="log.lifecycle_status === 'CONFIRMED'">
-                      <button type="button" :disabled="saving" @click="runAction($event, () => openEdit(log))">Đính chính</button>
-                      <button type="button" class="danger-action" :disabled="saving" @click="runAction($event, () => openRevoke(log))">Thu hồi</button>
+                      <button v-if="canEditLog(log)" type="button" :disabled="saving" @click="runAction($event, () => openEdit(log))">Đính chính</button>
+                      <button v-if="canConfirmLog" type="button" class="danger-action" :disabled="saving" @click="runAction($event, () => openRevoke(log))">Thu hồi</button>
                     </template>
                     <button v-if="log.current_version_id" type="button" @click="runAction($event, () => showHistory(log))">Lịch sử</button>
                   </div>
@@ -461,6 +471,9 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
               <div><dt>Cơ sở nuôi</dt><dd>{{ farmName || '—' }}</dd></div>
               <div><dt>Ao nuôi</dt><dd>{{ pondName }}</dd></div>
               <div><dt>Ngày ghi nhận</dt><dd>{{ formatDateTime(selectedLog.log_date) }}</dd></div>
+              <div><dt>Người ghi</dt><dd>{{ selectedLog.author_name || '—' }}</dd></div>
+              <div v-if="selectedLog.confirmed_by"><dt>Người xác nhận phiên bản hiện tại</dt><dd>{{ selectedLog.confirmer_name || '—' }}</dd></div>
+              <div v-if="selectedLog.confirmed_at"><dt>Thời điểm xác nhận</dt><dd>{{ formatDateTime(selectedLog.confirmed_at) }}</dd></div>
             </dl>
           </section>
           <section>
@@ -485,10 +498,10 @@ onUnmounted(() => { ++contextVersion; ++historyVersion; ++verifyVersion })
           </section>
         </div>
         <footer class="log-drawer-actions">
-          <va-button v-if="selectedLog.lifecycle_status !== 'REVOKED'" :disabled="saving" @click="actOnDetail(openEdit)">{{ selectedLog.lifecycle_status === 'DRAFT' ? 'Chỉnh sửa' : 'Đính chính' }}</va-button>
-          <va-button v-if="selectedLog.lifecycle_status === 'DRAFT'" preset="secondary" color="success" :disabled="saving" @click="actOnDetail(confirmLog)">Xác nhận</va-button>
+          <va-button v-if="canEditLog(selectedLog)" :disabled="saving" @click="actOnDetail(openEdit)">{{ selectedLog.lifecycle_status === 'DRAFT' ? 'Chỉnh sửa' : 'Đính chính' }}</va-button>
+          <va-button v-if="canConfirmLog && selectedLog.lifecycle_status === 'DRAFT'" preset="secondary" color="success" :disabled="saving" @click="actOnDetail(confirmLog)">Xác nhận</va-button>
           <va-button v-if="selectedLog.current_version_id" preset="secondary" icon="history" @click="actOnDetail(showHistory)">Lịch sử</va-button>
-          <va-button v-if="selectedLog.lifecycle_status === 'CONFIRMED'" preset="secondary" color="danger" :disabled="saving" @click="actOnDetail(openRevoke)">Thu hồi</va-button>
+          <va-button v-if="canConfirmLog && selectedLog.lifecycle_status === 'CONFIRMED'" preset="secondary" color="danger" :disabled="saving" @click="actOnDetail(openRevoke)">Thu hồi</va-button>
         </footer>
       </template>
     </dialog>

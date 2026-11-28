@@ -1,3 +1,4 @@
+const { requireFarmManager } = require('../ponds/pond-access')
 const farmsRepository = require('./farms.repository')
 const { normalizeFarmInput } = require('./farms.validation')
 
@@ -17,33 +18,47 @@ function validateId(id) {
 
 async function create(profile, input) {
   const farm = normalizeFarmInput(input)
-  return farmsRepository.create(profile.id, profile.organization_id ?? null, farm)
+  const organizationId = Object.hasOwn(input ?? {}, 'organizationId') ? input.organizationId : profile.organization_id
+  if (organizationId != null) validateId(organizationId)
+  if (!(await canCreate(profile, organizationId))) {
+    throw createHttpError('Chỉ người quản lý mới được tạo cơ sở cho đơn vị', 403)
+  }
+  return { ...await farmsRepository.create(profile.id, organizationId ?? null, farm), can_manage: true }
+}
+
+function canCreate(profile, organizationId) {
+  if (organizationId) return farmsRepository.canCreateIn(profile, organizationId)
+  return ['FARMER', 'ADMIN'].includes(profile.role)
 }
 
 async function list(profile) {
-  const items = await farmsRepository.findAllByOwner(profile.id)
-  return { count: items.length, items }
+  const [items, can_create] = await Promise.all([
+    farmsRepository.visible(profile), canCreate(profile, profile.organization_id),
+  ])
+  return { count: items.length, items, can_create }
 }
 
 async function detail(profile, id) {
   validateId(id)
-  const farm = await farmsRepository.findByIdAndOwner(id, profile.id)
+  const farm = await farmsRepository.visible(profile, id)
   if (!farm) throw createHttpError('Không tìm thấy cơ sở nuôi', 404)
   return farm
 }
 
 async function update(profile, id, input) {
   validateId(id)
+  await requireFarmManager(profile, id)
   const changes = normalizeFarmInput(input, { partial: true })
-  const farm = await farmsRepository.update(id, profile.id, changes)
+  const farm = await farmsRepository.update(id, changes)
   if (!farm) throw createHttpError('Không tìm thấy cơ sở nuôi', 404)
-  return farm
+  return { ...farm, can_manage: true }
 }
 
 async function remove(profile, id) {
   validateId(id)
+  await requireFarmManager(profile, id)
   try {
-    const farm = await farmsRepository.remove(id, profile.id)
+    const farm = await farmsRepository.remove(id)
     if (!farm) throw createHttpError('Không tìm thấy cơ sở nuôi', 404)
   } catch (error) {
     if (error.code === '23503') {

@@ -1,15 +1,37 @@
 const supabase = require('../../config/supabase')
 
 const LOG_FIELDS =
-  'id, batch_id, created_by, log_date, log_type, details, image_url, data_hash, tx_hash, current_version, current_version_id, lifecycle_status, created_at, updated_at'
+  'id, batch_id, created_by, log_date, log_type, details, image_url, data_hash, tx_hash, current_version, current_version_id, lifecycle_status, created_at, updated_at,' +
+  'author:user_profiles!farming_logs_created_by_fkey(full_name),' +
+  'confirmation:farming_log_versions!farming_logs_current_version_id_fkey(confirmed_at,confirmed_by,confirmer:user_profiles!farming_log_versions_confirmed_by_fkey(full_name))'
+
+function projectLog(row) {
+  if (!row) return null
+  const { author, confirmation, ...log } = row
+  return {
+    ...log,
+    author_name: author?.full_name ?? null,
+    confirmed_at: confirmation?.confirmed_at ?? null,
+    confirmed_by: confirmation?.confirmed_by ?? null,
+    confirmer_name: confirmation?.confirmer?.full_name ?? null,
+  }
+}
 
 async function create(userId, logData) {
-  const { data, error } = await supabase
-    .from('farming_logs')
-    .insert({ ...logData, created_by: userId })
-    .select(LOG_FIELDS)
-    .single()
+  return callWriteRpc('create_farming_log_draft', {
+    p_actor: userId, p_batch: logData.batch_id, p_date: logData.log_date,
+    p_type: logData.log_type, p_details: logData.details, p_image: logData.image_url,
+  })
+}
 
+async function callWriteRpc(name, args) {
+  const { data, error } = await supabase.rpc(name, args)
+  if (error?.code === 'P0002') {
+    throw Object.assign(new Error('Không tìm thấy nhật ký nuôi'), { status: 404 })
+  }
+  if (error?.code === 'PT409') {
+    throw Object.assign(new Error('Nhật ký đã thay đổi hoặc đang chờ chứng thực. Vui lòng tải lại trước khi thao tác'), { status: 409 })
+  }
   if (error) throw error
   return data
 }
@@ -22,19 +44,20 @@ async function findById(id) {
     .maybeSingle()
 
   if (error) throw error
-  return data
+  return projectLog(data)
 }
 
-async function update(id, changes, expected) {
-  if (!expected) throw new Error('Expected log state is required')
-  let query = supabase.from('farming_logs').update(changes).eq('id', id)
-    .eq('lifecycle_status', expected.lifecycle_status).eq('current_version', expected.current_version)
-    .eq('updated_at', expected.updated_at)
-  query = expected.current_version_id ? query.eq('current_version_id', expected.current_version_id) : query.is('current_version_id', null)
-  const { data, error } = await query.select(LOG_FIELDS).maybeSingle()
-  if (error) throw error
-  if (!data) throw Object.assign(new Error('Nhật ký đã thay đổi. Vui lòng tải lại trước khi thao tác'), { status: 409 })
-  return data
+function reserveAnchor(actor, log, operation, hash) {
+  return callWriteRpc('reserve_farming_log_anchor', {
+    p_actor: actor, p_log: log.id, p_updated_at: log.updated_at, p_mode: operation, p_hash: hash,
+  })
+}
+
+function applyChange(actor, log, operation, { changes = null, version = null, reason = null } = {}) {
+  return callWriteRpc('apply_farming_log_change', {
+    p_actor: actor, p_log: log.id, p_updated_at: log.updated_at, p_mode: operation,
+    p_changes: changes, p_version: version, p_reason: reason,
+  })
 }
 
 async function findVersionByEvent(eventId) {
@@ -92,33 +115,11 @@ async function createVersion(log, correctedBy, correctionReason, blockchainEvent
   return data
 }
 
-async function updateVersion(id, changes) {
-  const { data, error } = await supabase.from('farming_log_versions').update(changes).eq('id', id).select().single()
-  if (error) throw error
-  return data
-}
-
-async function findVersions(logId) {
+async function findVersions(logId, maxVersion) {
   const { data, error } = await supabase.from('farming_log_versions').select('*').eq('farming_log_id', logId).order('version_number', { ascending: false })
+    .lte('version_number', maxVersion)
   if (error) throw error
   return data ?? []
-}
-
-async function createAudit(userId, entityId, action, oldData, newData) {
-  const { error } = await supabase.from('audit_logs').insert({ user_id: userId, entity_type: 'FARMING_LOG', entity_id: entityId, action, old_data: oldData, new_data: newData })
-  if (error) throw error
-}
-
-async function updateHashes(id, dataHash, txHash) {
-  const { data, error } = await supabase
-    .from('farming_logs')
-    .update({ data_hash: dataHash, tx_hash: txHash })
-    .eq('id', id)
-    .select(LOG_FIELDS)
-    .maybeSingle()
-
-  if (error) throw error
-  return data
 }
 
 async function findAllByBatch(batchId) {
@@ -129,7 +130,7 @@ async function findAllByBatch(batchId) {
     .order('log_date', { ascending: false })
 
   if (error) throw error
-  return data ?? []
+  return (data ?? []).map(projectLog)
 }
 
-module.exports = { findCurrentVersions, create, findById, update, createVersion, updateVersion, findVersions, createAudit, updateHashes, findAllByBatch }
+module.exports = { findCurrentVersions, create, findById, reserveAnchor, applyChange, createVersion, findVersions, findAllByBatch }

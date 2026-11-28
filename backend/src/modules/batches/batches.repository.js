@@ -40,12 +40,8 @@ function scopedQuery(profile, { search = '', status = '' } = {}, head = false) {
   // Inner joins ensure scope filtering happens in SQL before count/range.
   const fields = head ? 'id,pond:ponds!inner(id,farm:farms!inner(id))'
     : `${BATCH_FIELDS},pond:ponds!inner(id,pond_code,pond_name,status,farm_id,farm:farms!inner(farm_name,organization_id,owner_id))`
-  let query = supabase.from('batches').select(fields, { count: 'exact', head })
-  if (profile.role !== 'ADMIN') {
-    if (profile.organization_id) {
-      query = query.or(`owner_id.eq.${profile.id},organization_id.eq.${profile.organization_id}`, { referencedTable: 'pond.farm' })
-    } else query = query.eq('pond.farm.owner_id', profile.id)
-  }
+  let query = supabase.rpc('production_batches', { p_actor: profile.id }, { get: true, count: 'exact', head })
+    .select(fields)
   if (search) query = query.ilike('batch_code', `%${search.replace(/[\\%_]/g, '\\$&')}%`)
   if (status) query = query.eq('status', status)
   return query

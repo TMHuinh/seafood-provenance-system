@@ -1,7 +1,9 @@
+const { requirePondAction } = require('../ponds/pond-access')
 const farmingLogsRepository = require('./farming-logs.repository')
 const { normalizeFarmingLogInput, UUID_PATTERN } = require('./farming-logs.validation')
 const blockchainService = require('../blockchain/blockchain.service')
 const batchesRepository = require('../batches/batches.repository')
+const LOG_NOT_FOUND = 'Không tìm thấy nhật ký nuôi'
 
 function createHttpError(message, status) {
   const error = new Error(message)
@@ -15,47 +17,38 @@ function validateId(id, fieldName = 'ID') {
   }
 }
 
-async function requireAccessibleBatch(profile, batchId) {
+async function requireAccessibleBatch(profile, batchId, action, notFound = 'Không tìm thấy lô nuôi') {
   validateId(batchId, 'Mã lô nuôi (batchId)')
 
   const batch = await batchesRepository.findById(batchId)
   if (!batch) {
-    throw createHttpError('Không tìm thấy lô nuôi', 404)
+    throw createHttpError(notFound, 404)
   }
 
-  if (profile.role === 'ADMIN') {
-    return batch
-  }
-
-  const farmOwnerId = batch.pond?.farm?.owner_id
-  if (!farmOwnerId || farmOwnerId !== profile.id) {
-    throw createHttpError('Bạn không có quyền thao tác trên lô nuôi này', 403)
-  }
-
+  await requirePondAction(profile, batch.pond_id, action, { notFound })
   return batch
+}
+
+async function requireAccessibleLog(profile, id, action) {
+  validateId(id, 'Mã nhật ký')
+  const log = await farmingLogsRepository.findById(id)
+  if (!log) throw createHttpError(LOG_NOT_FOUND, 404)
+  const batch = await requireAccessibleBatch(profile, log.batch_id, action, LOG_NOT_FOUND)
+  return { log, batch }
 }
 
 async function create(profile, input) {
   const logData = normalizeFarmingLogInput(input)
-  await requireAccessibleBatch(profile, logData.batch_id)
-  const log = await farmingLogsRepository.create(profile.id, { ...logData, lifecycle_status: 'DRAFT' })
-  await farmingLogsRepository.createAudit(profile.id, log.id, 'CREATE', null, log)
-  return log
+  await requireAccessibleBatch(profile, logData.batch_id, 'LOG_CREATE')
+  return farmingLogsRepository.create(profile.id, logData)
 }
 
 async function authorizeImageUpload(profile, batchId) {
-  await requireAccessibleBatch(profile, batchId)
+  await requireAccessibleBatch(profile, batchId, 'LOG_CREATE')
 }
 
 async function update(profile, id, input) {
-  validateId(id, 'Mã nhật ký')
-
-  const existing = await farmingLogsRepository.findById(id)
-  if (!existing) {
-    throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  }
-
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const { log: existing } = await requireAccessibleLog(profile, id, 'LOG_EDIT')
   if (existing.lifecycle_status !== 'DRAFT') throw createHttpError('Nhật ký đã xác nhận; hãy dùng chức năng Đính chính', 409)
 
   const changes = normalizeFarmingLogInput({
@@ -63,9 +56,7 @@ async function update(profile, id, input) {
     batchId: existing.batch_id,
   })
 
-  const log = await farmingLogsRepository.update(id, changes, existing)
-  await farmingLogsRepository.createAudit(profile.id, id, 'UPDATE', existing, log)
-  return log
+  return farmingLogsRepository.applyChange(profile.id, existing, 'EDIT', { changes })
 }
 
 function blockchainPayload(log) {
@@ -91,28 +82,25 @@ async function anchorVersion(log, profile, eventId, correctionReason = null, opt
   const result = await blockchainService.createRecord({ batchId: log.batch_id, entityType: 'FARMING_LOG', entityId: log.id, eventType: 'FARMING_LOG_RECORDED', eventId, payload: blockchainPayload(log), status: 'PENDING' })
   if (!result.submitted) throw createHttpError('Không thể xác nhận dữ liệu trên Blockchain', 502)
   const anchored = { ...log, data_hash: result.dataHash, tx_hash: result.record.transaction_hash }
-  const version = await farmingLogsRepository.createVersion(anchored, profile.id, correctionReason, eventId, { ...options, blockNumber: result.record.block_number })
-  return { anchored, version }
+  return farmingLogsRepository.createVersion(anchored, profile.id, correctionReason, eventId, { ...options, blockNumber: result.record.block_number })
+}
+
+function reserveAnchor(profile, log, action, payload) {
+  if (!blockchainService.isContractConfigured()) throw createHttpError('Thiếu cấu hình chứng thực trên Blockchain', 502)
+  return farmingLogsRepository.reserveAnchor(profile.id, log, action, blockchainService.hashData(payload))
 }
 
 async function confirm(profile, id) {
-  validateId(id, 'Mã nhật ký')
-  const existing = await farmingLogsRepository.findById(id)
-  if (!existing) throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const { log: existing } = await requireAccessibleLog(profile, id, 'LOG_CONFIRM')
   if (existing.lifecycle_status !== 'DRAFT') throw createHttpError('Chỉ bản nháp mới có thể xác nhận', 409)
-  const eventId = blockchainService.buildEventId('FARMING_LOG_RECORDED', id)
-  const { anchored, version } = await anchorVersion(existing, profile, eventId)
-  const log = await farmingLogsRepository.update(id, { data_hash: anchored.data_hash, tx_hash: anchored.tx_hash, lifecycle_status: 'CONFIRMED', current_version_id: version.id }, existing)
-  await farmingLogsRepository.createAudit(profile.id, id, 'CONFIRM', existing, log)
-  return log
+  const eventId = await reserveAnchor(profile, existing, 'CONFIRM', blockchainPayload(existing))
+  const version = await anchorVersion(existing, profile, eventId)
+  return farmingLogsRepository.applyChange(profile.id, existing, 'CONFIRM', { version: version.id })
 }
 
 async function correct(profile, id, input) {
-  validateId(id, 'Mã nhật ký')
-  const existing = await farmingLogsRepository.findById(id)
-  if (!existing) throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const { log: existing, batch } = await requireAccessibleLog(profile, id, 'LOG_EDIT')
+  await requirePondAction(profile, batch.pond_id, 'LOG_CONFIRM', { notFound: LOG_NOT_FOUND })
   if (existing.lifecycle_status !== 'CONFIRMED') throw createHttpError('Chỉ nhật ký đã xác nhận mới có thể đính chính', 409)
   if (Number(input?.expectedVersion) !== existing.current_version) throw createHttpError('Nhật ký đã có phiên bản mới hơn', 409)
   const reason = String(input?.correctionReason ?? '').trim()
@@ -120,47 +108,39 @@ async function correct(profile, id, input) {
   const changes = normalizeFarmingLogInput({ ...input, batchId: existing.batch_id })
   const nextVersion = existing.current_version + 1
   const candidate = { ...existing, ...changes, current_version: nextVersion }
-  const eventId = `${blockchainService.buildEventId('FARMING_LOG_RECORDED', id)}:v${nextVersion}`
-  const { anchored, version } = await anchorVersion(candidate, profile, eventId, reason, { supersedesVersionId: existing.current_version_id, evidenceUrl: input.evidenceUrl })
-  const log = await farmingLogsRepository.update(id, { ...changes, current_version: nextVersion, current_version_id: version.id, data_hash: anchored.data_hash, tx_hash: anchored.tx_hash }, existing)
-  await farmingLogsRepository.updateVersion(existing.current_version_id, { status: 'SUPERSEDED' })
-  await farmingLogsRepository.createAudit(profile.id, id, 'UPDATE', existing, log)
-  return log
+  const eventId = await reserveAnchor(profile, existing, 'CORRECT', blockchainPayload(candidate))
+  const version = await anchorVersion(candidate, profile, eventId, reason, { supersedesVersionId: existing.current_version_id, evidenceUrl: input.evidenceUrl })
+  return farmingLogsRepository.applyChange(profile.id, existing, 'CORRECT', { version: version.id })
 }
 
 async function revoke(profile, id, input) {
-  validateId(id, 'Mã nhật ký')
-  const existing = await farmingLogsRepository.findById(id)
-  if (!existing) throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  await requireAccessibleBatch(profile, existing.batch_id)
+  const { log: existing } = await requireAccessibleLog(profile, id, 'LOG_CONFIRM')
   if (existing.lifecycle_status !== 'CONFIRMED') throw createHttpError('Nhật ký không ở trạng thái có thể thu hồi', 409)
   const reason = String(input?.reason ?? '').trim()
   if (reason.length < 3 || reason.length > 1000) throw createHttpError('Lý do thu hồi phải có từ 3 đến 1000 ký tự', 400)
-  const eventId = `${blockchainService.buildEventId('FARMING_LOG_RECORDED', id)}:revoke:v${existing.current_version}`
-  const result = await blockchainService.createRecord({ batchId: existing.batch_id, entityType: 'FARMING_LOG', entityId: id, eventType: 'FARMING_LOG_RECORDED', eventId, payload: { targetEventId: existing.current_version_id, reason }, status: 'PENDING' })
+  const payload = { targetEventId: existing.current_version_id, reason }
+  const eventId = await reserveAnchor(profile, existing, 'REVOKE', payload)
+  const result = await blockchainService.createRecord({ batchId: existing.batch_id, entityType: 'FARMING_LOG', entityId: id, eventType: 'FARMING_LOG_RECORDED', eventId, payload, status: 'PENDING' })
   if (!result.submitted) throw createHttpError('Không thể ghi nhận thu hồi trên Blockchain', 502)
-  await farmingLogsRepository.updateVersion(existing.current_version_id, { status: 'REVOKED', revoked_by: profile.id, revoked_at: new Date().toISOString(), revocation_reason: reason })
-  const log = await farmingLogsRepository.update(id, { lifecycle_status: 'REVOKED' }, existing)
-  await farmingLogsRepository.createAudit(profile.id, id, 'REVOKE', existing, log)
-  return log
+  return farmingLogsRepository.applyChange(profile.id, existing, 'REVOKE', { reason })
 }
 
 async function history(profile, id) {
-  validateId(id, 'Mã nhật ký')
-  const log = await farmingLogsRepository.findById(id)
-  if (!log) throw createHttpError('Không tìm thấy nhật ký nuôi', 404)
-  await requireAccessibleBatch(profile, log.batch_id)
-  return { currentVersion: log.current_version, items: await farmingLogsRepository.findVersions(id) }
+  const { log } = await requireAccessibleLog(profile, id, 'READ')
+  return {
+    currentVersion: log.current_version,
+    items: log.lifecycle_status === 'DRAFT' ? [] : await farmingLogsRepository.findVersions(id, log.current_version),
+  }
 }
 
 async function listByBatch(profile, batchId) {
-  await requireAccessibleBatch(profile, batchId)
+  await requireAccessibleBatch(profile, batchId, 'READ')
   const items = await farmingLogsRepository.findAllByBatch(batchId)
   return { count: items.length, items }
 }
 
 async function verify(profile, batchId) {
-  await requireAccessibleBatch(profile, batchId)
+  await requireAccessibleBatch(profile, batchId, 'READ')
 
   const logs = await farmingLogsRepository.findAllByBatch(batchId)
   const records = await blockchainService.getRecordsByBatch(batchId)
@@ -230,8 +210,7 @@ async function verify(profile, batchId) {
   return { batchId, checkedAt: new Date().toISOString(), summary, details }
 }
 
-// Serialize mutations within this process; CAS above also detects stale writes.
-// This is not a cross-process transaction and cannot atomically commit DB + chain.
+// The database reserves shared proof state; also avoid duplicate work within this process.
 const mutatingLogs = new Set()
 async function mutate(id, operation) {
   validateId(id, 'Mã nhật ký')

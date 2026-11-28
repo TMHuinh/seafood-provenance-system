@@ -1,6 +1,6 @@
 const blockchainService = require('../blockchain/blockchain.service')
 const batchesRepository = require('./batches.repository')
-const farmsRepository = require('../farms/farms.repository')
+const { requirePondAction } = require('../ponds/pond-access')
 const pondsRepository = require('../ponds/ponds.repository')
 const { normalizeBatchInput } = require('./batches.validation')
 const { generateBusinessCode } = require('../../shared/utils/business-code')
@@ -8,10 +8,9 @@ const { generateBusinessCode } = require('../../shared/utils/business-code')
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function httpError(message, status) { const error = new Error(message); error.status = status; return error }
 function validId(id, label) { if (!UUID.test(String(id))) throw httpError(`${label} không hợp lệ`, 400) }
-async function requireOwnedPond(profile, farmId, pondId) {
+async function requireOwnedPond(profile, farmId, pondId, action) {
   validId(farmId, 'Mã cơ sở'); validId(pondId, 'Mã ao')
-  const farm = await farmsRepository.findByIdAndOwner(farmId, profile.id)
-  if (!farm) throw httpError('Không tìm thấy cơ sở nuôi', 404)
+  await requirePondAction(profile, pondId, action)
   const pond = await pondsRepository.findByIdAndFarm(pondId, farmId)
   if (!pond) throw httpError('Không tìm thấy ao nuôi', 404)
   return pond
@@ -46,19 +45,14 @@ async function list(profile, input) {
   } : null }))
   return { count: result.count, items, summary, page: options.page, pageSize: options.pageSize, totalPages: Math.ceil(result.count / options.pageSize) }
 }
-function canReadBatch(profile, batch) {
-  const farm = batch.pond?.farm
-  return profile.role === 'ADMIN' || farm?.owner_id === profile.id ||
-    Boolean(profile.organization_id && farm?.organization_id === profile.organization_id)
-}
-
 async function detail(profile, id) {
   if (!UUID.test(String(id))) throw createNotFound()
   const batch = await batchesRepository.findById(id)
-  if (!batch || !canReadBatch(profile, batch)) {
+  if (!batch) {
     throw createNotFound()
   }
 
+  await requirePondAction(profile, batch.pond_id, 'READ', { notFound: 'Không tìm thấy lô hàng' })
   const [blockchain, farmingLogs, harvests, transports, distributions] = await Promise.all([
     blockchainService.getRecordsByBatch(id, '*'),
     batchesRepository.countFarmingLogs(id),
@@ -68,7 +62,7 @@ async function detail(profile, id) {
   ])
 
   return {
-    batch,
+    batch: projectBatchDetail(batch, profile.id),
     summary: { farmingLogs },
     blockchain,
     harvests,
@@ -77,9 +71,29 @@ async function detail(profile, id) {
   }
 }
 
-async function listByPond(profile, farmId, pondId) { await requireOwnedPond(profile, farmId, pondId); const items = await batchesRepository.findAllByPond(pondId); return { count: items.length, items } }
+function projectBatchDetail(batch, actorId) {
+  const pond = batch.pond
+  const farm = pond?.farm
+  if (!farm || farm.owner_id === actorId) return batch
+
+  const { organization } = farm
+  return {
+    ...batch,
+    pond: {
+      id: pond.id, farm_id: pond.farm_id, pond_code: pond.pond_code, pond_name: pond.pond_name,
+      area: pond.area, depth: pond.depth, water_type: pond.water_type, status: pond.status,
+      farm: {
+        id: farm.id,
+        farm_name: farm.farm_name,
+        organization: organization ? { id: organization.id, name: organization.name, type: organization.type } : null,
+      },
+    },
+  }
+}
+
+async function listByPond(profile, farmId, pondId) { await requireOwnedPond(profile, farmId, pondId, 'READ'); const items = await batchesRepository.findAllByPond(pondId); return { count: items.length, items } }
 async function createForPond(profile, farmId, pondId, input) {
-  await requireOwnedPond(profile, farmId, pondId)
+  await requireOwnedPond(profile, farmId, pondId, 'BATCH_CREATE')
   let batch
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -124,7 +138,7 @@ async function createForPond(profile, farmId, pondId, input) {
   }
 }
 async function updateForPond(profile, farmId, pondId, id, input) {
-  await requireOwnedPond(profile, farmId, pondId)
+  await requireOwnedPond(profile, farmId, pondId, 'BATCH_EDIT')
   validId(id, 'Mã vụ nuôi')
   const existing = await batchesRepository.findById(id)
   if (!existing || existing.pond_id !== pondId) throw httpError('Không tìm thấy vụ nuôi', 404)
@@ -164,7 +178,7 @@ async function updateForPond(profile, farmId, pondId, id, input) {
 }
 
 async function historyForPond(profile, farmId, pondId, id) {
-  await requireOwnedPond(profile, farmId, pondId)
+  await requireOwnedPond(profile, farmId, pondId, 'READ')
   validId(id, 'Mã vụ nuôi')
   const batch = await batchesRepository.findById(id)
   if (!batch || batch.pond_id !== pondId) throw httpError('Không tìm thấy vụ nuôi', 404)
@@ -176,6 +190,6 @@ async function historyForPond(profile, farmId, pondId, id) {
   })) }
 }
 
-async function removeForPond(profile, farmId, pondId, id) { await requireOwnedPond(profile, farmId, pondId); validId(id, 'Mã vụ nuôi'); try { const item = await batchesRepository.removeByPond(id, pondId); if (!item) throw httpError('Không tìm thấy vụ nuôi', 404) } catch (e) { mapWriteError(e) } }
+async function removeForPond(profile, farmId, pondId, id) { await requireOwnedPond(profile, farmId, pondId, 'MANAGE'); validId(id, 'Mã vụ nuôi'); try { const item = await batchesRepository.removeByPond(id, pondId); if (!item) throw httpError('Không tìm thấy vụ nuôi', 404) } catch (e) { mapWriteError(e) } }
 
 module.exports = { requireOwnedPond, historyForPond, createForPond, detail, list, listByPond, removeForPond, updateForPond }

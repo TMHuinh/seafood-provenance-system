@@ -39,6 +39,8 @@ const tabs = [
 const logStatuses = { DRAFT: 'Bản nháp', CONFIRMED: 'Đã chứng thực', REVOKED: 'Đã thu hồi' }
 const logColors = { DRAFT: 'secondary', CONFIRMED: 'success', REVOKED: 'danger' }
 const params = computed(() => ({ farmId: props.farmId, pondId: props.pondId, batchId: props.batch.id }))
+const canCreateLog = computed(() => props.pond?.permissions?.includes('LOG_CREATE'))
+const canEditBatch = computed(() => props.pond?.permissions?.includes('BATCH_EDIT'))
 const date = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
 const timestamp = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' })
 const day = (value: string | null | undefined) => value ? date.format(new Date(value)) : '—'
@@ -91,9 +93,9 @@ watch([section, retry], async ([current], _, onCleanup) => {
     </header>
 
     <div class="drawer-actions">
-      <va-button :to="{ name: 'farming-logs', params, query: { create: 'log' } }" icon="edit_document">Ghi nhật ký</va-button>
+      <va-button v-if="canCreateLog" :to="{ name: 'farming-logs', params, query: { create: 'log' } }" icon="edit_document">Ghi nhật ký</va-button>
       <va-button preset="secondary" icon="agriculture" @click="emit('harvest')">Thu hoạch &amp; Lô</va-button>
-      <va-button preset="plain" icon="edit" @click="emit('edit')">Đính chính</va-button>
+      <va-button v-if="canEditBatch" preset="plain" icon="edit" @click="emit('edit')">Đính chính</va-button>
     </div>
 
     <div class="drawer-tabs" role="group" aria-label="Nội dung chi tiết vụ">
@@ -142,7 +144,7 @@ watch([section, retry], async ([current], _, onCleanup) => {
         <section v-if="section === 'logs'" class="detail-card">
           <div class="section-heading">
             <h3>Nhật ký của vụ</h3>
-            <va-button :to="{ name: 'farming-logs', params, query: { create: 'log' } }" icon="add" size="small">Ghi nhật ký mới</va-button>
+            <va-button v-if="canCreateLog" :to="{ name: 'farming-logs', params, query: { create: 'log' } }" icon="add" size="small">Ghi nhật ký mới</va-button>
           </div>
           <EmptyState v-if="!logs.length" heading="h3" title="Vụ chưa có nhật ký" />
           <ul v-else class="record-list">
@@ -152,7 +154,9 @@ watch([section, retry], async ([current], _, onCleanup) => {
                   <span><strong>{{ FARMING_LOG_TYPE_LABELS[log.log_type] }}</strong><small>{{ timestamp.format(new Date(log.log_date)) }}</small></span>
                   <va-badge :color="logColors[log.lifecycle_status]" :text="logStatuses[log.lifecycle_status]" />
                 </summary>
-                <dl v-if="detailsRows(log).length" class="facts">
+                <dl class="facts">
+                  <div><dt>Người ghi</dt><dd>{{ log.author_name || '—' }}</dd></div>
+                  <div v-if="log.confirmed_by"><dt>Người xác nhận</dt><dd>{{ log.confirmer_name || '—' }}</dd></div>
                   <div v-for="entry in detailsRows(log)" :key="entry.label"><dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd></div>
                 </dl>
                 <a v-if="log.image_url" :href="log.image_url" target="_blank" rel="noopener noreferrer">Xem ảnh nhật ký</a>

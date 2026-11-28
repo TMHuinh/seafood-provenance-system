@@ -10,10 +10,12 @@ const dataModule = source => `data:text/javascript;base64,${Buffer.from(source).
 const vueUrl = import.meta.resolve('vue')
 const overlaySource = await readFile(new URL('../src/components/overlay-dismiss.ts', import.meta.url), 'utf8')
 const overlay = dataModule(ts.transpileModule(overlaySource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText.replace("from 'vue'", `from ${JSON.stringify(vueUrl)}`))
+const types = dataModule(ts.transpileModule(await readFile(new URL('../src/types/index.ts', import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText)
 const stubs = {
+  '../../types': types,
   '../../components/overlay-dismiss': overlay,
   'vue-router': dataModule('export const useRouter = () => ({resolve: ({params}) => ({href: `/trace/${params.traceCode}`})})'),
-  '../api/client': dataModule('export const api = {get: (...a) => globalThis.qrTestApi.get(...a), post: (...a) => globalThis.qrTestApi.post(...a)}'),
+  '../api/client': dataModule('export class ApiError extends Error {} export const api = {get: (...a) => globalThis.qrTestApi.get(...a), post: (...a) => globalThis.qrTestApi.post(...a)}'),
   'vuestic-ui': dataModule(`import {h,defineComponent} from ${JSON.stringify(vueUrl)};
     const component = tag => defineComponent({inheritAttrs:false,emits:['update:modelValue'],setup(_, {attrs,slots,emit}) {
       return () => h(tag, {...attrs,onInput:e=>emit('update:modelValue',e.target.value)}, slots.default?.());
@@ -21,13 +23,19 @@ const stubs = {
     export const VaButton=component('button'), VaAlert=component('aside'), VaTextarea=component('textarea'),
       VaBadge=component('span'), VaIcon=component('i'), VaCard=component('article'), VaCardContent=component('div'), VaInnerLoading=component('section');`),
 }
-async function loadSfc(path, extraStubs = {}) {
+async function compileSfc(path, extraStubs = {}) {
   const source = await readFile(new URL(path, import.meta.url), 'utf8')
-  const compiled = compileScript(parse(source).descriptor, { id: path, inlineTemplate: true })
+  const compiled = compileScript(parse(source).descriptor, { id: String(path), inlineTemplate: true })
   const js = ts.transpileModule(compiled.content, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
   const imports = { ...stubs, ...extraStubs }
+  for (const [, specifier] of js.matchAll(/from ['"](\.\.?\/[^'"]+\.vue)['"]/g)) {
+    if (!imports[specifier]) imports[specifier] = await compileSfc(new URL(specifier, new URL(path, import.meta.url)), extraStubs)
+  }
   const resolved = js.replace(/(from\s+)(['"])([^'"]+)\2/g, (_, prefix, quote, specifier) => `${prefix}${quote}${imports[specifier] ?? import.meta.resolve(specifier)}${quote}`)
-  return (await import(dataModule(resolved))).default
+  return dataModule(resolved)
+}
+async function loadSfc(path, extraStubs = {}) {
+  return (await import(await compileSfc(path, extraStubs))).default
 }
 const Panel = await loadSfc('../src/components/LotQrPanel.vue')
 const node = (type, text = '') => ({ type, text, props: {}, children: [], parent: null, get options() { return this.children }, addEventListener() {}, open: false, showModal() { this.open = true }, close() { this.open = false } })
@@ -138,7 +146,6 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
   const Receipts = await loadSfc('../src/pages/transports/DistributorReceipts.vue', {
     '../../stores/auth.store': dataModule('export const useAuthStore = () => ({ organizationName: "Phân phối A" })'),
     'vue-router': dataModule('export const useRoute = () => ({ get query() { return globalThis.qrTestReceiptQuery.value } }); export const useRouter = () => ({ replace: async ({query}) => { globalThis.qrTestReceiptQuery.value = query } })'),
-    '../../types': dataModule('export const SPECIES_LABELS = {}'),
     '../../components/PageHeader.vue': dataModule('export default globalThis.qrTestHeader'),
     '../../components/EmptyState.vue': dataModule('export default globalThis.qrTestEmpty'),
     '../../components/LoadingState.vue': dataModule('export default globalThis.qrTestLoading'),
@@ -164,7 +171,10 @@ test('receipt page enables QR issuance only after successful receipt confirmatio
   const root = node('root'), app = renderer.createApp(Receipts); app.mount(root)
   try {
     await settle(); assert.equal(button(root, 'Phát hành'), undefined)
-    await button(root, 'Xác nhận nhận hàng').props.onClick(); await settle()
+    const fullReceipt = nodes(root).find(n => n.type === 'input' && n.props.value === 'FULL')
+    fullReceipt.props['onUpdate:modelValue']('FULL'); await nextTick()
+    const receiptForm = nodes(root).find(n => n.type === 'form' && n.props.class === 'receipt-form')
+    receiptForm.props.onSubmit({ preventDefault() {} }); await settle()
     assert.ok(button(root, 'Phát hành'))
     assert.ok(paths.includes('/transports/trip-a/qr'))
   } finally { app.unmount() }

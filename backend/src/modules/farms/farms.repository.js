@@ -14,35 +14,25 @@ async function create(ownerId, organizationId, farm) {
   return data
 }
 
-async function findAllByOwner(ownerId) {
-  const { data, error } = await supabase
-    .from('farms')
-    .select(FARM_FIELDS)
-    .eq('owner_id', ownerId)
-    .order('created_at', { ascending: false })
-
-  if (error) throw error
-  return data ?? []
-}
-
-async function findByIdAndOwner(id, ownerId) {
-  const { data, error } = await supabase
-    .from('farms')
-    .select(FARM_FIELDS)
-    .eq('id', id)
-    .eq('owner_id', ownerId)
-    .maybeSingle()
-
+async function visible(profile, id) {
+  let query = supabase.rpc('production_farms', { p_actor: profile.id }, { get: true })
+  query = id ? query.eq('id', id).maybeSingle() : query.order('created_at', { ascending: false })
+  const { data, error } = await query
   if (error) throw error
   return data
 }
 
-async function update(id, ownerId, changes) {
+async function canCreateIn(profile, organizationId) {
+  const { data, error } = await supabase.rpc('farm_org_can_create', { p_actor: profile.id, p_org: organizationId })
+  if (error) throw error
+  return data === true
+}
+
+async function update(id, changes) {
   const { data, error } = await supabase
     .from('farms')
     .update(changes)
     .eq('id', id)
-    .eq('owner_id', ownerId)
     .select(FARM_FIELDS)
     .maybeSingle()
 
@@ -50,12 +40,11 @@ async function update(id, ownerId, changes) {
   return data
 }
 
-async function remove(id, ownerId) {
+async function remove(id) {
   const { data, error } = await supabase
     .from('farms')
     .delete()
     .eq('id', id)
-    .eq('owner_id', ownerId)
     .select('id')
     .maybeSingle()
 
@@ -63,4 +52,4 @@ async function remove(id, ownerId) {
   return data
 }
 
-module.exports = { create, findAllByOwner, findByIdAndOwner, remove, update }
+module.exports = { canCreateIn, create, visible, remove, update }

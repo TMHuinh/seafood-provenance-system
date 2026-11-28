@@ -7,6 +7,7 @@ import type { Farm, FarmInput, FarmListResponse, FarmResponse } from '../types'
 interface FarmsState {
   requestVersion: number
   items: Farm[]
+  canCreate: boolean
   loading: boolean
   saving: boolean
   error: string
@@ -17,18 +18,22 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export const useFarmsStore = defineStore('farms', {
-  state: (): FarmsState => ({ requestVersion: 0, items: [], loading: false, saving: false, error: '' }),
+  state: (): FarmsState => ({ requestVersion: 0, items: [], canCreate: false, loading: false, saving: false, error: '' }),
 
   actions: {
     async load(): Promise<void> {
       this.requestVersion++
       const current = captureStoreRequest(this)
       this.items = []; this.saving = false
+      this.canCreate = false
       this.loading = true
       this.error = ''
       try {
         const result = await api.get<FarmListResponse>('/farms')
-        if (current()) this.items = result.items ?? []
+        if (current()) {
+          this.items = result.items ?? []
+          this.canCreate = result.can_create === true
+        }
       } catch (error) {
         if (current()) this.error = errorMessage(error, 'Không thể tải danh sách cơ sở nuôi')
       } finally {

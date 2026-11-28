@@ -63,6 +63,7 @@ const navigation = computed(() => [
   { name: 'home', label: 'Tổng quan', icon: 'dashboard', group: 'Không gian làm việc', active: route.name === 'home' },
   ...(authStore.user?.role === 'FARMER'
     ? [
+        { name: 'organizations', label: 'Tổ chức của tôi', icon: 'groups', active: String(route.name).startsWith('org') },
         { name: 'farms', label: 'Cơ sở nuôi', icon: 'domain', group: 'Quản lý vùng nuôi', active: route.name === 'farms' },
         { name: 'farm-ponds', label: 'Ao nuôi', icon: 'water', active: ['farm-ponds', 'ponds'].includes(String(route.name)) },
         { name: 'farm-batches', label: 'Vụ nuôi', icon: 'calendar_month', active: route.name === 'farm-batches' || (route.name === 'pond-batches' && !route.query.harvest) },
@@ -112,6 +113,14 @@ const navigation = computed(() => [
 ])
 const pageTitles: Record<string, string> = {
   home: 'Tổng quan',
+  organizations: 'Tổ chức của tôi',
+  'org-household-setup': 'Hồ sơ hộ nuôi',
+  'org-invitations': 'Lời mời tổ chức',
+  'org-invitation': 'Chi tiết lời mời',
+  'org-households': 'Quan hệ thành viên',
+  'org-household-detail': 'Dữ liệu hộ thành viên',
+  'org-staff': 'Nhân sự',
+  'org-pond-operations': 'Phân công và bàn giao ao',
   'farm-ponds': 'Ao nuôi',
   'farm-batches': 'Vụ nuôi',
   'farm-logs': 'Nhật ký nuôi',

@@ -260,6 +260,7 @@ module.exports = {
   hashData,
   hashLegacyData,
   buildEventId,
+  isContractConfigured,
   SUPPORTED_EVENT_TYPES,
   SUPPORTED_STATUSES,
 }

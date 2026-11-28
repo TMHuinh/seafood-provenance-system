@@ -18,6 +18,7 @@ const farmId = ref('')
 const pondId = ref('')
 const batchId = ref('')
 const needsPond = computed(() => props.section !== 'ponds')
+const canCreateLog = computed(() => ponds.scope === farmId.value && ponds.items.find(item => item.id === pondId.value)?.permissions?.includes('LOG_CREATE'))
 const needsBatch = computed(() => props.section === 'logs' || props.section === 'harvest')
 const titles = { ponds: 'Ao nuôi', batches: 'Vụ nuôi', logs: 'Nhật ký nuôi', harvest: 'Thu hoạch & Lô hàng' }
 const error = computed(() => farms.error || (needsPond.value && farmId.value && ponds.error)
@@ -49,7 +50,7 @@ function retry() {
 }
 
 function open(createLog = false) {
-  if (!ready.value) return
+  if (!ready.value || (createLog && !canCreateLog.value)) return
   if (props.section === 'ponds') {
     void router.push({ name: 'ponds', params: { farmId: farmId.value } })
     return
@@ -102,7 +103,7 @@ onMounted(() => farms.load())
         <va-button type="submit" icon="arrow_forward" :disabled="!ready" :loading="loading">
           Mở {{ titles[section].toLocaleLowerCase('vi') }}
         </va-button>
-        <va-button v-if="section === 'logs'" type="button" preset="secondary" icon="add" :disabled="!ready" @click="open(true)">
+        <va-button v-if="section === 'logs' && canCreateLog" type="button" preset="secondary" icon="add" :disabled="!ready" @click="open(true)">
           Ghi nhật ký mới
         </va-button>
         </div>

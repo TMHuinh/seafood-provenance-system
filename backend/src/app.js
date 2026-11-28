@@ -7,6 +7,9 @@ const {
   notFoundHandler,
 } = require('./shared/middleware/error-handler')
 const authRoutes = require('./modules/auth/auth.routes')
+const { requireAuth } = require('./modules/auth/auth.middleware')
+const { createOrganizationRouter } = require('./modules/organizations/organizations.routes')
+const supabase = require('./config/supabase')
 const batchesRoutes = require('./modules/batches/batches.routes')
 const farmsRoutes = require('./modules/farms/farms.routes')
 const healthRoutes = require('./modules/health/health.routes')
@@ -26,6 +29,7 @@ app.use(express.json({ limit: '1mb' }))
 
 app.use('/api/health', healthRoutes)
 app.use('/api/auth', authRoutes)
+app.use('/api/organizations', createOrganizationRouter(supabase, requireAuth))
 app.use('/api/batches', batchesRoutes)
 app.use('/api/farms', farmsRoutes)
 app.use('/api/farming-logs', farmingLogsRoutes)

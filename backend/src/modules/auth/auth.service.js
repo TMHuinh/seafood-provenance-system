@@ -56,16 +56,6 @@ async function register(input = {}) {
 
   validateRegister({ fullName, email, password, role, organizationType })
 
-  let organizationId = null
-  if (organizationName) {
-    const organization = await authRepository.createOrganization({
-      name: organizationName,
-      type: organizationType,
-      address: organizationAddress,
-    })
-    organizationId = organization.id
-  }
-
   const authClient = createAuthClient()
   const { data: authResult, error } = await authClient.auth.signUp({
     email: String(email).toLowerCase(),
@@ -81,6 +71,9 @@ async function register(input = {}) {
   if (error) {
     throw mapAuthError(error)
   }
+  if (authResult.user && authResult.user.identities?.length === 0) {
+    throw createHttpError('Email này đã được đăng ký', 409)
+  }
   if (!authResult.user) {
     throw createHttpError('Không thể tạo tài khoản. Vui lòng thử lại', 500)
   }
@@ -90,7 +83,9 @@ async function register(input = {}) {
     email,
     phone,
     role,
-    organizationId,
+    organizationName,
+    organizationType,
+    organizationAddress,
     walletAddress,
   })
 

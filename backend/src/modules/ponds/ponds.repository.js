@@ -8,10 +8,12 @@ async function create(farmId, pond) {
   return data
 }
 
-async function findAll(farmId) {
-  const { data, error } = await supabase.from('ponds').select(FIELDS).eq('farm_id', farmId).order('created_at', { ascending: false })
+async function visible(profile, farmId, id) {
+  let query = supabase.rpc('production_ponds', { p_actor: profile.id }, { get: true }).eq('farm_id', farmId)
+  query = id ? query.eq('id', id).maybeSingle() : query.order('created_at', { ascending: false })
+  const { data, error } = await query
   if (error) throw error
-  return data ?? []
+  return data
 }
 
 async function findByIdAndFarm(id, farmId) {
@@ -32,4 +34,4 @@ async function remove(id, farmId) {
   return data
 }
 
-module.exports = { create, findAll, findByIdAndFarm, remove, update }
+module.exports = { create, visible, findByIdAndFarm, remove, update }

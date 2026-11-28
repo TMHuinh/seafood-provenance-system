@@ -43,21 +43,22 @@ test('a missing or foreign lot cannot reach dossier or history; scoped authoriza
   await assert.rejects(service.report(farmer, 'bad-id'), { status: 404 })
   assert.equal(reads, 1)
 })
-test('real PostgREST URL includes owner scope, inner joins, inclusive VN day and escaped search literal', async () => {
+test('real PostgREST URL includes current actor scope, inner joins, inclusive VN day and escaped search literal', async () => {
   const urls = []
   const db = database(async url => { urls.push(new URL(url)); return new Response('[]', { status: 200, headers: { 'content-type': 'application/json', 'content-range': '*/0' } }) })
   const repo = createLotsRepository(db)
   const input = filters({ search: 'a%,status.eq.COMPLETED', from: '2026-11-01', to: '2026-11-01', farmId: id(4) }, { paginated: true })
   await repo.page(farmer, input)
   const query = urls[0].searchParams
-  assert.equal(query.get('batch.pond.farm.owner_id'), `eq.${farmer.id}`)
+  assert.equal(query.get('p_actor'), farmer.id)
   assert.equal(query.get('batch.pond.farm_id'), `eq.${id(4)}`)
   assert.match(query.get('select'), /farms!inner/)
   assert.match(query.get('select'), /blockchain_event_id/)
   assert.deepEqual(query.getAll('harvest.harvest_date'), ['gte.2026-11-01T00:00:00+07:00', 'lt.2026-11-01T17:00:00.000Z'])
   assert.ok(query.get('or').includes(`lot_code.imatch.${searchPattern(input.search)}`))
   await repo.page({ id: id(7), role: 'ADMIN' }, filters({}, { paginated: true }))
-  assert.equal(urls[1].searchParams.has('batch.pond.farm.owner_id'), false)
+  assert.equal(urls[1].searchParams.get('p_actor'), id(7))
+  assert.ok(urls.every(url => url.pathname.endsWith('/rpc/production_lots')))
 })
 
 test('literal search survives PostgREST decoding without regex or wildcard injection', () => {
@@ -76,7 +77,8 @@ test('statistics read all database pages rather than stopping at the server row 
     const query = new URL(url).searchParams
     const offset = Number(query.get('offset') ?? 0); const limit = Number(query.get('limit'))
     offsets.push(offset)
-    assert.equal(query.get('batch.pond.farm.owner_id'), `eq.${farmer.id}`)
+    assert.equal(query.get('p_actor'), farmer.id)
+    assert.ok(new URL(url).pathname.endsWith('/rpc/production_harvests'))
     return new Response(JSON.stringify(fixture.slice(offset, offset + limit)), { headers: { 'content-type': 'application/json' } })
   }))
   const result = await createLotsService(repo, {}).production(farmer, {})

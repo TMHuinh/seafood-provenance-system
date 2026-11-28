@@ -27,6 +27,10 @@ const { items, loading, saving, error } = storeToRefs(store)
 const farmId = computed(() => String(route.params.farmId)); const pondId = computed(() => String(route.params.pondId))
 const pond = computed(() => pondsStore.scope === farmId.value ? pondsStore.items.find((item) => item.id === pondId.value) : undefined)
 const pondName = computed(() => pond.value?.pond_name ?? '')
+const permissions = computed(() => pond.value?.permissions ?? [])
+const canCreateBatch = computed(() => permissions.value.includes('BATCH_CREATE'))
+const canEditBatch = computed(() => permissions.value.includes('BATCH_EDIT'))
+const canRemoveBatch = computed(() => permissions.value.includes('MANAGE'))
 const showForm = ref(false); const editingId = ref<string | null>(null); const formError = ref(''); const success = ref(''); const warning = ref('')
 const correctionReason = ref(''); const expectedVersion = ref(1)
 const editingBatch = computed(() => items.value.find((item) => item.id === editingId.value) ?? null)
@@ -101,13 +105,13 @@ const dateOnly = (value: string | null | undefined) => value
   ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value)) : ''
 
 function reset() { correctionReason.value = ''; expectedVersion.value = 1; editingId.value = null; Object.assign(form, { species: 'SHRIMP', seedSource: '', seedQuantity: '', stockingDate: '', expectedHarvestDate: '', actualHarvestDate: '', yieldQuantity: '', status: 'GROWING', note: '' }); formError.value = '' }
-function openCreate() { if (saving.value || loading.value) return; reset(); showForm.value = true }
-function openEdit(item: BatchItem) { if (saving.value || loading.value) return; correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
+function openCreate() { if (!canCreateBatch.value || saving.value || loading.value) return; reset(); showForm.value = true }
+function openEdit(item: BatchItem) { if (!canEditBatch.value || saving.value || loading.value) return; correctionReason.value = ''; formError.value = ''; expectedVersion.value = item.current_version; editingId.value = item.id; Object.assign(form, { species: item.species, seedSource: item.seed_source ?? '', seedQuantity: item.seed_quantity, stockingDate: dateOnly(item.stocking_date), expectedHarvestDate: dateOnly(item.expected_harvest_date), actualHarvestDate: dateOnly(item.actual_harvest_date), yieldQuantity: item.yield_quantity ?? '', status: item.status, note: item.note ?? '' }); showForm.value = true }
 const formDismiss = draftDismiss(() => [form, correctionReason.value], () => saving.value, showForm).dismiss
 function close() { showForm.value = false; reset() }
 
 async function submit() {
-  if (saving.value || loading.value) return
+  if (!(editingId.value ? canEditBatch.value : canCreateBatch.value) || saving.value || loading.value) return
   const version = contextVersion
   formError.value = ''; success.value = ''; warning.value = ''
   if (!form.stockingDate || numeric(form.seedQuantity) === null) { formError.value = 'Vui lòng nhập số lượng giống và ngày thả giống.'; return }
@@ -165,7 +169,7 @@ function toggleHistory(value: boolean) {
 }
 
 async function remove(item: BatchItem) {
-  if (saving.value || loading.value) return
+  if (!canRemoveBatch.value || saving.value || loading.value) return
   const version = contextVersion
   if (!confirm(`Bạn có chắc chắn muốn xóa vụ “${item.batch_code}”? Mọi dữ liệu nhật ký liên quan có thể bị mất.`)) return;
   try {
@@ -176,12 +180,10 @@ async function remove(item: BatchItem) {
 }
 
 async function loadContext() {
-  const version = ++contextVersion; ++historyVersion
+  ++contextVersion; ++historyVersion
   const farm = farmId.value; const pond = pondId.value
   detailId.value = ''; showForm.value = false; reset(); historyTitle.value = ''; historyItems.value = []; historyLoading.value = false; harvestBatchId.value = null; success.value = ''; warning.value = ''; query.value = ''; filterStatus.value = ''; filterSpecies.value = ''
-  await store.load(farm, pond)
-  if (version !== contextVersion) return
-  await pondsStore.load(farm)
+  await Promise.all([store.load(farm, pond), pondsStore.load(farm)])
 }
 watch(() => `${farmId.value}/${pondId.value}`, loadContext, { immediate: true })
 
@@ -193,7 +195,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
 
     <PageHeader title="Vụ nuôi" :context="pondName" :description="farmer ? 'Quản lý các vụ nuôi tại ao, theo dõi trạng thái, nhật ký và thu hoạch.' : 'Theo dõi vụ nuôi, nhật ký chăm sóc và các lô thu hoạch.'">
       <template #actions>
-        <va-button icon="add" :disabled="loading || saving" @click="openCreate">{{ farmer ? 'Thêm vụ nuôi' : 'Tạo vụ nuôi mới' }}</va-button>
+        <va-button v-if="canCreateBatch" icon="add" :disabled="loading || saving" @click="openCreate">{{ farmer ? 'Thêm vụ nuôi' : 'Tạo vụ nuôi mới' }}</va-button>
       </template>
     </PageHeader>
 
@@ -230,8 +232,8 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
     <LoadingState v-else-if="loading" />
     <template v-else>
       <!-- Empty State -->
-      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có vụ nuôi nào" description="Tạo vụ nuôi đầu tiên để theo dõi quá trình nuôi trong ao này." icon="set_meal">
-        <va-button icon="add" @click="openCreate">Tạo vụ nuôi mới</va-button>
+      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có vụ nuôi nào" :description="canCreateBatch ? 'Tạo vụ nuôi đầu tiên để theo dõi quá trình nuôi trong ao này.' : undefined" icon="set_meal">
+        <va-button v-if="canCreateBatch" icon="add" @click="openCreate">Tạo vụ nuôi mới</va-button>
       </EmptyState>
       <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có vụ nuôi phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
@@ -263,9 +265,9 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
                 <va-icon name="more_horiz" aria-hidden="true" />
               </summary>
               <div class="menu-actions">
-                <button type="button" :disabled="saving" @click="chooseAction($event, () => openEdit(item))">Đính chính</button>
+                <button v-if="canEditBatch" type="button" :disabled="saving" @click="chooseAction($event, () => openEdit(item))">Đính chính</button>
                 <button type="button" @click="chooseAction($event, () => openDetail(item, 'history'))">Lịch sử</button>
-                <button type="button" class="menu-danger" :disabled="saving" @click="chooseAction($event, () => remove(item))">Xóa vụ nuôi</button>
+                <button v-if="canRemoveBatch" type="button" class="menu-danger" :disabled="saving" @click="chooseAction($event, () => remove(item))">Xóa vụ nuôi</button>
               </div>
             </details>
           </div>
@@ -316,9 +318,9 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
             </va-button>
             <va-button preset="secondary" icon="agriculture" aria-label="Thu hoạch và lô hàng" @click="harvestBatchId = item.id">Thu hoạch và lô</va-button>
             <div class="batch-secondary-actions">
-              <va-button preset="plain" size="small" icon="edit" color="secondary" @click="openEdit(item)">Đính chính</va-button>
+              <va-button v-if="canEditBatch" preset="plain" size="small" icon="edit" color="secondary" @click="openEdit(item)">Đính chính</va-button>
               <va-button preset="plain" size="small" icon="history" color="secondary" @click="openHistory(item)">Lịch sử</va-button>
-              <va-button preset="plain" size="small" icon="delete" color="danger" aria-label="Xóa vụ nuôi" @click="remove(item)" />
+              <va-button v-if="canRemoveBatch" preset="plain" size="small" icon="delete" color="danger" aria-label="Xóa vụ nuôi" @click="remove(item)" />
             </div>
           </div>
         </va-card>
@@ -333,7 +335,7 @@ onUnmounted(() => { ++contextVersion; ++historyVersion })
       @harvest="harvestBatchId = detailBatch.id; detailId = ''" />
 
     <HarvestModal v-if="harvestBatch" :key="harvestBatch.id" :batch="harvestBatch" :farm-id="farmId" :pond-id="pondId"
-      @close="closeHarvest" @updated="updateHarvestBatch" />
+      :permissions="permissions" @close="closeHarvest" @updated="updateHarvestBatch" />
 
     <!-- Modal Form -->
     <va-modal title="batch-form-title" :model-value="showForm" @update:model-value="(open: boolean) => { if (!open) close() }" :mobile-fullscreen="false" :before-close="formDismiss" close-button aria-close-label="Đóng biểu mẫu" :no-dismiss="saving" hide-default-actions overlay-opacity="0.5">

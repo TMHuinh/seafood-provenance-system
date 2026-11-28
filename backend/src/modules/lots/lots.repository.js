@@ -9,7 +9,6 @@ function createLotsRepository(db) {
     return response
   }
   function scope(query, profile, options = {}) {
-    if (profile.role !== 'ADMIN') query = query.eq('batch.pond.farm.owner_id', profile.id)
     if (options.farmId) query = query.eq('batch.pond.farm_id', options.farmId)
     if (options.pondId) query = query.eq('batch.pond_id', options.pondId)
     return query
@@ -27,7 +26,7 @@ function createLotsRepository(db) {
     return rows
   }
   function lotQuery(profile, options = {}) {
-    let query = scope(db.from('harvest_lots').select(`id,lot_code,batch_id,quantity,status,created_at,provenance,blockchain_event_id,${PARENTS},harvest:harvests!inner(harvest_date),qr:lot_trace_codes(trace_code,status)`, { count: 'exact' }), profile, options)
+    let query = scope(db.rpc('production_lots', { p_actor: profile.id }, { get: true, count: 'exact' }).select(`id,lot_code,batch_id,quantity,status,created_at,provenance,blockchain_event_id,${PARENTS},harvest:harvests!inner(harvest_date),qr:lot_trace_codes(trace_code,status)`), profile, options)
       .order('status', { referencedTable: 'qr' })
       .order('created_at', { referencedTable: 'qr', ascending: false })
       .order('trace_code', { referencedTable: 'qr', ascending: false })
@@ -55,7 +54,7 @@ function createLotsRepository(db) {
       const bounds = dateBounds(options)
       const cutoff = new Date().toISOString()
       return all(() => {
-        let query = scope(db.from('harvests').select(`id,quantity,harvest_date,${PARENTS},lots:harvest_lots(id,provenance)`).lte('created_at', cutoff), profile, options)
+        let query = scope(db.rpc('production_harvests', { p_actor: profile.id }, { get: true }).select(`id,quantity,harvest_date,${PARENTS},lots:harvest_lots(id,provenance)`).lte('created_at', cutoff), profile, options)
         if (bounds.from) query = query.gte('harvest_date', bounds.from)
         if (bounds.until) query = query.lt('harvest_date', bounds.until)
         // Species is taken from the harvest snapshot in the service, including legacy harvests.
@@ -63,17 +62,11 @@ function createLotsRepository(db) {
       })
     },
     async options(profile) {
-      const farms = await all(() => {
-        let query = db.from('farms').select('id,farm_name').order('id')
-        if (profile.role !== 'ADMIN') query = query.eq('owner_id', profile.id)
-        return query
-      })
-      const ponds = await all(() => {
-        let query = db.from('ponds').select('id,farm_id,pond_name,pond_code,farm:farms!inner(owner_id)').order('id')
-        if (profile.role !== 'ADMIN') query = query.eq('farm.owner_id', profile.id)
-        return query
-      })
-      return { farms, ponds: ponds.map(({ farm, ...pond }) => pond) }
+      const farms = await all(() => db.rpc('production_farms', { p_actor: profile.id }, { get: true })
+        .select('id,farm_name').order('id'))
+      const ponds = await all(() => db.rpc('production_ponds', { p_actor: profile.id }, { get: true })
+        .select('id,farm_id,pond_name,pond_code').order('id'))
+      return { farms, ponds }
     },
     async history(batchId) {
       return all(() => db.from('batch_versions').select('version_number,correction_reason,created_at')

@@ -1,3 +1,4 @@
+const { requirePondAction, requireFarmManager } = require('./pond-access')
 const farmsRepository = require('../farms/farms.repository')
 const pondsRepository = require('./ponds.repository')
 const { normalizePondInput } = require('./ponds.validation')
@@ -9,7 +10,7 @@ function httpError(message, status) { const error = new Error(message); error.st
 function validId(id, label) { if (!UUID.test(String(id))) throw httpError(`${label} không hợp lệ`, 400) }
 async function requireFarm(profile, farmId) {
   validId(farmId, 'Mã cơ sở nuôi')
-  const farm = await farmsRepository.findByIdAndOwner(farmId, profile.id)
+  const farm = await farmsRepository.visible(profile, farmId)
   if (!farm) throw httpError('Không tìm thấy cơ sở nuôi', 404)
   return farm
 }
@@ -19,30 +20,45 @@ function mapDatabaseError(error) {
   throw error
 }
 
-async function list(profile, farmId) { await requireFarm(profile, farmId); const items = await pondsRepository.findAll(farmId); return { count: items.length, items } }
+async function list(profile, farmId) { await requireFarm(profile, farmId); const items = await pondsRepository.visible(profile, farmId); return { count: items.length, items } }
+async function detail(profile, farmId, pondId) {
+  validId(farmId, 'Mã cơ sở')
+  validId(pondId, 'Mã ao')
+  const pond = await pondsRepository.visible(profile, farmId, pondId)
+  if (!pond) throw httpError('Không tìm thấy ao nuôi', 404)
+  return pond
+}
 async function create(profile, farmId, input) {
-  await requireFarm(profile, farmId)
+  validId(farmId, 'Mã cơ sở')
+  await requireFarmManager(profile, farmId)
+  let pond
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const normalized = normalizePondInput({ ...input, pondCode: generateBusinessCode('AO') })
-      return await pondsRepository.create(farmId, normalized)
+      pond = await pondsRepository.create(farmId, normalized)
+      break
     } catch (error) {
       if (error.code === '23505' && attempt < 2) continue
       mapDatabaseError(error)
     }
   }
+  return withPermissions(profile, pond)
 }
 async function update(profile, farmId, id, input) {
-  await requireFarm(profile, farmId)
-  validId(id, 'Mã ao nuôi')
+  validId(farmId, 'Mã cơ sở'); validId(id, 'Mã ao nuôi')
+  await requirePondAction(profile, id, 'MANAGE')
   const { pondCode, ...changes } = input && typeof input === 'object' ? input : {}
   void pondCode
   try {
     const pond = await pondsRepository.update(id, farmId, normalizePondInput(changes, { partial: true }))
     if (!pond) throw httpError('Không tìm thấy ao nuôi', 404)
-    return pond
+    return withPermissions(profile, pond)
   } catch (error) { mapDatabaseError(error) }
 }
-async function remove(profile, farmId, id) { await requireFarm(profile, farmId); validId(id, 'Mã ao nuôi'); try { const pond = await pondsRepository.remove(id, farmId); if (!pond) throw httpError('Không tìm thấy ao nuôi', 404) } catch (e) { mapDatabaseError(e) } }
+async function withPermissions(profile, pond) {
+  const visible = await pondsRepository.visible(profile, pond.farm_id, pond.id)
+  return { ...pond, permissions: visible?.permissions ?? [] }
+}
+async function remove(profile, farmId, id) { validId(farmId, 'Mã cơ sở'); validId(id, 'Mã ao nuôi'); await requireFarmManager(profile, farmId); await requirePondAction(profile, id, 'MANAGE'); try { const pond = await pondsRepository.remove(id, farmId); if (!pond) throw httpError('Không tìm thấy ao nuôi', 404) } catch (e) { mapDatabaseError(e) } }
 
-module.exports = { create, list, remove, update }
+module.exports = { create, detail, list, remove, update }

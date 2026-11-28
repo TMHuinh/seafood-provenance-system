@@ -6,6 +6,7 @@ const router = express.Router({ mergeParams: true })
 router.get('/', controller.list)
 router.post('/', controller.create)
 router.use('/:pondId/batches', pondBatchesRoutes)
+router.get('/:id', controller.detail)
 router.patch('/:id', controller.update)
 router.delete('/:id', controller.remove)
 

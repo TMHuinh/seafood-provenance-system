@@ -10,4 +10,22 @@ async function create(req, res, next) {
     res.status(result.replayed ? 200 : 201).json({ success: true, ...result })
   } catch (error) { next(error) }
 }
-module.exports = { list, create }
+async function createDraft(req, res, next) {
+  try {
+    const draft = await service.createDraft(req.auth.profile, req.params.farmId, req.params.pondId, req.params.id, req.body)
+    res.status(201).json({ success: true, draft })
+  } catch (error) { next(error) }
+}
+async function editDraft(req, res, next) {
+  try {
+    const draft = await service.editDraft(req.auth.profile, req.params.farmId, req.params.pondId, req.params.id, req.params.draftId, req.body)
+    res.json({ success: true, draft })
+  } catch (error) { next(error) }
+}
+async function confirmDraft(req, res, next) {
+  try {
+    const result = await service.confirmDraft(req.auth.profile, req.params.farmId, req.params.pondId, req.params.id, req.params.draftId, req.body)
+    res.status(result.replayed ? 200 : 201).json({ success: true, ...result })
+  } catch (error) { next(error) }
+}
+module.exports = { list, create, createDraft, editDraft, confirmDraft }

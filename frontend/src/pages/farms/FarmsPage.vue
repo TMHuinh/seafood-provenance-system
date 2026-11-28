@@ -20,7 +20,7 @@ import type { Farm, FarmInput } from '../../types'
 const authStore = useAuthStore()
 const farmsStore = useFarmsStore()
 const router = useRouter()
-const { items, loading, saving, error } = storeToRefs(farmsStore)
+const { items, canCreate, loading, saving, error } = storeToRefs(farmsStore)
 
 const showForm = ref(false)
 const editingId = ref<string | null>(null)
@@ -40,8 +40,11 @@ const visibleItems = computed(() => filteredItems.value.slice((listPage.value - 
 watch([query, filterStatus], () => { listPage.value = 1 })
 watch(() => filteredItems.value.length, (length) => { listPage.value = Math.min(listPage.value, Math.max(1, Math.ceil(length / listPageSize))) })
 
+const defaultHousehold = computed(() => authStore.user?.organization?.type === 'FARMER_HOUSEHOLD'
+  ? authStore.user.organization : null)
 const form = reactive({
   farmName: '',
+  ownerScope: 'household',
   address: '',
   area: '',
   certification: '',
@@ -53,6 +56,7 @@ const formTitle = computed(() => (editingId.value ? 'Cập nhật cơ sở nuôi
 function resetForm() {
   editingId.value = null
   form.farmName = ''
+  form.ownerScope = 'household'
   form.address = ''
   form.area = ''
   form.certification = ''
@@ -110,7 +114,9 @@ async function submit() {
       await farmsStore.update(editingId.value, payload)
       successMessage.value = 'Đã cập nhật cơ sở nuôi thành công.'
     } else {
-      await farmsStore.create(payload)
+      await farmsStore.create(defaultHousehold.value
+        ? { ...payload, organizationId: form.ownerScope === 'independent' ? null : defaultHousehold.value.id }
+        : payload)
       successMessage.value = 'Đã tạo cơ sở nuôi mới thành công.'
     }
     closeForm()
@@ -144,7 +150,7 @@ onMounted(async () => {
   <main class="farms-page" :class="{ 'farmer-farms': authStore.user?.role === 'FARMER' }" :aria-busy="loading">
     <PageHeader title="Cơ sở nuôi của tôi" :context="authStore.organizationName || 'Hộ nuôi độc lập'" description="Quản lý cơ sở và truy cập các ao nuôi.">
       <template #actions>
-        <va-button icon="add" @click="openCreate">Thêm cơ sở mới</va-button>
+        <va-button v-if="canCreate" icon="add" @click="openCreate">Thêm cơ sở mới</va-button>
       </template>
     </PageHeader>
 
@@ -161,8 +167,8 @@ onMounted(async () => {
     <LoadingState v-if="loading" />
     <va-inner-loading v-else :loading="false">
         <!-- Empty State -->
-        <EmptyState v-if="!loading && !error && !items.length" title="Bạn chưa có cơ sở nuôi nào" description="Hãy tạo cơ sở đầu tiên để quản lý ao và theo dõi vụ nuôi." icon="water">
-          <va-button icon="add" @click="openCreate">Tạo cơ sở mới</va-button>
+        <EmptyState v-if="!loading && !error && !items.length" title="Bạn chưa có cơ sở nuôi nào" :description="canCreate ? 'Hãy tạo cơ sở đầu tiên để quản lý ao và theo dõi vụ nuôi.' : undefined" icon="water">
+          <va-button v-if="canCreate" icon="add" @click="openCreate">Tạo cơ sở mới</va-button>
         </EmptyState>
         <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có cơ sở phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
@@ -209,10 +215,10 @@ onMounted(async () => {
                 class="flex-1"
                 @click="router.push({ name: 'ponds', params: { farmId: farm.id } })"
               >
-                Quản lý ao
+                Xem ao nuôi
               </va-button>
-              <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(farm)" />
-              <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="removeFarm(farm)" />
+              <va-button v-if="farm.can_manage" preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(farm)" />
+              <va-button v-if="farm.can_manage" preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="removeFarm(farm)" />
             </div>
           </va-card>
         </div>
@@ -227,6 +233,13 @@ onMounted(async () => {
       
       <form @submit.prevent="submit" class="modern-form">
         <h3 class="form-section-heading">Thông tin cơ sở</h3>
+        <label v-if="!editingId && defaultHousehold" class="farm-owner-scope col-span-2">
+          Cơ sở thuộc
+          <select v-model="form.ownerScope" :disabled="saving">
+            <option value="household">{{ defaultHousehold.name }}</option>
+            <option value="independent">Cơ sở độc lập của tôi</option>
+          </select>
+        </label>
         <va-input 
           v-model="form.farmName" 
           label="Tên cơ sở nuôi *" 
@@ -282,6 +295,18 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.farm-owner-scope { display: grid; gap: .35rem; }
+.farm-owner-scope select {
+  min-height: 44px;
+  width: 100%;
+  font: inherit;
+  padding: .5rem .75rem;
+  color: var(--app-ink);
+  background: var(--app-surface);
+  border: 1px solid var(--app-control-line);
+  border-radius: var(--app-control-radius);
+}
+
 .workspace-content .farmer-farms .farm-grid { gap: 14px; }
 .workspace-content .farmer-farms .farm-card > .va-card__content { padding: 18px; }
 .workspace-content .farmer-farms .card-actions-custom { padding: 10px 16px; }

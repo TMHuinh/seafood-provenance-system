@@ -30,6 +30,7 @@ const detailPond = computed(() => store.items.find((pond) => pond.id === detailI
 const { items, loading, saving, error } = storeToRefs(store)
 const farmId = computed(() => String(route.params.farmId))
 const farmName = ref('')
+const canManageFarm = ref(false)
 const activeBatches = computed(() => detailPond.value && batchStore.scope === `/farms/${farmId.value}/ponds/${detailPond.value.id}/batches`
   ? batchStore.items.filter((batch) => ['PREPARING', 'GROWING', 'READY_FOR_HARVEST'].includes(batch.status))
   : [])
@@ -167,12 +168,16 @@ async function remove(pond: Pond) {
 
 async function loadContext() {
   const version = ++contextVersion; const id = farmId.value
+  canManageFarm.value = false
   detailId.value = ''; showForm.value = false; reset(); success.value = ''; farmName.value = ''; query.value = ''; filterStatus.value = ''
   await store.load(id)
   if (version !== contextVersion) return
   try {
     const res = await api.get<FarmResponse>(`/farms/${id}`)
-    if (version === contextVersion) farmName.value = res.farm.farm_name
+    if (version === contextVersion) {
+      farmName.value = res.farm.farm_name
+      canManageFarm.value = res.farm.can_manage === true
+    }
   } catch (e) { if (version === contextVersion) store.error = e instanceof Error ? e.message : 'Không tải được cơ sở nuôi.' }
 }
 watch(farmId, loadContext, { immediate: true })
@@ -185,7 +190,7 @@ onUnmounted(() => { ++contextVersion })
 
     <PageHeader title="Ao nuôi" :context="farmName" description="Quản lý thông tin ao và mở từng vụ nuôi tại cơ sở này.">
       <template #actions>
-        <va-button icon="add" :disabled="loading || saving" @click="openCreate">Thêm ao nuôi</va-button>
+        <va-button v-if="canManageFarm" icon="add" :disabled="loading || saving" @click="openCreate">Thêm ao nuôi</va-button>
       </template>
     </PageHeader>
 
@@ -201,8 +206,8 @@ onUnmounted(() => { ++contextVersion })
     <LoadingState v-if="loading" />
     <va-inner-loading v-else :loading="false">
       <!-- Empty State -->
-      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có ao nuôi nào" description="Hãy thêm ao đầu tiên để quản lý các vụ nuôi tại cơ sở này." icon="water">
-        <va-button icon="add" @click="openCreate">Thêm ao nuôi</va-button>
+      <EmptyState v-if="!loading && !error && !items.length" title="Chưa có ao nuôi nào" :description="canManageFarm ? 'Thêm ao đầu tiên tại cơ sở này.' : undefined" icon="water">
+        <va-button v-if="canManageFarm" icon="add" @click="openCreate">Thêm ao nuôi</va-button>
       </EmptyState>
       <EmptyState v-else-if="!loading && !error && !filteredItems.length" title="Không có ao phù hợp" description="Thử đổi từ khóa hoặc trạng thái." />
 
@@ -246,8 +251,8 @@ onUnmounted(() => { ++contextVersion })
               Xem vụ nuôi
             </va-button>
             <va-button v-if="farmer" preset="secondary" icon="info" aria-label="Chi tiết ao" @click="openDetail(pond)" />
-            <va-button preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(pond)" />
-            <va-button preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(pond)" />
+            <va-button v-if="pond.permissions?.includes('MANAGE')" preset="secondary" icon="edit" color="info" aria-label="Chỉnh sửa" @click="openEdit(pond)" />
+            <va-button v-if="canManageFarm && pond.permissions?.includes('MANAGE')" preset="secondary" icon="delete" color="danger" aria-label="Xóa" @click="remove(pond)" />
           </div>
         </va-card>
       </div>

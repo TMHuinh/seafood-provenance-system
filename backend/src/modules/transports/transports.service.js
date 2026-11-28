@@ -21,12 +21,14 @@ function cloudinaryImageUrl(value) {
   return imageUrl
 }
 function requireTransporter(profile) { if (profile.role !== 'TRANSPORTER') fail('Chỉ tài khoản người vận chuyển mới dùng được chức năng này', 403) }
-async function accessible(profile, farmId, pondId, batchId, lotId) {
-  await requireOwnedPond(profile, farmId, pondId)
+async function accessible(profile, farmId, pondId, batchId, lotId, { ownerOnly = false } = {}) {
+  await requireOwnedPond(profile, farmId, pondId, 'READ')
   uuid(batchId, 'Mã vụ nuôi')
   uuid(lotId, 'Mã lô')
   const batch = await batches.findById(batchId)
-  if (!batch || batch.pond_id !== pondId) fail('Không tìm thấy vụ nuôi', 404)
+  if (!batch || batch.pond_id !== pondId || (ownerOnly && batch.pond?.farm?.owner_id !== profile.id)) {
+    fail('Không tìm thấy vụ nuôi', 404)
+  }
   const { data, error } = await supabase.from('harvest_lots').select('id, batch_id, lot_code, quantity, status').eq('id', lotId).eq('batch_id', batchId).maybeSingle()
   if (error) throw error
   if (!data) fail('Không tìm thấy lô thu hoạch', 404)
@@ -79,7 +81,7 @@ async function listRecipients(profile) {
 async function create(profile, farmId, pondId, batchId, lotId, input = {}) {
   if (profile.role !== 'FARMER' && profile.role !== 'ADMIN') fail('Chỉ chủ cơ sở mới được tạo yêu cầu vận chuyển', 403)
   input = only(record(input), ['requestId', 'recipientOrganizationId', 'quantity', 'transportDate', 'fromLocation', 'toLocation', 'note'])
-  const lot = await accessible(profile, farmId, pondId, batchId, lotId)
+  const lot = await accessible(profile, farmId, pondId, batchId, lotId, { ownerOnly: true })
   const recipientOrganizationId = uuid(input.recipientOrganizationId, 'Nhà phân phối nhận hàng')
   const { data: recipientOrganization, error: recipientError } = await supabase.from('organizations')
     .select('id, name, address').eq('id', recipientOrganizationId).eq('status', true).maybeSingle()

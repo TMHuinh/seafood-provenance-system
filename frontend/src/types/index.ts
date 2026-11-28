@@ -28,6 +28,7 @@ export interface UserProfile {
 }
 
 export interface Farm {
+  can_manage?: boolean
   id: string
   owner_id: string
   organization_id: string | null
@@ -42,6 +43,7 @@ export interface Farm {
 
 export interface FarmInput {
   farmName: string
+  organizationId?: string | null
   address?: string | null
   area?: number | null
   certification?: string | null
@@ -50,6 +52,7 @@ export interface FarmInput {
 
 export interface FarmListResponse {
   success: boolean
+  can_create: boolean
   count: number
   items: Farm[]
 }
@@ -62,6 +65,7 @@ export interface FarmResponse {
 export type PondStatus = 'ACTIVE' | 'INACTIVE' | 'MAINTENANCE'
 
 export interface Pond {
+  permissions?: string[]
   id: string
   farm_id: string
   pond_code: string
@@ -181,6 +185,22 @@ export interface HarvestRecord {
   quality_grade: string | null
   note: string | null
   created_at: string
+  author_name?: string | null
+  confirmer_name?: string | null
+}
+
+export interface HarvestDraft {
+  id: string
+  batch_id: string
+  harvest_date: string
+  quantity: number
+  is_final: boolean
+  note: string | null
+  created_by: string
+  author_name?: string | null
+  version: number
+  created_at: string
+  updated_at: string
 }
 
 export interface HarvestLot {
@@ -232,6 +252,7 @@ export interface LotTransport {
   receipt_outcome?: ReceiptOutcome | null
   received_quantity?: number | null
   id: string
+  created_by?: string
   batch_id: string
   harvest_lot_id: string
   recipient_organization_id?: string | null
@@ -301,7 +322,7 @@ export interface BatchDetailPayload {
     pond_name: string
     farm?: {
       farm_name: string
-      organization?: Organization | null
+      organization?: Pick<Organization, 'id' | 'name' | 'type'> | null
     } | null
   } | null
 }
@@ -322,6 +343,10 @@ export interface FarmingLog {
   id: string
   batch_id: string
   created_by: string
+  author_name?: string | null
+  confirmed_by?: string | null
+  confirmer_name?: string | null
+  confirmed_at?: string | null
   log_date: string
   log_type: FarmingLogType
   details: Record<string, unknown>

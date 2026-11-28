@@ -65,49 +65,23 @@ async function updateProfile(userId, changes) {
   return data
 }
 
-async function createOrganization({ name, type, address }) {
-  const { data, error } = await supabase
-    .from('organizations')
-    .insert({
-      name: String(name).trim(),
-      type: type ?? 'COMPANY',
-      address: address ?? null,
-    })
-    .select()
-    .single()
-
-  if (error) {
-    throw error
-  }
-
-  return data
-}
-
 async function createProfile(authUser, profile) {
-  const { data, error } = await supabase
-    .from('user_profiles')
-    .insert({
-      id: authUser.id,
-      organization_id: profile.organizationId ?? null,
-      full_name: String(profile.fullName).trim(),
-      email: String(profile.email).toLowerCase(),
-      phone: profile.phone ?? null,
-      role: profile.role ?? 'FARMER',
-      wallet_address: profile.walletAddress ?? null,
-      status: true,
-    })
-    .select('*, organization:organizations(*)')
-    .single()
-
-  if (error) {
-    throw error
-  }
-
-  return data
+  const { error } = await supabase.rpc('register_production_profile', {
+    p_user: authUser.id,
+    p_name: String(profile.fullName).trim(),
+    p_email: String(profile.email).toLowerCase(),
+    p_phone: profile.phone ?? null,
+    p_role: profile.role ?? 'FARMER',
+    p_wallet: profile.walletAddress ?? null,
+    p_org_name: profile.organizationName?.trim() || null,
+    p_org_type: profile.organizationType || null,
+    p_org_address: profile.organizationAddress ?? null,
+  })
+  if (error) throw error
+  return findProfileById(authUser.id)
 }
 
 module.exports = {
-  createOrganization,
   createProfile,
   countActiveAdmins,
   findProfileByEmail,

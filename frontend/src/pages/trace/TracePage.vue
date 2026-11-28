@@ -19,6 +19,7 @@ const logPage = ref(1)
 const journal = ref<HTMLDetailsElement | null>(null)
 const logs = computed(() => (result.value?.status === 'ACTIVE' ? result.value.trace.logs : []))
 const summary = computed(() => summarizeLogs(logs.value))
+const mismatchedLogs = computed(() => logs.value.filter(log => log.verificationStatus === 'MISMATCH').length)
 const productSections = computed(() => [
   {
     id: 'feeding',
@@ -94,6 +95,12 @@ const proofLabels = {
   MISMATCH: 'Thông tin thu hoạch có sai lệch so với hồ sơ đã lưu. Vui lòng hỏi nhà phân phối.',
   PENDING: 'Thông tin thu hoạch đang chờ được kiểm tra.',
   UNAVAILABLE: 'Tạm thời chưa thể kiểm tra thông tin thu hoạch. Vui lòng thử lại sau.',
+}
+const logCheckLabels = {
+  MATCH: 'Đã kiểm tra. Nội dung khớp với hồ sơ đã lưu.',
+  MISMATCH: 'Dữ liệu hiện tại không khớp với hồ sơ đã xác nhận.',
+  PENDING: 'Nhật ký đang chờ được kiểm tra.',
+  UNAVAILABLE: 'Tạm thời chưa thể kiểm tra nhật ký này.',
 }
 const detailLabels: Record<string, string> = {
   feedType: 'Loại thức ăn',
@@ -282,6 +289,9 @@ onBeforeUnmount(() => {
         <p class="eyebrow">QUÁ TRÌNH NUÔI</p>
         <h2>Được chăm sóc như thế nào?</h2>
         <p>Nhìn nhanh các sản phẩm được ghi nhận trong vụ nuôi của lô hàng.</p>
+        <va-alert v-if="mismatchedLogs" color="danger">
+          Có {{ mismatchedLogs }} nhật ký có sai lệch so với hồ sơ đã xác nhận. Xem chi tiết trong nhật ký vụ nuôi.
+        </va-alert>
       </div>
       <div class="care-grid">
         <section
@@ -304,6 +314,9 @@ onBeforeUnmount(() => {
                 <h4>{{ product.name }}</h4>
                 <span>{{ product.count }} lần</span>
               </div>
+              <p v-if="product.mismatchCount" class="product-mismatch">
+                <strong>Có sai lệch</strong> · {{ product.mismatchCount }}/{{ product.count }} bản ghi
+              </p>
               <p class="product-dates">
                 {{ date(product.firstUsed) }} <span aria-label="đến">→</span>
                 {{ date(product.lastUsed) }}
@@ -373,10 +386,10 @@ onBeforeUnmount(() => {
           <li v-for="(log, index) in visibleLogs" :key="`${logPage}-${index}`">
             <h3>{{ labels[log.type] || log.type }}</h3>
             <p>{{ time(log.date) }}</p>
-            <p class="muted">
-              Ghi nhận hồ sơ:
-              {{ recordedLabels[log.blockchainStatus || 'UNKNOWN'] || 'Chưa xác định' }}
-            </p>
+            <va-alert v-if="log.verificationStatus === 'MISMATCH'" color="danger">
+              {{ logCheckLabels.MISMATCH }}
+            </va-alert>
+            <p v-else class="muted">{{ logCheckLabels[log.verificationStatus ?? 'UNAVAILABLE'] }}</p>
             <dl class="facts">
               <div v-for="detail in technicalDetails(log.details)" :key="detail.key">
                 <dt>{{ detail.label }}</dt>
@@ -418,7 +431,7 @@ onBeforeUnmount(() => {
           Thời điểm kiểm tra: {{ time(result.trace.proof.checkedAt) }}
         </p>
         <p class="muted">
-          Nhật ký nuôi và các mốc vận chuyển hiển thị trạng thái ghi nhận do hệ thống lưu.
+          Kết quả kiểm tra nhật ký hiển thị tại từng mục. Các mốc vận chuyển hiển thị trạng thái ghi nhận.
         </p>
       </section>
       <section id="journey" class="trace-card journey-card">
@@ -823,6 +836,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   margin-top: 8px;
   color: var(--app-muted);
+}
+.product-mismatch {
+  margin: 6px 0 0;
+  color: var(--app-danger, #952d2d);
+  font-size: 12px;
 }
 .product-dates span {
   padding-inline: 4px;

@@ -1,3 +1,4 @@
+const { blockchainPayload, payloadHashes } = require('./farming-log-proof')
 const farmingLogsRepository = require('./farming-logs.repository')
 const { normalizeFarmingLogInput, validateFarmingLog, farmingLogIssue, UUID_PATTERN } = require('./farming-logs.validation')
 const blockchainService = require('../blockchain/blockchain.service')
@@ -67,25 +68,6 @@ async function update(profile, id, input) {
   const log = await farmingLogsRepository.update(id, changes, existing)
   await farmingLogsRepository.createAudit(profile.id, id, 'UPDATE', existing, log)
   return { ...log, validation_issue: farmingLogIssue(log, batch) }
-}
-
-function blockchainPayload(log) {
-  return {
-    batchId: log.batch_id,
-    logType: log.log_type,
-    logDate: new Date(log.log_date).toISOString(),
-    details: log.details,
-  }
-}
-
-function legacyInputOrderDetails(logType, details) {
-  switch (logType) {
-    case 'FEEDING': return { feedType: details.feedType, feedAmount: details.feedAmount, note: details.note }
-    case 'WATER_QUALITY': return { temperature: details.temperature, salinity: details.salinity, ph: details.ph, dissolvedOxygen: details.dissolvedOxygen, note: details.note }
-    case 'MEDICINE': return { medicineName: details.medicineName, dose: details.dose, note: details.note }
-    case 'MORTALITY': return { mortalityCount: details.mortalityCount, cause: details.cause, note: details.note }
-    default: return { description: details.description }
-  }
 }
 
 async function deliverCommitted(log, eventId) {
@@ -167,15 +149,7 @@ async function verify(profile, batchId) {
   const versionsById = new Map(versions.map(version => [version.id, version]))
 
   const details = await Promise.all(logs.map(async (log) => {
-    const payload = blockchainPayload(log)
-    const legacyPayload = { batchId: log.batch_id, logType: log.log_type, logDate: log.log_date, details: log.details }
-    const recomputedHash = blockchainService.hashData(payload)
-    const legacyHash = blockchainService.hashLegacyData(legacyPayload)
-    const legacyInputHash = blockchainService.hashLegacyData({
-      ...payload,
-      details: legacyInputOrderDetails(log.log_type, log.details),
-    })
-    const validPayloadHashes = new Set([recomputedHash, legacyHash, legacyInputHash])
+    const validPayloadHashes = payloadHashes(log, blockchainService.hashData, blockchainService.hashLegacyData)
     const storedMatches = Boolean(log.data_hash) && validPayloadHashes.has(log.data_hash)
     const baseEventId = blockchainService.buildEventId('FARMING_LOG_RECORDED', log.id)
     const eventId = versionsById.get(log.current_version_id)?.blockchain_event_id ?? (log.current_version > 1 ? `${baseEventId}:v${log.current_version}` : baseEventId)

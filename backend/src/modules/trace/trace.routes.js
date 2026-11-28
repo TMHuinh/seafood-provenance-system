@@ -9,6 +9,7 @@ const db = require('../../config/supabase')
 const { receivingQr, revokeLegacy } = require('../transports/receiving.service')
 const service = createTraceService({ ...createTraceRepository(db), receivingQr, revokeLegacy }, {
   hash: blockchain.hashData,
+  hashLegacy: blockchain.hashLegacyData,
   async read(eventId, address, chainId) {
     if (!env.blockchainRpcUrl) throw new Error('Blockchain unavailable')
     const connection = new ethers.FetchRequest(env.blockchainRpcUrl)

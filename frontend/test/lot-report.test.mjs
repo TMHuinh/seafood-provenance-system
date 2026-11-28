@@ -87,11 +87,16 @@ test('private report renders origin, histories and honest unavailable proof; pri
   } finally { view.close() }
 })
 test('public report requests without login and never includes private history', async () => {
-  const calls = [], view = mount(async (...args) => { calls.push(args); return { ...fixture(), status: 'ACTIVE' } }, true)
+  const response = fixture()
+  response.trace.logs = [{ date: '2026-11-01', type: 'MEDICINE', details: { medicineName: 'Vitamin C', dose: '2000l' },
+    blockchainStatus: 'SUCCESS', verificationStatus: 'MISMATCH' }]
+  const calls = [], view = mount(async (...args) => { calls.push(args); return { ...response, status: 'ACTIVE' } }, true)
   try {
     await settle()
     assert.deepEqual(calls, [['/public/trace/code/report', false]])
     assert.match(text(view.root), /Bản công khai/)
+    assert.match(text(view.root), /2000l/)
+    assert.match(text(view.root), /Dữ liệu hiện tại không khớp với hồ sơ đã xác nhận/)
     assert.doesNotMatch(text(view.root), /Đính chính nguồn giống|Lịch sử cập nhật vụ nuôi/)
   } finally { view.close() }
 })

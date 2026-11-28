@@ -35,7 +35,7 @@ export interface PublicTrace {
   pond: { code: string; name: string }
   batch: { code: string; seedSource: string | null; stockingDate: string }
   packaging?: LotPackaging[]
-  logs: { imageUrl: string | null; type: string; date: string; blockchainStatus: string | null; details: Record<string, string | number | null> }[]
+  logs: { imageUrl: string | null; type: string; date: string; blockchainStatus: string | null; verificationStatus?: VerificationStatus; details: Record<string, string | number | null> }[]
   transports: {
     code: string; date: string; status: string; quantity: number; recipientName: string | null
     receivedQuantity?: number | string | null

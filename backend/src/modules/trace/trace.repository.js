@@ -27,9 +27,9 @@ function createTraceRepository(db) {
       .eq('batch_id',batchId).eq('lifecycle_status','CONFIRMED').lt('log_date',before).order('log_date'),500)
     const ids = logs.map(log => log.version?.blockchain_event_id).filter(Boolean)
     if (!ids.length) return logs
-    const records = await bounded(db.from('blockchain_records').select('event_id,status').in('event_id', ids),500)
-    const statusByEvent = new Map(records.map(record => [record.event_id, record.status]))
-    return logs.map(log => ({...log,recordedStatus:statusByEvent.get(log.version?.blockchain_event_id) ?? null}))
+    const records = await bounded(db.from('blockchain_records').select('event_id,status,data_hash,contract_address,chain_id').in('event_id', ids),500)
+    const byEvent = new Map(records.map(record => [record.event_id, record]))
+    return logs.map(log => ({ ...log, record: byEvent.get(log.version?.blockchain_event_id) }))
   }
   async function transports(lotId, transportId) {
     let query = db.from('transport_logs').select('id,harvest_lot_id,transport_code,transport_date,status,quantity,received_quantity,receipt_outcome,recipient:organizations!recipient_organization_id(name)').eq('harvest_lot_id',lotId)

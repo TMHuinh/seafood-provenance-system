@@ -1,4 +1,5 @@
 // Dependency injection keeps public projection/authorization testable without live services.
+const { payloadHashes } = require('../farming-logs/farming-log-proof')
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 function fail(message, status) { throw Object.assign(new Error(message), { status }) }
 function text(value) { return typeof value === 'string' ? value.slice(0, 500) : null }
@@ -53,7 +54,7 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     }
     return repo.receivingQr(...args)
   }
-  async function proof(eventId, snapshot, record) {
+  async function proof(eventId, snapshot, record, { matches = hash => hash === chain.hash(snapshot), waitMs = timeoutMs } = {}) {
     const base = { recordedStatus: record?.status ?? null, transactionHash: record?.transaction_hash ?? null, checkedAt: null }
     if (!record || record.status !== 'SUCCESS') return { ...base, status: 'PENDING' }
     if (!record.contract_address) return { ...base, status: 'UNAVAILABLE' }
@@ -61,12 +62,35 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
     try {
       const hash = await Promise.race([
         chain.read(eventId, record.contract_address, record.chain_id),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chain timeout')), timeoutMs) }),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Chain timeout')), waitMs) }),
       ])
       return { ...base, checkedAt: new Date().toISOString(),
-        status: !hash ? 'UNAVAILABLE' : hash === chain.hash(snapshot) && hash === record.data_hash ? 'MATCH' : 'MISMATCH' }
+        status: !hash ? 'UNAVAILABLE' : matches(hash) && hash === record.data_hash ? 'MATCH' : 'MISMATCH' }
     } catch { return { ...base, status: 'UNAVAILABLE' } }
     finally { clearTimeout(timer) }
+  }
+  async function verifyLogs(logs) {
+    const pending = []
+    const statuses = logs.map(({ batch_id, version, record }, index) => {
+      if (record?.status !== 'SUCCESS') return 'PENDING'
+      const matches = payloadHashes({ ...version, batch_id }, chain.hash, chain.hashLegacy, { strictDetails: true })
+      if (record.data_hash && !matches.has(record.data_hash)) return 'MISMATCH'
+      if (record.contract_address) pending.push({ index, version, record, matches })
+      return 'UNAVAILABLE'
+    })
+    const deadline = Date.now() + timeoutMs
+    let next = 0
+    await Promise.all(Array.from({ length: Math.min(6, pending.length) }, async () => {
+      while (next < pending.length) {
+        const waitMs = deadline - Date.now()
+        if (waitMs <= 0) break
+        const { index, version, record, matches } = pending[next++]
+        statuses[index] = (await proof(version.blockchain_event_id, null, record, {
+          matches: hash => matches.has(hash), waitMs,
+        })).status
+      }
+    }))
+    return statuses
   }
   async function publicTrace(code) {
     if (!UUID.test(String(code))) fail('Không tìm thấy mã truy xuất', 404)
@@ -90,17 +114,22 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
       repo.logs(lot.batch_id, logsBefore), repo.transports(lot.id, packagingTransportId),
       packagingTransportId === false ? [] : repo.packaging(lot.id, packagingTransportId),
     ])
-    const publicLogs = logs.filter(log => log.batch_id === lot.batch_id && log.lifecycle_status === 'CONFIRMED' &&
+    const confirmedLogs = logs.filter(log => log.batch_id === lot.batch_id && log.lifecycle_status === 'CONFIRMED' &&
       log.version?.id === log.current_version_id && log.version.status === 'ACTIVE' &&
-      new Date(log.version.log_date) < new Date(logsBefore)).map(log => {
-        const version = log.version
-        const details = {}
-        for (const key of DETAIL_KEYS[version.log_type] ?? []) {
-          const value = scalar(version.details?.[key])
-          if (value !== null) details[key] = value
-        }
-        return { type: text(version.log_type), date: text(version.log_date), imageUrl: imageUrl(version.image_url), details, blockchainStatus: ['SUCCESS', 'PENDING', 'FAILED'].includes(log.recordedStatus) ? log.recordedStatus : null }
-      })
+      new Date(log.version.log_date) < new Date(logsBefore))
+    const verification = isPublic ? verifyLogs(confirmedLogs) : []
+    const publicLogs = Promise.resolve(verification).then(statuses => confirmedLogs.map((log, index) => {
+      const version = log.version
+      const verificationStatus = statuses[index]
+      const details = {}
+      for (const key of DETAIL_KEYS[version.log_type] ?? []) {
+        const value = scalar(version.details?.[key])
+        if (value !== null) details[key] = value
+      }
+      return { type: text(version.log_type), date: text(version.log_date),
+        imageUrl: imageUrl(version.image_url), details,
+        blockchainStatus: log.record?.status ?? null, ...(isPublic ? { verificationStatus } : {}) }
+    }))
     const publicTransports = transports.filter(trip => trip.harvest_lot_id === lot.id &&
       (!packagingTransportId || trip.id === packagingTransportId)).map(trip => ({
       code: text(trip.transport_code), date: text(trip.transport_date), status: text(trip.status), quantity: scalar(trip.quantity),
@@ -111,7 +140,7 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
         imageUrl: imageUrl(event.payload?.deliveryReport?.proofImageUrl),
         temperature: scalar(event.payload?.temperature), trackingStatus: text(event.payload?.trackingStatus), blockchainStatus: text(event.blockchain_status) })),
     }))
-    const [harvestProof, packagingDetails] = await Promise.all([
+    const [harvestProof, packagingDetails, projectedLogs] = await Promise.all([
       repo.proof(lot.blockchain_event_id).then(record => proof(lot.blockchain_event_id, origin, record)),
       Promise.all(packaging.map(async ({ snapshot: item, eventId, record }) => ({
         transportCode: text(item.transportCode), distributorName: text(item.distributorName),
@@ -123,13 +152,14 @@ function createTraceService(repo, chain, { timeoutMs = 2500 } = {}) {
           ? { verificationStatus: (await proof(eventId, item, record)).status }
           : { transactionHash: record?.transaction_hash ?? null }),
       }))),
+      publicLogs,
     ])
     if (isPublic) delete harvestProof.transactionHash
     return {
       lotCode: text(lot.lot_code), species: text(origin.batch.species), quantity: scalar(lot.quantity), harvestDate: text(harvestDate),
       farm: { name: text(origin.farm.name), address: text(origin.farm.address) }, pond: { code: text(origin.pond.code), name: text(origin.pond.name) },
       batch: { code: text(origin.batch.batch_code), seedSource: text(origin.batch.seed_source), stockingDate: text(origin.batch.stocking_date) },
-      logs: publicLogs, transports: publicTransports, packaging: packagingDetails, proof: harvestProof,
+      logs: projectedLogs, transports: publicTransports, packaging: packagingDetails, proof: harvestProof,
     }
   }
   return { get, issue, revoke, publicTrace, dossier,

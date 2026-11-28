@@ -53,12 +53,23 @@ test('authenticated organization routes enforce consent, scoped operation and de
     req.auth = { profile: { id: user } }
     next()
   }
-  app.use('/api/organizations', createOrganizationRouter(adapter, authenticate))
+  app.use('/api/organizations', createOrganizationRouter(adapter, authenticate, run => db.transaction(async tx => {
+    await tx.exec('SET LOCAL ROLE service_role')
+    return run(tx)
+  })))
   if (process.env.SEAFOOD_FRONTEND_DIST) {
     const root = resolve(process.env.SEAFOOD_FRONTEND_DIST)
     app.get('/api/auth/me', authenticate, async (req, res) => {
       const { rows } = await db.query('SELECT * FROM user_profiles WHERE id=$1', [req.auth.profile.id])
       res.json({ success: true, user: rows[0] })
+    })
+    app.get('/api/farms/:farm/ponds/:pond/batches', authenticate, async (req, res) => {
+      const { rows: [scope] } = await db.query(
+        'SELECT pond_can($1,$2,$3) AND EXISTS(SELECT FROM ponds WHERE id=$2 AND farm_id=$4) AS allowed',
+        [req.auth.profile.id,req.params.pond,'READ',req.params.farm])
+      if (!scope.allowed) return res.sendStatus(404)
+      const { rows } = await db.query('SELECT id,status FROM batches WHERE pond_id=$1', [req.params.pond])
+      res.json({ items: rows })
     })
     app.use(express.static(root))
     app.get(/^\/to-chuc(?:\/.*)?$/, (_req, res) => res.sendFile(join(root, 'index.html')))
@@ -118,11 +129,47 @@ test('authenticated organization routes enforce consent, scoped operation and de
   await request(representative, relationship + '/leave', { method: 'POST' })
   await request(manager, detail, { status: 404 })
   assert.equal((await db.query('SELECT organization_id FROM farms WHERE id=$1', [farm])).rows[0].organization_id, household)
+  await t.test('household requests join an HTX only after authorized approval', async () => {
+    const secondCoop = randomUUID()
+    const otherScope = '/' + otherHousehold
+    await db.query("INSERT INTO organizations(id,name,type) VALUES($1,'HTX B','COOPERATIVE')", [secondCoop])
+    await db.query("INSERT INTO organization_memberships(organization_id,user_id,role) VALUES($1,$2,'MANAGER')", [secondCoop,manager])
+    const search = await request(otherRep, otherScope + '/cooperative-search?q=HTX')
+    assert.deepEqual(search.cooperatives.map(item => item.name), ['HTX A', 'HTX B'])
+    await request(worker, otherScope + '/cooperative-search?q=HTX', { status: 403 })
+    const send = (cooperativeId, extra = {}) => request(otherRep, otherScope + '/join-requests', {
+      method: 'POST', body: { cooperativeId, shareLogs: true, ...extra },
+    })
+    const sent = await send(coop)
+    assert.equal((await send(coop)).id, sent.id)
+    const competing = await send(secondCoop)
+    assert.equal((await request(manager, '/invitations')).invitations.find(item => item.id === sent.id).canRespond, true)
+    assert.equal((await request(manager, '/join-requests/' + sent.id)).requested_share_logs, true)
+    await request(worker, '/join-requests/' + sent.id, { status: 404 })
+    await request(otherRep, '/join-requests/' + sent.id + '/respond', { method: 'POST', body: { accept: true }, status: 404 })
+    assert.deepEqual((await request(manager, scope + '/households')).households.filter(item => !item.ended_at), [])
+    const approve = (id, status = 200) => request(manager, '/join-requests/' + id + '/respond', {
+      method: 'POST', body: { accept: true, shareLogs: false }, status,
+    })
+    assert.equal((await approve(sent.id)).status, 'ACCEPTED')
+    assert.equal((await approve(sent.id)).status, 'ACCEPTED')
+    await approve(competing.id, 409)
+    assert.equal((await request(manager, '/invitations')).invitations.find(item => item.id === competing.id).status, 'PENDING')
+    const active = (await request(manager, scope + '/households')).households.filter(item => !item.ended_at)
+    assert.equal(active.length, 1)
+    assert.equal(active[0].household_id, otherHousehold)
+    assert.equal(active[0].share_logs, true)
+    await request(otherRep, '/join-requests/' + competing.id + '/cancel', { method: 'POST' })
+    await request(otherRep, otherScope + '/households/' + active[0].id + '/leave', { method: 'POST' })
+  })
   if (process.env.SEAFOOD_FRONTEND_DIST) {
     await t.test('HTX invitation and privacy defaults on desktop and mobile Chromium', async () => {
       const { browserScenario } = require('./browser-organizations.cjs')
+      await db.query("INSERT INTO organization_memberships(organization_id,user_id,role) VALUES($1,$2,'STAFF')", [otherHousehold,manager])
       await browserScenario({ host, organization: coop, household, managerToken: byUser.get(manager),
-        representativeToken: byUser.get(representative),
+        representativeToken: byUser.get(representative), staffOrganization: otherHousehold,
+        secondRepresentativeToken: byUser.get(otherRep),
+        askForHandover: () => request(representative, houseScope + '/handovers', { method: 'POST', body: { pondId: pond, cooperativeId: coop } }),
         readInvitations: async () => (await request(representative, '/invitations')).invitations })
     })
     await t.test('independent farmer creates a household and links existing farms selectively on mobile', async () => {

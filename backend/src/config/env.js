@@ -30,6 +30,8 @@ module.exports = Object.freeze({
   supabaseUrl: process.env.SUPABASE_URL,
   supabaseSecretKey: process.env.SUPABASE_SECRET_KEY,
   supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+  databaseUrl: process.env.DATABASE_URL,
+  databaseCaFile: process.env.DATABASE_SSL_CA_FILE,
   cloudinaryName: process.env.CLOUDINARY_NAME,
   cloudinaryApiKey: process.env.CLOUDINARY_API_KEY,
   cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET,

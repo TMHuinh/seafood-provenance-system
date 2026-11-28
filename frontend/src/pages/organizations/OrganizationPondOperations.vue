@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { VaAlert, VaButton, VaInput } from 'vuestic-ui'
 import { api } from '../../api/client'
 import EmptyState from '../../components/EmptyState.vue'
@@ -16,6 +17,12 @@ interface Operations {
 }
 
 const props = defineProps<{ orgId: string }>()
+const route = useRoute()
+const view = computed(() => route.query.view === 'history' || route.query.view === 'handover' ? route.query.view : 'assignment')
+const archivedHandovers = computed(() => handovers.value.filter(item => item.status !== 'PENDING' && item.status !== 'ACCEPTED'))
+const visibleHandovers = computed(() => view.value === 'history' ? archivedHandovers.value : handovers.value.filter(item =>
+  item.status === 'PENDING' || item.status === 'ACCEPTED'))
+const viewTitle = computed(() => ({ assignment: 'Phân công ao', handover: 'Bàn giao quyền vận hành', history: 'Lịch sử vận hành' })[view.value])
 const scope = () => props.orgId
 const { data, loading, error, load } = useOrganizationData(scope, async () => {
   const id = props.orgId
@@ -140,7 +147,7 @@ function endHandover(item: PondHandover) {
 <template>
   <main class="page-container org-page" :aria-busy="loading">
     <RouterLink :to="{ name: 'organizations', query: { org: orgId } }">← Tổ chức của tôi</RouterLink>
-    <PageHeader title="Phân công và bàn giao ao" :context="data?.member?.organization_name" />
+    <PageHeader :title="viewTitle" />
     <VaAlert v-if="success" color="success" outline role="status">{{ success }}</VaAlert>
     <VaAlert v-if="actionError" color="danger" outline role="alert">{{ actionError }}</VaAlert>
     <LoadingState v-if="loading" />
@@ -149,7 +156,7 @@ function endHandover(item: PondHandover) {
     </VaAlert>
     <EmptyState v-else-if="!isOrganizationLead(data?.member)" title="Bạn không có quyền quản lý vận hành của đơn vị này" icon="water" />
     <template v-else>
-      <section class="org-panel org-stack">
+      <section v-if="view === 'assignment'" class="org-panel org-stack">
         <h2>Ao đang vận hành</h2>
         <p v-if="!managedPonds.length" class="org-muted">Đơn vị chưa có ao đang vận hành.</p>
         <ul v-else class="org-list org-records">
@@ -163,7 +170,7 @@ function endHandover(item: PondHandover) {
         </ul>
       </section>
 
-      <section class="org-panel org-stack">
+      <section v-if="view === 'assignment'" class="org-panel org-stack">
         <h2>Phân công người phụ trách</h2>
         <p v-if="!managedPonds.length || !staff.length" class="org-muted">
           {{ !managedPonds.length ? 'Cần có ao đang vận hành để phân công.' : 'Mời nhân sự tham gia đơn vị để phân công.' }}
@@ -203,7 +210,9 @@ function endHandover(item: PondHandover) {
             <VaButton type="submit" :loading="saving === 'assignment'" :disabled="Boolean(saving) || !selectedPond || !userId || Boolean(selectedPond.scheduled_assignment_id)">Lưu phân công</VaButton>
           </div>
         </form>
-        <h3>Lịch sử phân công</h3>
+      </section>
+      <section v-if="view !== 'handover'" class="org-panel org-stack">
+        <h2>Lịch sử phân công</h2>
         <p v-if="!assignments.length" class="org-muted">Chưa có phân công.</p>
         <ul v-else class="org-list org-records">
           <li v-for="item in assignments" :key="item.id" class="org-row">
@@ -213,7 +222,7 @@ function endHandover(item: PondHandover) {
               <p>{{ item.permissions.map(permission => permissionLabels[permission]).join(' · ') }}</p>
               <p v-if="item.note" class="org-muted">{{ item.note }}</p>
             </div>
-            <VaButton v-if="['Đang phụ trách', 'Sắp tiếp nhận'].includes(assignmentState(item))"
+            <VaButton v-if="view === 'assignment' && ['Đang phụ trách', 'Sắp tiếp nhận'].includes(assignmentState(item))"
               preset="secondary" color="danger" :loading="saving === item.id" :disabled="Boolean(saving)" @click="endAssignment(item)">
               {{ assignmentState(item) === 'Sắp tiếp nhận' ? 'Hủy lịch tiếp nhận' : 'Kết thúc phân công' }}
             </VaButton>
@@ -221,9 +230,9 @@ function endHandover(item: PondHandover) {
         </ul>
       </section>
 
-      <section class="org-panel org-stack">
-        <h2>Bàn giao quyền vận hành</h2>
-        <form v-if="relationship && handoverCandidates.length" class="org-search" @submit.prevent="proposeHandover">
+      <section v-if="view !== 'assignment'" class="org-panel org-stack">
+        <h2>{{ view === 'history' ? 'Lịch sử bàn giao' : 'Đề nghị và bàn giao đang hiệu lực' }}</h2>
+        <form v-if="view === 'handover' && relationship && handoverCandidates.length" class="org-search" @submit.prevent="proposeHandover">
           <label class="org-select">Ao đề nghị bàn giao cho {{ relationship.cooperative_name }}
             <select v-model="handoverPondId" required :disabled="Boolean(saving)">
               <option value="" disabled>Chọn ao</option>
@@ -232,9 +241,9 @@ function endHandover(item: PondHandover) {
           </label>
           <VaButton type="submit" :loading="saving === 'handover'" :disabled="Boolean(saving) || !handoverPondId">Gửi đề nghị</VaButton>
         </form>
-        <p v-if="!handovers.length" class="org-muted">Chưa có đề nghị hoặc lịch sử bàn giao.</p>
+        <p v-if="!visibleHandovers.length" class="org-muted">Chưa có đề nghị hoặc lịch sử bàn giao.</p>
         <ul v-else class="org-list org-records">
-          <li v-for="item in handovers" :key="item.id" class="org-row">
+          <li v-for="item in visibleHandovers" :key="item.id" class="org-row">
             <div>
               <strong>{{ item.pond_name }} · {{ item.pond_code }}</strong>
               <p>{{ item.household_name }} → {{ item.cooperative_name }}</p>
@@ -250,6 +259,10 @@ function endHandover(item: PondHandover) {
           </li>
         </ul>
       </section>
+      <div v-if="view === 'history'" class="org-actions">
+        <VaButton preset="secondary" :to="{ name: 'org-staff', params: { orgId }, hash: '#lich-su-nhan-su' }">Lịch sử nhân sự</VaButton>
+        <VaButton preset="secondary" :to="{ name: 'org-households', params: { orgId }, hash: '#lich-su-thanh-vien' }">Lịch sử thành viên</VaButton>
+      </div>
     </template>
   </main>
 </template>

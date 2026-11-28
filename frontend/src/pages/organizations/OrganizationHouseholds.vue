@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { VaAlert, VaButton, VaInput } from 'vuestic-ui'
 import { api } from '../../api/client'
 import EmptyState from '../../components/EmptyState.vue'
 import LoadingState from '../../components/LoadingState.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import { date, errorText, isOrganizationLead, organizationsPath, type DirectoryOrganization, type HouseholdRelationship, type Membership, type SharingCandidate } from './model'
+import CooperativeJoinRequest from './CooperativeJoinRequest.vue'
 import SharedScopeFields from './SharedScopeFields.vue'
 import { useOrganizationData } from './useOrganizationData'
 
@@ -122,6 +124,10 @@ async function changeRelationship(leave: boolean) {
     saving.value = ''
   }
 }
+const route = useRoute()
+watch([loading, () => route.hash], ([pending, hash]) => {
+  if (!pending && hash === '#lich-su-thanh-vien') document.getElementById('lich-su-thanh-vien')?.scrollIntoView()
+}, { flush: 'post' })
 </script>
 
 <template>
@@ -167,7 +173,7 @@ async function changeRelationship(leave: boolean) {
         </ul>
       </section>
 
-      <EmptyState v-else-if="!active" title="Hộ chưa tham gia hợp tác xã" icon="groups" />
+      <CooperativeJoinRequest v-else-if="!active" :org-id="orgId" />
       <form v-else class="org-panel org-stack" @submit.prevent="changeRelationship(false)">
         <div><h2>{{ active.cooperative_name }}</h2><p>Tham gia từ {{ date(active.joined_at) }}</p></div>
         <p>Thông tin cơ bản của hộ, các ao liên quan, vụ nuôi và lô thu hoạch trong thời gian tham gia thuộc phạm vi chia sẻ mặc định.</p>
@@ -181,8 +187,9 @@ async function changeRelationship(leave: boolean) {
         </div>
       </form>
 
-      <section v-if="history.length" class="org-panel">
+      <section v-if="history.length || $route.hash === '#lich-su-thanh-vien'" id="lich-su-thanh-vien" class="org-panel">
         <h2>Lịch sử thành viên</h2>
+        <p v-if="!history.length" class="org-muted">Chưa có bản ghi lịch sử.</p>
         <ul class="org-list org-records">
           <li v-for="item in history" :key="item.id">
             <strong>{{ manager ? item.household_name : item.cooperative_name }}</strong>

@@ -10,6 +10,9 @@ export interface Organization {
   name: string
   type: OrgType
   address: string | null
+  phone?: string | null
+  email?: string | null
+  representative?: string | null
   status: boolean
   created_at: string
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { VaAlert, VaButton, VaInput } from 'vuestic-ui'
 import { api } from '../../api/client'
 import EmptyState from '../../components/EmptyState.vue'
@@ -66,6 +67,10 @@ function remove(item: OrganizationStaff) {
   if (!window.confirm(`Kết thúc tư cách nhân sự của ${item.full_name}? Quyền truy cập theo tổ chức và các phân công liên quan sẽ kết thúc. Hồ sơ đã tạo vẫn được lưu.`)) return
   void mutate(item.id, () => api.post(`${organizationsPath(props.orgId)}/staff/${item.id}/remove`), 'Đã kết thúc tư cách nhân sự.')
 }
+const route = useRoute()
+watch([loading, () => route.hash], ([pending, hash]) => {
+  if (!pending && hash === '#lich-su-nhan-su') document.getElementById('lich-su-nhan-su')?.scrollIntoView()
+}, { flush: 'post' })
 </script>
 
 <template>
@@ -91,8 +96,9 @@ function remove(item: OrganizationStaff) {
           <VaButton type="submit" :loading="saving === 'invite'" :disabled="Boolean(saving) || !email.trim()">Gửi lời mời</VaButton>
         </form>
       </section>
-      <section v-if="history.length" class="org-panel">
+      <section v-if="history.length || $route.hash === '#lich-su-nhan-su'" id="lich-su-nhan-su" class="org-panel">
         <h2>Lịch sử nhân sự</h2>
+        <p v-if="!history.length" class="org-muted">Chưa có bản ghi lịch sử.</p>
         <ul class="org-list org-records">
           <li v-for="item in history" :key="item.id">
             <strong>{{ item.full_name }}</strong>

@@ -33,7 +33,7 @@ export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED'
 
 export interface OrganizationInvitation {
   id: string
-  kind: 'HOUSEHOLD' | 'STAFF'
+  kind: 'HOUSEHOLD' | 'STAFF' | 'HOUSEHOLD_REQUEST'
   status: InvitationStatus
   created_at: string
   expires_at: string
@@ -161,6 +161,7 @@ export interface SharingCandidate {
 }
 
 export const organizationsPath = (orgId: string) => `/organizations/${encodeURIComponent(orgId)}`
+export const joinRequestPath = (id: string) => `/organizations/join-requests/${encodeURIComponent(id)}`
 export const invitationPath = (id: string) => `/organizations/invitations/${encodeURIComponent(id)}`
 
 export { date } from '../lots/lot-utils'

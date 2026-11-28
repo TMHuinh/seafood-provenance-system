@@ -1,9 +1,10 @@
 const { Router } = require('express')
+const joinRequests = require('./join-requests.service')
 const { call, workspace } = require('./organizations.service')
 const { id, text, bool, sharing, farmIds, email, permissions, startsAt,
   confirmationPermissions, assignmentPermissions } = require('./organizations.validation')
 
-function createOrganizationRouter(db, authenticate) {
+function createOrganizationRouter(db, authenticate, transaction = run => require('../../config/postgres').transaction(run)) {
   const router = Router()
   router.use(authenticate)
   router.use((_req, res, next) => {
@@ -34,6 +35,33 @@ function createOrganizationRouter(db, authenticate) {
     p_farm_ids: farmIds(req.body?.farmIds),
     p_cooperative: req.body?.cooperativeId == null ? null : id(req.body.cooperativeId, 'Mã hợp tác xã'),
   }))
+  router.get('/:orgId/cooperative-search', async (req, res) => {
+    const org = id(req.params.orgId, 'Mã hộ nuôi')
+    const term = text(req.query.q, 'Từ khóa tìm kiếm', 100, { min: 2 })
+    res.json(await transaction(client => joinRequests.search(client, req.auth.profile.id, org, term)))
+  })
+  router.post('/:orgId/join-requests', async (req, res) => {
+    const org = id(req.params.orgId, 'Mã hộ nuôi')
+    const cooperative = id(req.body?.cooperativeId, 'Mã hợp tác xã')
+    const scope = sharing(req.body)
+    res.json(await transaction(client => joinRequests.send(client, req.auth.profile.id, org, cooperative,
+      scope.p_share_logs, scope.p_batch_ids)))
+  })
+  router.get('/join-requests/:id', async (req, res) => {
+    const request = id(req.params.id, 'Mã yêu cầu')
+    res.json(await transaction(client => joinRequests.detail(client, req.auth.profile.id, request)))
+  })
+  router.post('/join-requests/:id/respond', async (req, res) => {
+    const request = id(req.params.id, 'Mã yêu cầu')
+    const accept = bool(req.body?.accept, 'Lựa chọn phản hồi')
+    res.json(await transaction(client => joinRequests.respond(client, req.auth.profile.id, request, accept)))
+  })
+
+  router.post('/join-requests/:id/cancel', async (req, res) => {
+    const request = id(req.params.id, 'Mã yêu cầu')
+    res.json(await transaction(client => joinRequests.cancel(client, req.auth.profile.id, request)))
+  })
+
   handle('get', '/invitations', 'org_invitations')
   handle('post', '/invitations/:id/respond', 'org_respond_invite', req => {
     const accept = bool(req.body?.accept, 'Lựa chọn phản hồi')

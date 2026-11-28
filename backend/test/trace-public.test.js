@@ -50,6 +50,35 @@ test('public trace stays readable without identity and does not expose publisher
   assert.equal(value.trace.proof.status, 'PENDING')
   assert.doesNotMatch(JSON.stringify(value), /PRIVATE|issued_by|canIssue|canRevoke/)
 })
+test('public QR and report flag a modified confirmed log while retaining the current content', async () => {
+  const { hashData, hashLegacyData } = require('../src/modules/blockchain/blockchain.service')
+  const original = { batchId: 'batch', logType: 'MEDICINE', logDate: '2026-11-07T10:00:00.000Z',
+    details: { medicineName: 'Vitamin C', dose: '20l' } }
+  const dataHash = hashData(original)
+  let dose = '20l'
+  let onChain = dataHash
+  const service = setup(undefined, { logs: async () => [{
+    batch_id: 'batch', lifecycle_status: 'CONFIRMED', current_version_id: 'version',
+    version: { id: 'version', status: 'ACTIVE', log_type: original.logType, log_date: original.logDate,
+      details: { ...original.details, dose }, blockchain_event_id: 'log-event' },
+    record: { status: 'SUCCESS', data_hash: dataHash, contract_address: 'contract', chain_id: 31337 },
+  }] }, { hash: hashData, hashLegacy: hashLegacyData, read: async () => onChain })
+
+  assert.equal((await service.publicTrace(traceCode)).trace.logs[0].verificationStatus, 'MATCH')
+  onChain = null
+  assert.equal((await service.publicTrace(traceCode)).trace.logs[0].verificationStatus, 'UNAVAILABLE')
+  dose = '2000l'
+  await withPublicRouter(service, async base => {
+    for (const suffix of ['', '/report']) {
+      const response = await fetch(`${base}/${traceCode}${suffix}`)
+      assert.equal(response.status, 200)
+      const body = await response.json()
+      assert.equal(body.trace.logs[0].verificationStatus, 'MISMATCH')
+      assert.deepEqual(body.trace.logs[0].details, { medicineName: 'Vitamin C', dose: '2000l' })
+      assert.doesNotMatch(JSON.stringify(body), /log-event/)
+    }
+  })
+})
 test('revoked legacy or distributor QR never returns a dossier', async () => {
   assert.deepEqual(await setup(async () => ({ lot_id: lotId, status: 'REVOKED' })).publicTrace(traceCode), { status: 'REVOKED' })
 })

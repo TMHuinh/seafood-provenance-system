@@ -26,6 +26,12 @@ const publicProofLabels = {
   UNAVAILABLE: 'Tạm thời chưa thể kiểm tra thông tin thu hoạch. Vui lòng thử lại sau.',
 }
 const chainLabels: Record<string, string> = { SUCCESS: 'Đã ghi nhận', PENDING: 'Đang chờ', FAILED: 'Ghi nhận thất bại' }
+const logCheckLabels = {
+  MATCH: 'Nội dung khớp với hồ sơ đã lưu',
+  MISMATCH: 'Dữ liệu hiện tại không khớp với hồ sơ đã xác nhận.',
+  PENDING: 'Đang chờ kiểm tra',
+  UNAVAILABLE: 'Tạm thời chưa thể kiểm tra',
+}
 const logLabels: Record<string, string> = { FEEDING: 'Thức ăn', MEDICINE: 'Thuốc / hóa chất', WATER_QUALITY: 'Chất lượng nước', ENVIRONMENT: 'Môi trường', CARE: 'Chăm sóc', MORTALITY: 'Hao hụt', OTHER: 'Khác' }
 const detailLabels: Record<string, string> = { feedType: 'Thức ăn', feedAmount: 'Lượng thức ăn (kg)', medicineName: 'Thuốc / hóa chất', dose: 'Liều lượng', temperature: 'Nhiệt độ (°C)', salinity: 'Độ mặn (‰)', ph: 'pH', dissolvedOxygen: 'Oxy hòa tan (mg/L)', mortalityCount: 'Số con chết' }
 const tripLabels: Record<string, string> = { PLANNING: 'Chờ nhận chuyến', IN_TRANSIT: 'Đang vận chuyển', DELIVERED: 'Đã xác nhận nhận hàng', CANCELLED: 'Đã hủy' }
@@ -81,11 +87,11 @@ onUnmounted(() => { version++; document.title = previousTitle; delete document.b
         <p v-if="!publicReport">Trạng thái ghi nhận thu hoạch: {{ chainLabels[trace.proof.recordedStatus || ''] || 'Chưa xác định' }}.</p>
         <p v-if="trace.proof.checkedAt">Thời điểm kiểm tra: {{ date(trace.proof.checkedAt, true) }}.</p>
         <p v-if="!publicReport && trace.proof.transactionHash" class="hash">Mã giao dịch: {{ trace.proof.transactionHash }}</p>
-        <p class="scope-note">Nhật ký nuôi và các mốc vận chuyển hiển thị trạng thái ghi nhận do hệ thống lưu.</p>
+        <p class="scope-note">{{ publicReport ? 'Kết quả kiểm tra nhật ký hiển thị tại từng mục. Vận chuyển hiển thị trạng thái ghi nhận.' : 'Nhật ký nuôi và vận chuyển hiển thị trạng thái ghi nhận.' }}</p>
       </section>
       <section><h2>3. Nhật ký nuôi liên quan</h2><p>Nhật ký đã xác nhận, còn hiệu lực đến hết ngày thu hoạch theo giờ Việt Nam. Nội dung là phiên bản hiện còn hiệu lực tại thời điểm lập báo cáo.</p>
         <p v-if="!trace.logs.length">Chưa có nhật ký đã xác nhận để tổng hợp.</p>
-        <div v-else class="table-scroll"><table><thead><tr><th>Ngày ghi nhận</th><th>Hoạt động</th><th>Nội dung</th><th>{{ publicReport ? 'Tr?ng th?i ghi nh?n' : 'Blockchain' }}</th></tr></thead><tbody><tr v-for="(log, index) in trace.logs" :key="index"><td>{{ date(log.date, true) }}</td><td>{{ logLabels[log.type] || log.type }}</td><td>{{ details(log.details) }}</td><td>{{ chainLabels[log.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div>
+        <div v-else class="table-scroll"><table><thead><tr><th>Ngày ghi nhận</th><th>Hoạt động</th><th>Nội dung</th><th>{{ publicReport ? 'Kết quả kiểm tra' : 'Blockchain' }}</th></tr></thead><tbody><tr v-for="(log, index) in trace.logs" :key="index"><td>{{ date(log.date, true) }}</td><td>{{ logLabels[log.type] || log.type }}</td><td>{{ details(log.details) }}</td><td :class="{ mismatch: log.verificationStatus === 'MISMATCH' }">{{ publicReport ? logCheckLabels[log.verificationStatus ?? 'UNAVAILABLE'] : chainLabels[log.blockchainStatus || ''] || 'Chưa xác định' }}</td></tr></tbody></table></div>
       </section>
       <section><h2>4. Vận chuyển và đơn vị nhận</h2><p v-if="!trace.transports.length">Chưa có thông tin vận chuyển gắn với lô này.</p>
         <article v-for="(trip, index) in trace.transports" :key="index" class="trip-report"><h3>{{ trip.code }}</h3><p>{{ date(trip.date, true) }} · {{ tripLabels[trip.status] || trip.status }}</p>
@@ -114,6 +120,7 @@ onUnmounted(() => { version++; document.title = previousTitle; delete document.b
 section { margin: 28px 0; } h2 { font-size: 1.1rem; margin-bottom: 12px; } h3 { font-size: 1rem; } p { margin: 10px 0; line-height: 1.6; }
 .origin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; } dt { font-size: .8rem; color: var(--app-muted); margin-bottom: 4px; } dd { margin: 0; font-weight: 550; }
 .proof-result { padding: 12px; background: var(--app-primary-soft); font-weight: 600; border-left: 3px solid var(--app-primary); } .proof-result.mismatch, .report-warning { border-left: 3px solid var(--app-danger, #b64242); background: #fff2f0; color: #8b2525; padding: 12px; }
+td.mismatch { color: #8b2525; font-weight: 600; }
 .scope-note, .document-footer { font-size: .85rem; color: var(--app-muted); } .document-footer { border-top: 1px solid var(--app-line); padding-top: 16px; } .hash { overflow-wrap: anywhere; }
 .table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: .85rem; text-align: left; } th, td { padding: 10px 8px; border: 1px solid var(--app-line); vertical-align: top; } th { background: var(--app-primary-soft); font-weight: 600; } td small { display: block; margin-top: 4px; }
 .trip-report { margin: 18px 0 24px; } @media (max-width: 600px) { .origin-grid { grid-template-columns: 1fr; } }

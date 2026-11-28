@@ -325,7 +325,11 @@ API đã chọn lọc; giới hạn 500 nhật ký của API bên dưới vẫn 
 
 Trang QR đối soát trực tiếp hồ sơ thu hoạch và hồ sơ đóng gói, kiểm định của
 chuyến phát hành. Kết quả phân biệt khớp, sai lệch, chờ ghi và chưa thể kiểm tra.
-Nhật ký và vận chuyển hiển thị trạng thái ghi nhận lưu trong database.
+Trang QR cũng kiểm tra phiên bản nhật ký đang công bố. Nhật ký sai lệch vẫn
+hiển thị nội dung hiện tại kèm cảnh báo. Phần tổng hợp ghi rõ sản phẩm có
+bản ghi sai lệch và số bản ghi bị ảnh hưởng. Khi chưa đối soát được trong thời gian giới hạn,
+trang hiển thị trạng thái chờ hoặc chưa thể kiểm tra. Vận chuyển hiển thị trạng
+thái ghi nhận lưu trong database.
 Quét QR chỉ đọc dữ liệu và kết quả kiểm tra.
 QR theo chuyến hiển thị hành trình, khối lượng gửi, khối lượng thực nhận
 và hồ sơ đóng gói, kiểm định của chuyến phát hành. Với chuyến cũ thiếu khối lượng
@@ -391,7 +395,8 @@ trả lỗi yêu cầu thu hẹp bộ lọc. Báo cáo giữ các giới hạn k
 truy xuất hiện có và tối đa 2.000 phiên bản vụ. Báo cáo công khai đối soát
 hồ sơ thu hoạch và đóng gói, kiểm định như trang QR. Báo cáo quản lý đối soát
 hồ sơ thu hoạch và hiển thị trạng thái ghi nhận của các hồ sơ đóng gói.
-Nhật ký và vận chuyển hiển thị trạng thái ghi nhận.
+Báo cáo công khai hiển thị kết quả kiểm tra từng nhật ký. Báo cáo quản lý và
+các mốc vận chuyển hiển thị trạng thái ghi nhận.
 PDF/CSV là bản tại thời điểm lập, không được lưu như một báo cáo bất biến
 trên server; dữ liệu đã tải xuống không cập nhật khi QR hoặc nhật ký bị thu hồi.
 

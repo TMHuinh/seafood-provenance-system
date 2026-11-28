@@ -409,6 +409,7 @@ async function main() {
   assert.equal(trace.status, 'ACTIVE')
   assert.equal(trace.trace.proof.status, 'MATCH')
   assert.equal(trace.trace.logs.length, 1)
+  assert.equal(trace.trace.logs[0].verificationStatus, 'MATCH')
   assert.equal(trace.trace.transports[0].recipientName, distributor.user.organization.name)
   assert.equal(Number(trace.trace.transports[0].quantity), 6)
   assert.equal(Number(trace.trace.transports[0].receivedQuantity), 5.5)

@@ -6,7 +6,7 @@ export function summarizeLogs(logs: Logs) {
   function group(type: string, field: string) {
     const products = new Map<
       string,
-      { name: string; count: number; firstUsed: string; lastUsed: string }
+      { name: string; count: number; mismatchCount: number; firstUsed: string; lastUsed: string }
     >()
     let recordCount = 0
     let unnamedCount = 0
@@ -21,12 +21,14 @@ export function summarizeLogs(logs: Logs) {
         continue
       }
       const key = name.toLocaleLowerCase('vi-VN')
+      const mismatchCount = log.verificationStatus === 'MISMATCH' ? 1 : 0
       const product = products.get(key)
       if (product) {
         product.count++
+        product.mismatchCount += mismatchCount
         if (new Date(log.date) < new Date(product.firstUsed)) product.firstUsed = log.date
         if (new Date(log.date) > new Date(product.lastUsed)) product.lastUsed = log.date
-      } else products.set(key, { name, count: 1, firstUsed: log.date, lastUsed: log.date })
+      } else products.set(key, { name, count: 1, mismatchCount, firstUsed: log.date, lastUsed: log.date })
     }
     return {
       recordCount,
